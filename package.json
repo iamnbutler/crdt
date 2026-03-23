@@ -29,6 +29,10 @@
     "./protocol": {
       "types": "./dist/protocol/index.d.ts",
       "import": "./dist/protocol/index.js"
+    },
+    "./anchor": {
+      "types": "./dist/anchor/index.d.ts",
+      "import": "./dist/anchor/index.js"
     }
   },
   "files": [
