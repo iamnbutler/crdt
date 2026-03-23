@@ -91,6 +91,12 @@ export class TextBuffer {
   private undoStack: UndoEntry[];
   private redoStack: UndoEntry[];
 
+  // Track applied remote operation IDs for idempotency
+  private appliedOps: Set<string>;
+
+  // Pending operations waiting for their causal dependencies
+  private pendingOps: Operation[];
+
   /** Injectable time source for testing. */
   private _now: () => number;
 
@@ -108,6 +114,8 @@ export class TextBuffer {
     this.lastEditType = null;
     this.undoStack = [];
     this.redoStack = [];
+    this.appliedOps = new Set();
+    this.pendingOps = [];
     this._now = Date.now;
   }
 
@@ -418,9 +426,85 @@ export class TextBuffer {
    * Apply a remote operation to this buffer.
    */
   applyRemote(operation: Operation): void {
+    // Idempotency check: skip operations that have already been applied.
+    const opKey = `${operation.id.replicaId}:${operation.id.counter}`;
+    if (this.appliedOps.has(opKey)) {
+      return; // Already applied
+    }
+
+    // Check causal readiness: all operations that the sender had seen
+    // when generating this operation must already be applied here.
+    if (!this.isCausallyReady(operation)) {
+      this.pendingOps.push(operation);
+      return;
+    }
+
+    this.applyRemoteInternal(operation);
+    this.retryPendingOps();
+  }
+
+  /**
+   * Check if an operation's causal dependencies are satisfied.
+   * For inserts: the referenced after/before fragments must exist.
+   * For deletes: the referenced fragments must exist.
+   * For undos: always ready (undo counts are merged via max-wins).
+   */
+  private isCausallyReady(operation: Operation): boolean {
     switch (operation.type) {
       case "insert":
-        this.applyRemoteInsert(operation);
+        return this.isInsertReady(operation);
+      case "delete":
+        return this.isDeleteReady(operation);
+      case "undo":
+        return true;
+    }
+  }
+
+  /** Check if an insert operation's after/before fragments exist. */
+  private isInsertReady(op: InsertOperation): boolean {
+    if (!operationIdsEqual(op.after.insertionId, MIN_OPERATION_ID)) {
+      if (!this.hasFragment(op.after.insertionId)) {
+        return false;
+      }
+    }
+    if (!operationIdsEqual(op.before.insertionId, MAX_OPERATION_ID)) {
+      if (!this.hasFragment(op.before.insertionId)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /** Check if a delete operation's target fragments exist. */
+  private isDeleteReady(op: DeleteOperation): boolean {
+    for (const range of op.ranges) {
+      if (!this.hasFragment(range.insertionId)) {
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /** Check if any fragment with the given insertionId exists. */
+  private hasFragment(insertionId: OperationId): boolean {
+    for (const frag of this.fragmentsArray()) {
+      if (operationIdsEqual(frag.insertionId, insertionId)) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Apply a remote operation that has been confirmed as causally ready.
+   */
+  private applyRemoteInternal(operation: Operation): void {
+    const opKey = `${operation.id.replicaId}:${operation.id.counter}`;
+    this.appliedOps.add(opKey);
+
+    switch (operation.type) {
+      case "insert":
+        this.applyRemoteInsertDirect(operation);
         break;
       case "delete":
         this.applyRemoteDelete(operation);
@@ -428,6 +512,32 @@ export class TextBuffer {
       case "undo":
         this.applyRemoteUndo(operation);
         break;
+    }
+  }
+
+  /**
+   * Retry pending operations that may now have their causal dependencies satisfied.
+   */
+  private retryPendingOps(): void {
+    let madeProgress = true;
+    while (madeProgress) {
+      madeProgress = false;
+      const stillPending: Operation[] = [];
+
+      for (const pendingOp of this.pendingOps) {
+        const opKey = `${pendingOp.id.replicaId}:${pendingOp.id.counter}`;
+        if (this.appliedOps.has(opKey)) {
+          continue; // Already applied (idempotency)
+        }
+        if (this.isCausallyReady(pendingOp)) {
+          this.applyRemoteInternal(pendingOp);
+          madeProgress = true;
+        } else {
+          stillPending.push(pendingOp);
+        }
+      }
+
+      this.pendingOps = stillPending;
     }
   }
 
@@ -516,9 +626,6 @@ export class TextBuffer {
             i + 2 < frags.length ? (frags[i + 2]?.locator ?? MAX_LOCATOR) : MAX_LOCATOR;
 
           return {
-            // We need a locator between the left split and right split.
-            // Since they have the same locator, we use the left's locator as left bound
-            // and the next fragment's locator as right bound.
             leftLocator: left.locator,
             rightLocator: rightLocator,
             insertIndex: i + 1,
@@ -710,7 +817,11 @@ export class TextBuffer {
   // Internal: apply remote operations
   // ---------------------------------------------------------------------------
 
-  private applyRemoteInsert(op: InsertOperation): void {
+  /**
+   * Apply a remote insert operation. Causal ordering is guaranteed by the
+   * caller (applyRemote), so all referenced fragments should exist.
+   */
+  private applyRemoteInsertDirect(op: InsertOperation): void {
     // Update clock
     this.clock.observe(op.id.counter);
     observeVersion(this._version, op.id.replicaId, op.id.counter);
@@ -719,71 +830,18 @@ export class TextBuffer {
     const frags = this.fragmentsArray();
     const newFrag = createFragment(op.id, 0, op.locator, op.text, true);
 
-    // Strategy: Use the after/before references to find the correct
-    // insertion region, then use locator comparison to resolve ordering
-    // among concurrent inserts in the same region.
-
     // Step 1: Find the fragment referenced by "after" (insert goes after this).
-    // We look for the fragment whose insertion range ENDS at or contains the
-    // after offset. Among multiple splits of the same insertion, we want the
-    // one whose end == after.offset (i.e. the left side of the split point).
     let afterIndex = -1;
     if (!operationIdsEqual(op.after.insertionId, MIN_OPERATION_ID)) {
-      for (let i = 0; i < frags.length; i++) {
-        const frag = frags[i];
-        if (frag === undefined) continue;
-        if (!operationIdsEqual(frag.insertionId, op.after.insertionId)) continue;
-
-        const fragEnd = frag.insertionOffset + frag.length;
-
-        if (op.after.offset > frag.insertionOffset && op.after.offset < fragEnd) {
-          // The after point falls strictly inside this fragment — split it
-          const splitPoint = op.after.offset - frag.insertionOffset;
-          const [leftPart, rightPart] = splitFragment(frag, splitPoint);
-          frags.splice(i, 1, leftPart, rightPart);
-          afterIndex = i; // Insert after leftPart
-          break;
-        }
-
-        if (fragEnd === op.after.offset) {
-          // This fragment ends exactly at the after point
-          afterIndex = i;
-          // Don't break — there might be a later split fragment that also
-          // ends here (if the fragment was previously split at this exact
-          // point by another operation). But actually that can't happen:
-          // if the fragment was split, the left part ends at the split point
-          // and the right part starts there. So this is the correct fragment.
-          break;
-        }
-      }
+      const found = this.findRefIndex(frags, op.after, "after");
+      if (found !== null) afterIndex = found;
     }
 
     // Step 2: Find the fragment referenced by "before" (insert goes before this).
-    // We look for the fragment whose insertion range STARTS at the before offset.
     let beforeIndex = frags.length;
     if (!operationIdsEqual(op.before.insertionId, MAX_OPERATION_ID)) {
-      for (let i = 0; i < frags.length; i++) {
-        const frag = frags[i];
-        if (frag === undefined) continue;
-        if (!operationIdsEqual(frag.insertionId, op.before.insertionId)) continue;
-
-        const fragEnd = frag.insertionOffset + frag.length;
-
-        if (op.before.offset > frag.insertionOffset && op.before.offset < fragEnd) {
-          // The before point falls strictly inside this fragment — split it
-          const splitPoint = op.before.offset - frag.insertionOffset;
-          const [leftPart, rightPart] = splitFragment(frag, splitPoint);
-          frags.splice(i, 1, leftPart, rightPart);
-          beforeIndex = i + 1; // Insert before rightPart
-          break;
-        }
-
-        if (frag.insertionOffset === op.before.offset) {
-          // This fragment starts exactly at the before point
-          beforeIndex = i;
-          break;
-        }
-      }
+      const found = this.findRefIndex(frags, op.before, "before");
+      if (found !== null) beforeIndex = found;
     }
 
     // Step 3: Find the exact position within [afterIndex+1, beforeIndex)
@@ -811,6 +869,100 @@ export class TextBuffer {
 
     const newFrags = [...frags.slice(0, insertIndex), newFrag, ...frags.slice(insertIndex)];
     this.fragments = SumTree.fromItems(newFrags, fragmentSummaryOps);
+  }
+
+  /**
+   * Find the index of a fragment referenced by an after/before ref.
+   * Splits the fragment if the reference point falls inside it.
+   * Returns the index, or null if the referenced fragment doesn't exist.
+   *
+   * For "after": returns the index of the fragment AFTER which to insert.
+   * For "before": returns the index of the fragment BEFORE which to insert.
+   */
+  private findRefIndex(
+    frags: Fragment[],
+    ref: { insertionId: OperationId; offset: number },
+    type: "after" | "before",
+  ): number | null {
+    // Collect indices of all fragments with the matching insertionId
+    const matchingIndices: number[] = [];
+    for (let i = 0; i < frags.length; i++) {
+      const frag = frags[i];
+      if (frag === undefined) continue;
+      if (operationIdsEqual(frag.insertionId, ref.insertionId)) {
+        matchingIndices.push(i);
+      }
+    }
+
+    if (matchingIndices.length === 0) {
+      return null; // Insertion not found — dependency not yet applied
+    }
+
+    // Check for exact matches and splits
+    for (const i of matchingIndices) {
+      const frag = frags[i];
+      if (frag === undefined) continue;
+      const fragEnd = frag.insertionOffset + frag.length;
+
+      // Case 1: Reference falls strictly inside this fragment — split it
+      if (ref.offset > frag.insertionOffset && ref.offset < fragEnd) {
+        const splitPoint = ref.offset - frag.insertionOffset;
+        const [leftPart, rightPart] = splitFragment(frag, splitPoint);
+        frags.splice(i, 1, leftPart, rightPart);
+        return type === "after" ? i : i + 1;
+      }
+
+      if (type === "after") {
+        // Case 2: Fragment ends exactly at the reference offset
+        if (fragEnd === ref.offset) {
+          return i;
+        }
+      }
+
+      if (type === "before") {
+        // Case 3: Fragment starts exactly at the reference offset
+        // Prefer non-zero-length fragments to avoid matching zero-length splits
+        // that are meant for "after" references.
+        if (frag.insertionOffset === ref.offset && frag.length > 0) {
+          return i;
+        }
+      }
+    }
+
+    // Edge cases: the reference points to a boundary that requires
+    // a zero-length split to exist (the sender created one during local editing).
+    if (type === "after") {
+      // "after offset X" where X equals the insertionOffset of the first
+      // matching fragment. This means the sender had a zero-length left split.
+      const firstIdx = matchingIndices[0];
+      if (firstIdx === undefined) return null;
+      const firstFrag = frags[firstIdx];
+      if (firstFrag !== undefined && firstFrag.insertionOffset === ref.offset && firstFrag.length > 0) {
+        // Create zero-length left split to match sender state
+        const [leftPart, rightPart] = splitFragment(firstFrag, 0);
+        frags.splice(firstIdx, 1, leftPart, rightPart);
+        return firstIdx; // Return the zero-length fragment's index
+      }
+    }
+
+    if (type === "before") {
+      // "before offset X" where X equals the end of the last matching fragment.
+      // This means the sender had a zero-length right split.
+      const lastIdx = matchingIndices[matchingIndices.length - 1];
+      if (lastIdx === undefined) return null;
+      const lastFrag = frags[lastIdx];
+      if (lastFrag !== undefined) {
+        const lastEnd = lastFrag.insertionOffset + lastFrag.length;
+        if (lastEnd === ref.offset && lastFrag.length > 0) {
+          // Create zero-length right split to match sender state
+          const [leftPart, rightPart] = splitFragment(lastFrag, lastFrag.length);
+          frags.splice(lastIdx, 1, leftPart, rightPart);
+          return lastIdx + 1; // Return the zero-length fragment's index
+        }
+      }
+    }
+
+    return null; // Reference not found
   }
 
   private applyRemoteDelete(op: DeleteOperation): void {
