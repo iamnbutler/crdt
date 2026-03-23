@@ -757,20 +757,66 @@ export class TextBuffer {
     const newFrags: Fragment[] = [];
 
     for (const frag of frags) {
-      let matched = false;
+      let handled = false;
       for (const range of op.ranges) {
-        if (
-          operationIdsEqual(frag.insertionId, range.insertionId) &&
-          frag.insertionOffset >= range.offset &&
-          frag.insertionOffset + frag.length <= range.offset + range.length
-        ) {
-          // This fragment falls entirely within a deleted range
+        if (!operationIdsEqual(frag.insertionId, range.insertionId)) {
+          continue;
+        }
+
+        const fragStart = frag.insertionOffset;
+        const fragEnd = frag.insertionOffset + frag.length;
+        const rangeStart = range.offset;
+        const rangeEnd = range.offset + range.length;
+
+        // Check for any overlap between the fragment and the delete range
+        if (fragEnd <= rangeStart || fragStart >= rangeEnd) {
+          // No overlap with this range
+          continue;
+        }
+
+        if (fragStart >= rangeStart && fragEnd <= rangeEnd) {
+          // Fragment is entirely within the delete range
           newFrags.push(deleteFragment(frag, op.id));
-          matched = true;
+          handled = true;
           break;
         }
+
+        if (fragStart < rangeStart && fragEnd > rangeEnd) {
+          // Delete range is entirely within this fragment — split into 3 parts
+          const deleteLocalStart = rangeStart - fragStart;
+          const deleteLocalEnd = rangeEnd - fragStart;
+
+          const [beforePart, rest] = splitFragment(frag, deleteLocalStart);
+          const [deletedPart, afterPart] = splitFragment(rest, deleteLocalEnd - deleteLocalStart);
+
+          newFrags.push(beforePart);
+          newFrags.push(deleteFragment(deletedPart, op.id));
+          newFrags.push(afterPart);
+          handled = true;
+          break;
+        }
+
+        if (fragStart < rangeStart) {
+          // Delete range overlaps the end of this fragment
+          const splitPoint = rangeStart - fragStart;
+          const [keepPart, deletedPart] = splitFragment(frag, splitPoint);
+
+          newFrags.push(keepPart);
+          newFrags.push(deleteFragment(deletedPart, op.id));
+          handled = true;
+          break;
+        }
+
+        // Delete range overlaps the start of this fragment (fragEnd > rangeEnd)
+        const splitPoint = rangeEnd - fragStart;
+        const [deletedPart, keepPart] = splitFragment(frag, splitPoint);
+
+        newFrags.push(deleteFragment(deletedPart, op.id));
+        newFrags.push(keepPart);
+        handled = true;
+        break;
       }
-      if (!matched) {
+      if (!handled) {
         newFrags.push(frag);
       }
     }

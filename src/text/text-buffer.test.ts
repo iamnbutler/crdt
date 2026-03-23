@@ -1007,3 +1007,121 @@ describe("TextBuffer integration", () => {
     expect(happenedBefore(v2, v1)).toBe(false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Locator: >>> truncation regression
+// ---------------------------------------------------------------------------
+
+describe("Locator depth with sequential insertions", () => {
+  it("100 sequential insertions stay at depth 1", () => {
+    // With the corrected >> 37 shift giving ~65K values at depth 0,
+    // 100 sequential insertions should never need to go deeper than depth 1.
+    let left = MIN_LOCATOR;
+    const right = MAX_LOCATOR;
+    let maxDepth = 0;
+
+    for (let i = 0; i < 100; i++) {
+      const loc = locatorBetween(left, right);
+      if (loc.levels.length > maxDepth) {
+        maxDepth = loc.levels.length;
+      }
+      // Each new locator should still be between left and right
+      expect(compareLocators(left, loc)).toBeLessThan(0);
+      expect(compareLocators(loc, right)).toBeLessThan(0);
+      left = loc;
+    }
+
+    // With the fix, the first level has ~65K values (MAX_SAFE_INTEGER / 2^37).
+    // 100 sequential insertions should easily fit in depth 1.
+    expect(maxDepth).toBeLessThanOrEqual(2);
+  });
+
+  it("locatorBetween depth-0 max is large enough for many insertions", () => {
+    // Verify the depth-0 range is actually large (~65K), not truncated to near-zero.
+    const mid = locatorBetween(MIN_LOCATOR, MAX_LOCATOR);
+    // The midpoint should be roughly (MAX_SAFE_INTEGER / 2^37) / 2 ~ 32768
+    expect(mid.levels.length).toBe(1);
+    const midValue = mid.levels[0] ?? 0;
+    // With the fix, midpoint should be around 32768. Before the fix (>>> truncation),
+    // MAX_SAFE_INTEGER >>> 37 would give 0 or a very small number due to 32-bit truncation.
+    expect(midValue).toBeGreaterThan(10000);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Remote delete: partial fragment overlap after concurrent split
+// ---------------------------------------------------------------------------
+
+describe("Remote delete with split fragments", () => {
+  it("concurrent insert-split + remote delete converge", () => {
+    const rid1 = replicaId(1);
+    const rid2 = replicaId(2);
+
+    // Both replicas start with the same text "ABCDE"
+    const buf1 = TextBuffer.create(rid1);
+    const initOp = buf1.insert(0, "ABCDE");
+
+    const buf2 = TextBuffer.create(rid2);
+    buf2.applyRemote(initOp);
+
+    expect(buf1.getText()).toBe("ABCDE");
+    expect(buf2.getText()).toBe("ABCDE");
+
+    // Replica 1 inserts "X" at position 2 (between B and C), splitting the "ABCDE" fragment
+    const insertOp = buf1.insert(2, "X");
+    expect(buf1.getText()).toBe("ABXCDE");
+
+    // Replica 2 deletes "BCD" (positions 1-4) from the ORIGINAL unsplit fragment
+    const deleteOp = buf2.delete(1, 4);
+    expect(buf2.getText()).toBe("AE");
+
+    // Cross-apply: buf1 gets the delete, buf2 gets the insert
+    buf1.applyRemote(deleteOp);
+    buf2.applyRemote(insertOp);
+
+    // Both should converge: "X" was inserted between B and C.
+    // The delete of "BCD" should still delete B, C, D even though the fragment
+    // was split by the concurrent insert. The "X" should survive since it's
+    // a different insertion.
+    expect(buf1.getText()).toBe(buf2.getText());
+    // Both should contain "A", "X", "E" but not "B", "C", "D"
+    expect(buf1.getText()).toContain("A");
+    expect(buf1.getText()).toContain("X");
+    expect(buf1.getText()).toContain("E");
+    expect(buf1.getText()).not.toContain("B");
+    expect(buf1.getText()).not.toContain("C");
+    expect(buf1.getText()).not.toContain("D");
+  });
+
+  it("remote delete partially overlapping a split fragment", () => {
+    const rid1 = replicaId(1);
+    const rid2 = replicaId(2);
+
+    // Both replicas start with "ABCDEF"
+    const buf1 = TextBuffer.create(rid1);
+    const initOp = buf1.insert(0, "ABCDEF");
+
+    const buf2 = TextBuffer.create(rid2);
+    buf2.applyRemote(initOp);
+
+    // Replica 1 inserts "X" at position 3 (between C and D), splitting the fragment
+    const insertOp = buf1.insert(3, "X");
+    expect(buf1.getText()).toBe("ABCXDEF");
+
+    // Replica 2 deletes "CD" (positions 2-4), which partially overlaps the
+    // sub-fragments after the split
+    const deleteOp = buf2.delete(2, 4);
+    expect(buf2.getText()).toBe("ABEF");
+
+    // Cross-apply
+    buf1.applyRemote(deleteOp);
+    buf2.applyRemote(insertOp);
+
+    // Both should converge
+    expect(buf1.getText()).toBe(buf2.getText());
+    // "C" and "D" should be deleted, "X" should survive
+    expect(buf1.getText()).toContain("X");
+    expect(buf1.getText()).not.toContain("C");
+    expect(buf1.getText()).not.toContain("D");
+  });
+});
