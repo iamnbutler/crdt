@@ -279,9 +279,14 @@ describe("TextBuffer undo/redo", () => {
   });
 
   it("multiple undo/redo cycles", () => {
+    let time = 0;
     const buf = TextBuffer.create();
+    buf.setTimeSource(() => time);
+
     buf.insert(0, "A");
+    time += 500; // exceed groupDelay so each insert is a separate group
     buf.insert(1, "B");
+    time += 500;
     buf.insert(2, "C");
     expect(buf.getText()).toBe("ABC");
 
