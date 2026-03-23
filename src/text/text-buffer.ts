@@ -56,6 +56,7 @@ import { UndoMap } from "./undo-map.js";
 interface Transaction {
   id: TransactionId;
   operationIds: OperationId[];
+  timestamp: number;
 }
 
 interface UndoEntry {
@@ -81,9 +82,17 @@ export class TextBuffer {
   private activeTransaction: Transaction | null;
   private transactionHistory: Transaction[];
 
+  // Time-based transaction grouping
+  private groupDelay: number;
+  private implicitTransaction: Transaction | null;
+  private lastEditType: "insert" | "delete" | null;
+
   // Undo/Redo stacks
   private undoStack: UndoEntry[];
   private redoStack: UndoEntry[];
+
+  /** Injectable time source for testing. */
+  private _now: () => number;
 
   private constructor(rid: ReplicaId) {
     this._replicaId = rid;
@@ -94,8 +103,12 @@ export class TextBuffer {
     this.nextTransactionId = 0;
     this.activeTransaction = null;
     this.transactionHistory = [];
+    this.groupDelay = 300;
+    this.implicitTransaction = null;
+    this.lastEditType = null;
     this.undoStack = [];
     this.redoStack = [];
+    this._now = Date.now;
   }
 
   /**
@@ -125,6 +138,22 @@ export class TextBuffer {
 
   get version(): VersionVector {
     return this._version;
+  }
+
+  /**
+   * Set the time-based grouping delay in milliseconds.
+   * Consecutive same-type edits within this window are grouped as one undo unit.
+   * Default is 300ms.
+   */
+  setGroupDelay(ms: number): void {
+    this.groupDelay = ms;
+  }
+
+  /**
+   * Override the time source used for grouping (useful for tests).
+   */
+  setTimeSource(now: () => number): void {
+    this._now = now;
   }
 
   // ---------------------------------------------------------------------------
@@ -201,16 +230,65 @@ export class TextBuffer {
   // ---------------------------------------------------------------------------
 
   /**
-   * Start a new transaction. All operations until endTransaction() are grouped.
+   * Flush the current implicit (time-based) transaction onto the undo stack.
+   * Called when starting an explicit transaction, on undo/redo, or when the
+   * time window expires.
+   */
+  private flushImplicitTransaction(): void {
+    if (this.implicitTransaction !== null && this.implicitTransaction.operationIds.length > 0) {
+      this.transactionHistory.push(this.implicitTransaction);
+      this.undoStack.push({
+        transactionId: this.implicitTransaction.id,
+        operationIds: [...this.implicitTransaction.operationIds],
+        undoCounts: [],
+      });
+      this.redoStack = [];
+    }
+    this.implicitTransaction = null;
+    this.lastEditType = null;
+  }
+
+  /**
+   * Record an operation into the implicit (time-based) transaction grouping.
+   * Consecutive same-type edits within `groupDelay` ms share one transaction.
+   */
+  private recordImplicitOp(opId: OperationId, editType: "insert" | "delete"): void {
+    const now = this._now();
+
+    if (this.implicitTransaction !== null) {
+      const elapsed = now - this.implicitTransaction.timestamp;
+      if (editType === this.lastEditType && this.groupDelay > 0 && elapsed <= this.groupDelay) {
+        // Append to existing implicit transaction
+        this.implicitTransaction.operationIds.push(opId);
+        this.implicitTransaction.timestamp = now;
+        return;
+      }
+      // Different type or time window expired — flush the old one
+      this.flushImplicitTransaction();
+    }
+
+    // Start a new implicit transaction
+    const txnId = transactionId(this.nextTransactionId++);
+    this.implicitTransaction = { id: txnId, operationIds: [opId], timestamp: now };
+    this.lastEditType = editType;
+    // Clear redo stack on new edit
+    this.redoStack = [];
+  }
+
+  /**
+   * Start a new explicit transaction. All operations until endTransaction()
+   * are grouped into one undo unit, regardless of time or edit type.
    */
   startTransaction(): TransactionId {
+    // Flush any pending implicit transaction first
+    this.flushImplicitTransaction();
     const id = transactionId(this.nextTransactionId++);
-    this.activeTransaction = { id, operationIds: [] };
+    this.activeTransaction = { id, operationIds: [], timestamp: this._now() };
     return id;
   }
 
   /**
-   * End the current transaction.
+   * End the current explicit transaction.
    */
   endTransaction(): TransactionId {
     if (this.activeTransaction === null) {
@@ -240,6 +318,8 @@ export class TextBuffer {
    * Returns an UndoOperation for collaboration, or null if nothing to undo.
    */
   undo(): Operation | null {
+    // Flush any pending implicit transaction so it becomes undoable
+    this.flushImplicitTransaction();
     const entry = this.undoStack.pop();
     if (entry === undefined) {
       return null;
@@ -281,6 +361,8 @@ export class TextBuffer {
    * Returns an UndoOperation for collaboration, or null if nothing to redo.
    */
   redo(): Operation | null {
+    // Flush any pending implicit transaction first
+    this.flushImplicitTransaction();
     const entry = this.redoStack.pop();
     if (entry === undefined) {
       return null;
@@ -357,20 +439,11 @@ export class TextBuffer {
     const opId = this.clock.tick();
     observeVersion(this._version, this._replicaId, opId.counter);
 
-    // Record in active transaction
+    // Record in active (explicit) transaction or implicit (time-based) group
     if (this.activeTransaction !== null) {
       this.activeTransaction.operationIds.push(opId);
     } else {
-      // Auto-transaction: single operation = single transaction
-      const txnId = transactionId(this.nextTransactionId++);
-      const txn: Transaction = { id: txnId, operationIds: [opId] };
-      this.transactionHistory.push(txn);
-      this.undoStack.push({
-        transactionId: txnId,
-        operationIds: [opId],
-        undoCounts: [],
-      });
-      this.redoStack = [];
+      this.recordImplicitOp(opId, "insert");
     }
 
     const frags = this.fragmentsArray();
@@ -515,19 +588,11 @@ export class TextBuffer {
     const opId = this.clock.tick();
     observeVersion(this._version, this._replicaId, opId.counter);
 
-    // Record in active transaction
+    // Record in active (explicit) transaction or implicit (time-based) group
     if (this.activeTransaction !== null) {
       this.activeTransaction.operationIds.push(opId);
     } else {
-      const txnId = transactionId(this.nextTransactionId++);
-      const txn: Transaction = { id: txnId, operationIds: [opId] };
-      this.transactionHistory.push(txn);
-      this.undoStack.push({
-        transactionId: txnId,
-        operationIds: [opId],
-        undoCounts: [],
-      });
-      this.redoStack = [];
+      this.recordImplicitOp(opId, "delete");
     }
 
     const frags = this.fragmentsArray();
