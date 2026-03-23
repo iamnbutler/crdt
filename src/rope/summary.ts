@@ -17,11 +17,15 @@ export {
 export type { TextSummary, Point } from "../sum-tree/index.js";
 
 /**
+ * Module-level TextEncoder singleton to avoid per-call allocation.
+ */
+const textEncoder = new TextEncoder();
+
+/**
  * Compute the byte length of a string (UTF-8 encoded).
  */
 export function byteLength(str: string): number {
-  // Use TextEncoder for accurate UTF-8 byte count
-  return new TextEncoder().encode(str).byteLength;
+  return textEncoder.encode(str).byteLength;
 }
 
 /**

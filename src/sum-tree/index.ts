@@ -211,6 +211,7 @@ export class Cursor<T extends Summarizable<S>, S, D> {
 
   /**
    * Get the summary of remaining items from cursor to end.
+   * Includes the current item.
    */
   suffix(): S {
     const summaryOps = this.tree.getSummaryOps();
@@ -218,7 +219,13 @@ export class Cursor<T extends Summarizable<S>, S, D> {
       return summaryOps.identity();
     }
 
-    // Sum from current position to end
+    // Sum from current position to end.
+    // Walk from the deepest stack entry (leaf) upward to root.
+    // For leaf entries, sum items from childIndex onward.
+    // For internal entries, find the child that was descended into
+    // (identified by the next deeper entry's nodeId) and sum children
+    // strictly AFTER that child. This avoids double-counting the subtree
+    // already accounted for by the deeper stack entry.
     let result = summaryOps.identity();
     const arena = this.tree.getArena();
 
@@ -227,14 +234,33 @@ export class Cursor<T extends Summarizable<S>, S, D> {
       if (entry === undefined) continue;
 
       const count = arena.getCount(entry.nodeId);
-      for (let j = entry.childIndex; j < count; j++) {
-        if (arena.isLeaf(entry.nodeId)) {
-          const leafItems = this.tree.getLeafItems(entry.nodeId);
+
+      if (arena.isLeaf(entry.nodeId)) {
+        // Leaf: sum items from childIndex (current item) onward
+        const leafItems = this.tree.getLeafItems(entry.nodeId);
+        for (let j = entry.childIndex; j < count; j++) {
           const item = leafItems[j];
           if (item !== undefined) {
             result = summaryOps.combine(result, item.summary());
           }
-        } else {
+        }
+      } else {
+        // Internal node: find which child the deeper entry descended into,
+        // then sum only the children AFTER it.
+        const deeperEntry = this.stack[i + 1];
+        let startJ = entry.childIndex;
+
+        if (deeperEntry !== undefined) {
+          // Find the child index that matches the deeper entry's nodeId
+          for (let j = 0; j < count; j++) {
+            if (arena.getChild(entry.nodeId, j) === deeperEntry.nodeId) {
+              startJ = j + 1;
+              break;
+            }
+          }
+        }
+
+        for (let j = startJ; j < count; j++) {
           const childId = arena.getChild(entry.nodeId, j);
           if (childId !== INVALID_NODE_ID) {
             const childSummary = this.tree.getSummary(childId);
@@ -266,7 +292,7 @@ export class Cursor<T extends Summarizable<S>, S, D> {
       const found = this.findChildForTarget(top, target, bias);
       if (!found) {
         // Need to ascend
-        if (!this.ascendAndContinue()) {
+        if (!this.ascendAndContinue(target, bias)) {
           this._atEnd = true;
           return false;
         }
@@ -307,7 +333,7 @@ export class Cursor<T extends Summarizable<S>, S, D> {
     // Target is past this leaf
     this._position = pos;
     entry.childIndex = count;
-    return this.ascendAndContinue();
+    return this.ascendAndContinue(target, bias);
   }
 
   private findChildForTarget(entry: StackEntry<D>, target: D, bias: SeekBias): boolean {
@@ -348,13 +374,13 @@ export class Cursor<T extends Summarizable<S>, S, D> {
     return false;
   }
 
-  private ascendAndContinue(): boolean {
+  private ascendAndContinue(target: D, bias: SeekBias): boolean {
     this.stack.pop();
     if (this.stack.length === 0) {
       this._atEnd = true;
       return false;
     }
-    return this.seekFromCurrent(this._position, "right");
+    return this.seekFromCurrent(target, bias);
   }
 
   private advanceToNext(): boolean {

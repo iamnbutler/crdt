@@ -2,7 +2,7 @@
 // Provides O(log n) insert, delete, offset<->line/col conversions
 
 import { SumTree, type TextSummary } from "../sum-tree/index.js";
-import { createTextChunk, textSummaryOps } from "./summary.js";
+import { createTextChunk, lineDimension, textSummaryOps, utf16Dimension } from "./summary.js";
 import { CHUNK_TARGET, type TextChunk } from "./types.js";
 
 /**
@@ -106,6 +106,11 @@ export class Rope {
 
   /**
    * Insert text at the given UTF-16 offset. Returns a new Rope.
+   *
+   * TODO: The SumTree's slice()/concat() currently collect all items into arrays (O(n)),
+   * so true O(log n) tree surgery requires SumTree-level improvements (node-level split
+   * and merge without materializing items). For now we rebuild from the spliced string,
+   * which is O(n) but correct.
    */
   insert(offset: number, text: string): Rope {
     if (text.length === 0) return this;
@@ -116,10 +121,7 @@ export class Rope {
     // Clamp offset
     const insertOffset = Math.max(0, Math.min(offset, len));
 
-    // Get current text, splice in the new text, rebuild
-    // For a production system we'd do tree surgery; for correctness,
-    // we reconstruct from the modified string. The SumTree handles
-    // the structural sharing.
+    // Reconstruct from the modified string.
     const current = this.getText();
     const newText = current.slice(0, insertOffset) + normalized + current.slice(insertOffset);
     return Rope.from(newText);
@@ -127,6 +129,9 @@ export class Rope {
 
   /**
    * Delete text in range [start, end). Returns a new Rope.
+   *
+   * TODO: Same as insert() — true O(log n) tree surgery requires SumTree-level
+   * split/concat that operates on nodes rather than materializing item arrays.
    */
   delete(start: number, end: number): Rope {
     const len = this.length;
@@ -142,7 +147,7 @@ export class Rope {
 
   /**
    * Convert a line number (0-based) to the UTF-16 offset of the start of that line.
-   * Iterates chunks counting newlines until the target line is reached.
+   * O(log n) via SumTree cursor seek by line dimension, then O(CHUNK_SIZE) local scan.
    */
   lineToOffset(line: number): number {
     if (line <= 0) return 0;
@@ -151,27 +156,45 @@ export class Rope {
     // Line number beyond last line returns length
     if (line >= totalLines) return this.length;
 
-    let linesSeen = 0;
-    let utf16Offset = 0;
+    // Seek to the chunk containing the target line boundary.
+    // seekForward(line, "left") lands on the chunk whose accumulated
+    // line count first reaches or exceeds `line`.
+    const cursor = this.tree.cursor(lineDimension);
+    cursor.seekForward(line, "left");
 
-    for (const chunkText of this.chunksIter()) {
-      for (let i = 0; i < chunkText.length; i++) {
-        if (chunkText.charCodeAt(i) === 0x0a) {
-          linesSeen++;
-          if (linesSeen === line) {
-            return utf16Offset + i + 1;
-          }
-        }
-      }
-      utf16Offset += chunkText.length;
+    const chunk = cursor.item();
+    if (chunk === undefined) {
+      return this.length;
     }
 
-    return utf16Offset;
+    // cursor.position = accumulated lines BEFORE the current item.
+    // suffix() includes the current chunk and everything after, so:
+    //   prefixUtf16 = total.utf16Len - suffix.utf16Len
+    const suffixSummary = cursor.suffix();
+    const prefixUtf16 = this.tree.summary().utf16Len - suffixSummary.utf16Len;
+    const prefixLines = cursor.position;
+
+    // Within this chunk, find where the (line - prefixLines)-th newline is.
+    const linesNeeded = line - prefixLines;
+    let linesFound = 0;
+    const chunkStr = chunk.text;
+
+    for (let i = 0; i < chunkStr.length; i++) {
+      if (chunkStr.charCodeAt(i) === 0x0a) {
+        linesFound++;
+        if (linesFound === linesNeeded) {
+          return prefixUtf16 + i + 1;
+        }
+      }
+    }
+
+    // Should not reach here for valid input, but fall back to end of chunk
+    return prefixUtf16 + chunkStr.length;
   }
 
   /**
    * Convert a UTF-16 offset to {line, col} (both 0-based).
-   * O(log n) via SumTree cursor seek.
+   * O(log n) via SumTree cursor seek by utf16 dimension, then O(CHUNK_SIZE) local scan.
    */
   offsetToLineCol(offset: number): { line: number; col: number } {
     const len = this.length;
@@ -181,25 +204,52 @@ export class Rope {
       return { line: 0, col: 0 };
     }
 
-    // Walk chunks, counting lines and tracking column
-    let line = 0;
-    let colStart = 0; // UTF-16 offset of the start of the current line
-    let utf16Pos = 0;
+    // Seek to the chunk containing the target utf16 offset.
+    const cursor = this.tree.cursor(utf16Dimension);
+    cursor.seekForward(clampedOffset, "left");
 
-    for (const chunkText of this.chunksIter()) {
-      for (let i = 0; i < chunkText.length; i++) {
-        if (utf16Pos + i >= clampedOffset) {
-          return { line, col: clampedOffset - colStart };
-        }
-        if (chunkText.charCodeAt(i) === 0x0a) {
-          line++;
-          colStart = utf16Pos + i + 1;
-        }
-      }
-      utf16Pos += chunkText.length;
+    const chunk = cursor.item();
+    if (chunk === undefined) {
+      // Offset is at the very end
+      const total = this.tree.summary();
+      return { line: total.lines, col: total.lastLineLen };
     }
 
-    return { line, col: clampedOffset - colStart };
+    // cursor.position = accumulated utf16 of all items BEFORE the current item.
+    // suffix() includes the current chunk and everything after.
+    const suffixSummary = cursor.suffix();
+    const totalSummary = this.tree.summary();
+    const prefixLines = totalSummary.lines - suffixSummary.lines;
+    const prefixUtf16 = cursor.position;
+
+    // Offset within the current chunk
+    const offsetInChunk = clampedOffset - prefixUtf16;
+    const chunkStr = chunk.text;
+
+    // Scan within the chunk to count newlines before the target offset.
+    let line = prefixLines;
+    let lastNewlineInChunk = -1;
+
+    for (let i = 0; i < offsetInChunk; i++) {
+      if (chunkStr.charCodeAt(i) === 0x0a) {
+        line++;
+        lastNewlineInChunk = i;
+      }
+    }
+
+    // Compute column. If a newline was found in this chunk before our offset,
+    // the column is relative to that newline. Otherwise, the current line started
+    // in a previous chunk and we use lineToOffset (also O(log n)) to find it.
+    let col: number;
+    if (lastNewlineInChunk >= 0) {
+      col = offsetInChunk - (lastNewlineInChunk + 1);
+    } else {
+      // No newline in this chunk before the offset. The line started earlier.
+      const lineStartOffset = this.lineToOffset(line);
+      col = clampedOffset - lineStartOffset;
+    }
+
+    return { line, col };
   }
 
   /**
@@ -302,12 +352,15 @@ export class Rope {
   }
 
   /**
-   * Internal: iterate over all chunk text strings.
+   * Internal: iterate over all chunk text strings using cursor traversal.
    */
   private *chunksIter(): IterableIterator<string> {
-    const items = this.tree.toArray();
-    for (const chunk of items) {
+    const cursor = this.tree.cursor(utf16Dimension);
+    let chunk = cursor.item();
+    while (chunk !== undefined) {
       yield chunk.text;
+      if (!cursor.next()) break;
+      chunk = cursor.item();
     }
   }
 }
