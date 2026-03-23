@@ -246,7 +246,7 @@ export class AnchorSet<T> {
           // Check if this entry's offset falls within this fragment
           if (
             entry.anchor.offset >= fragment.startOffset &&
-            entry.anchor.offset < fragment.endOffset
+            entry.anchor.offset <= fragment.endOffset
           ) {
             // Calculate position within fragment
             const localOffset = entry.anchor.offset - fragment.startOffset;

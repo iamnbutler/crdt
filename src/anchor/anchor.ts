@@ -8,7 +8,7 @@
 import type { DocumentSnapshot } from "./snapshot.ts";
 import {
   type Anchor,
-  type Bias,
+  Bias,
   MAX_ANCHOR,
   MAX_OPERATION_ID,
   MIN_ANCHOR,
@@ -41,14 +41,14 @@ export function createAnchor(snapshot: DocumentSnapshot, utf16Offset: number, bi
 
   // Handle edge cases
   if (snapshot.length === 0) {
-    return bias === 0 ? MIN_ANCHOR : MAX_ANCHOR;
+    return bias === Bias.Left ? MIN_ANCHOR : MAX_ANCHOR;
   }
 
-  if (clampedOffset === 0 && bias === 0) {
+  if (clampedOffset === 0 && bias === Bias.Left) {
     return MIN_ANCHOR;
   }
 
-  if (clampedOffset === snapshot.length && bias === 1) {
+  if (clampedOffset === snapshot.length && bias === Bias.Right) {
     return MAX_ANCHOR;
   }
 
@@ -88,7 +88,7 @@ export function resolveAnchor(snapshot: DocumentSnapshot, anchor: Anchor): numbe
     // Insertion was deleted - resolve based on bias
     // For deleted content, we return the position where it would have been
     // A more sophisticated implementation would track tombstones
-    return anchor.bias === 0 ? 0 : snapshot.length;
+    return anchor.bias === Bias.Left ? 0 : snapshot.length;
   }
 
   return result.position.utf16Offset;
@@ -120,7 +120,7 @@ export function isSentinelAnchor(anchor: Anchor): boolean {
  * Uses Right bias so it stays at the start when content is inserted.
  */
 export function createRangeStartAnchor(snapshot: DocumentSnapshot, utf16Offset: number): Anchor {
-  return createAnchor(snapshot, utf16Offset, 1); // Right bias
+  return createAnchor(snapshot, utf16Offset, Bias.Right);
 }
 
 /**
@@ -128,7 +128,7 @@ export function createRangeStartAnchor(snapshot: DocumentSnapshot, utf16Offset: 
  * Uses Left bias so it stays at the end when content is inserted.
  */
 export function createRangeEndAnchor(snapshot: DocumentSnapshot, utf16Offset: number): Anchor {
-  return createAnchor(snapshot, utf16Offset, 0); // Left bias
+  return createAnchor(snapshot, utf16Offset, Bias.Left);
 }
 
 /**
@@ -214,6 +214,7 @@ export function deserializeAnchor(str: string): Anchor | null {
   return {
     insertionId: { replicaId, localSeq },
     offset,
+    // biome-ignore lint/plugin/no-type-assertion: expect: bias validated as 0|1 by guard above
     bias: bias as Bias,
   };
 }
