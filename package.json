@@ -1,0 +1,54 @@
+{
+  "name": "@iamnbutler/crdt",
+  "version": "0.0.1",
+  "type": "module",
+  "description": "Pure TypeScript CRDT implementation for collaborative text editing",
+  "license": "MIT",
+  "author": "iamnbutler",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./arena": {
+      "types": "./dist/arena/index.d.ts",
+      "import": "./dist/arena/index.js"
+    },
+    "./sum-tree": {
+      "types": "./dist/sum-tree/index.d.ts",
+      "import": "./dist/sum-tree/index.js"
+    },
+    "./rope": {
+      "types": "./dist/rope/index.d.ts",
+      "import": "./dist/rope/index.js"
+    },
+    "./text": {
+      "types": "./dist/text/index.d.ts",
+      "import": "./dist/text/index.js"
+    },
+    "./protocol": {
+      "types": "./dist/protocol/index.d.ts",
+      "import": "./dist/protocol/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "bun build ./src/index.ts --outdir ./dist --target node",
+    "typecheck": "tsc --noEmit",
+    "lint": "biome check .",
+    "lint:fix": "biome check --write .",
+    "format": "biome format --write .",
+    "test": "bun test",
+    "bench": "bun run benchmarks/index.ts",
+    "bench:ci": "bun run benchmarks/index.ts --ci",
+    "fixtures:download": "bun run scripts/download-fixtures.ts"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "1.9.4",
+    "@types/bun": "latest",
+    "mitata": "1.0.34",
+    "typescript": "5.7.2"
+  }
+}

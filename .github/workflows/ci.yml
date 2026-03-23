@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  check:
+    name: Check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Test
+        run: bun test
+
+  benchmark:
+    name: Benchmark
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Download fixtures
+        run: bun run fixtures:download
+
+      - name: Run benchmarks
+        id: bench
+        run: |
+          bun run bench:ci > benchmark-results.json
+          cat benchmark-results.json
+
+      - name: Check for regressions
+        if: github.event_name == 'pull_request'
+        run: |
+          # Download baseline from main branch if it exists
+          if git show origin/main:.benchmark-baseline.json > baseline.json 2>/dev/null; then
+            echo "Checking against baseline from main branch..."
+            cat benchmark-results.json | bun run benchmarks/regression.ts check
+          else
+            echo "No baseline found on main branch, skipping regression check."
+          fi
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results
+          path: benchmark-results.json
+          retention-days: 30
