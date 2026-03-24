@@ -579,6 +579,160 @@ export class SumTree<T extends Summarizable<S>, S> {
   }
 
   /**
+   * Seek to a target position in the given dimension and return the array index.
+   * Returns { index, position, item } where:
+   * - index: the flat array index of the item at or after the target position
+   * - position: the accumulated dimension value at the START of that item
+   * - item: the item at that index, or undefined if at end
+   *
+   * With bias="right" (default), if target falls between items, returns the next item.
+   * With bias="left", returns the previous item if target is exactly at a boundary.
+   *
+   * This is O(log n) for seeking by dimension position.
+   */
+  seekIndexAtPosition<D>(
+    dimension: Dimension<S, D>,
+    target: D,
+    bias: SeekBias = "right",
+  ): { index: number; position: D; item: T | undefined } {
+    if (this.isEmpty()) {
+      return { index: 0, position: dimension.zero(), item: undefined };
+    }
+
+    let index = 0;
+    let position = dimension.zero();
+    let current = this._root;
+
+    while (true) {
+      if (this.arena.isLeaf(current)) {
+        // Scan items in this leaf
+        const data = this.arena.getItem(current);
+        const items = data?.items ?? [];
+
+        for (let i = 0; i < items.length; i++) {
+          const item = items[i];
+          if (item === undefined) continue;
+
+          const itemSummary = item.summary();
+          const itemMeasure = dimension.measure(itemSummary);
+          const nextPos = dimension.add(position, itemMeasure);
+
+          const cmp = dimension.compare(nextPos, target);
+
+          if (cmp > 0 || (cmp === 0 && bias === "left")) {
+            // Target is within or before this item
+            return { index, position, item };
+          }
+
+          position = nextPos;
+          index++;
+        }
+
+        // Target is past all items
+        return { index, position, item: undefined };
+      }
+
+      // Internal node: find the right child
+      const children = this.arena.getChildren(current);
+      let found = false;
+
+      for (let i = 0; i < children.length; i++) {
+        const childId = children[i];
+        if (childId === undefined || childId === INVALID_NODE_ID) continue;
+
+        const childSummary = this.summaries.get(childId);
+        if (childSummary === undefined) continue;
+
+        const childMeasure = dimension.measure(childSummary);
+        const nextPos = dimension.add(position, childMeasure);
+        const childCount = this.countItems(childId);
+
+        const cmp = dimension.compare(nextPos, target);
+
+        if (cmp > 0 || (cmp === 0 && bias === "left")) {
+          // Target is in this child
+          current = childId;
+          found = true;
+          break;
+        }
+
+        position = nextPos;
+        index += childCount;
+      }
+
+      if (!found) {
+        // Target is past all children
+        return { index, position, item: undefined };
+      }
+    }
+  }
+
+  /**
+   * Replace an item at the given index.
+   * Returns a new tree (path copying), leaving the original unchanged.
+   */
+  replaceAt(index: number, item: T): SumTree<T, S> {
+    if (index < 0 || index >= this.length()) {
+      throw new Error(`Index ${index} out of bounds`);
+    }
+
+    const newTree = this.shallowClone();
+    const path = newTree.findLeafForIndex(index);
+    if (path.length === 0) {
+      return newTree;
+    }
+
+    // Clone the path
+    const clonedPath = newTree.clonePath(path);
+
+    // Replace the item in the leaf
+    const leafEntry = clonedPath[clonedPath.length - 1];
+    if (leafEntry === undefined) {
+      return newTree;
+    }
+
+    const leafData = newTree.arena.getItem(leafEntry.nodeId);
+    const items = leafData?.items ?? [];
+    items[leafEntry.indexInNode] = item;
+
+    // Update leaf
+    newTree.arena.setItem(leafEntry.nodeId, { items });
+
+    // Update summaries up the path
+    newTree.updateSummariesUp(clonedPath);
+
+    return newTree;
+  }
+
+  /**
+   * Splice items: remove `deleteCount` items starting at `index` and insert `newItems`.
+   * Returns a new tree (path copying), leaving the original unchanged.
+   * This is useful for split-and-insert operations.
+   */
+  spliceAt(index: number, deleteCount: number, ...newItems: T[]): SumTree<T, S> {
+    // For simplicity, handle as remove + insert sequence
+    // This is still O(k * log n) where k is the number of operations
+    let tree: SumTree<T, S> = this;
+
+    // Remove items
+    for (let i = 0; i < deleteCount; i++) {
+      if (index < tree.length()) {
+        tree = tree.removeAt(index);
+      }
+    }
+
+    // Insert new items
+    for (let i = 0; i < newItems.length; i++) {
+      const item = newItems[i];
+      if (item !== undefined) {
+        tree = tree.insertAt(index + i, item);
+      }
+    }
+
+    return tree;
+  }
+
+  /**
    * Push an item to the end of the tree.
    * Returns a new tree (path copying), leaving the original unchanged.
    */

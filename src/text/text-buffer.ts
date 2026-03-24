@@ -23,6 +23,7 @@ import {
   deleteFragment,
   fragmentSummaryOps,
   splitFragment,
+  visibleLenDimension,
   withVisibility,
 } from "./fragment.js";
 import { MAX_LOCATOR, MIN_LOCATOR, compareLocators, locatorBetween } from "./locator.js";
@@ -556,23 +557,93 @@ export class TextBuffer {
       this.recordImplicitOp(opId, "insert");
     }
 
-    const frags = this.fragmentsArray();
+    // Use O(log n) seeking to find the insert position
+    const { index, position, item: frag } = this.fragments.seekIndexAtPosition(
+      visibleLenDimension,
+      offset,
+      "right",
+    );
 
-    // Find the position to insert: seek to the visible offset
-    const { leftLocator, rightLocator, insertLocator, insertIndex, afterRef, beforeRef } =
-      this.findInsertPosition(frags, offset);
+    let leftLocator: Locator;
+    let rightLocator: Locator;
+    let insertLocator: Locator | undefined;
+    let insertIndex: number;
+    let afterRef: { insertionId: OperationId; offset: number };
+    let beforeRef: { insertionId: OperationId; offset: number };
 
-    // Use explicit insertLocator if provided (for split cases), otherwise compute via locatorBetween
+    if (frag === undefined) {
+      // Insert at end
+      const lastFrag = index > 0 ? this.fragments.get(index - 1) : undefined;
+      leftLocator = lastFrag?.locator ?? MIN_LOCATOR;
+      rightLocator = MAX_LOCATOR;
+      insertIndex = index;
+      afterRef = lastFrag
+        ? { insertionId: lastFrag.insertionId, offset: lastFrag.insertionOffset + lastFrag.length }
+        : { insertionId: MIN_OPERATION_ID, offset: 0 };
+      beforeRef = { insertionId: MAX_OPERATION_ID, offset: 0 };
+    } else if (!frag.visible) {
+      // Fragment is invisible, find next visible fragment
+      // For now, use the simple approach - invisible fragments don't contribute to visible offset
+      const prevFrag = index > 0 ? this.fragments.get(index - 1) : undefined;
+      leftLocator = prevFrag?.locator ?? MIN_LOCATOR;
+      rightLocator = frag.locator;
+      insertIndex = index;
+      afterRef = prevFrag
+        ? { insertionId: prevFrag.insertionId, offset: prevFrag.insertionOffset + prevFrag.length }
+        : { insertionId: MIN_OPERATION_ID, offset: 0 };
+      beforeRef = { insertionId: frag.insertionId, offset: frag.insertionOffset };
+    } else {
+      // Fragment is visible - check if we're at boundary or need to split
+      const localOffset = offset - position;
+
+      if (localOffset === 0) {
+        // Insert BEFORE this fragment (at boundary)
+        const prevFrag = index > 0 ? this.fragments.get(index - 1) : undefined;
+        leftLocator = prevFrag?.locator ?? MIN_LOCATOR;
+        rightLocator = frag.locator;
+        insertIndex = index;
+        afterRef = prevFrag
+          ? { insertionId: prevFrag.insertionId, offset: prevFrag.insertionOffset + prevFrag.length }
+          : { insertionId: MIN_OPERATION_ID, offset: 0 };
+        beforeRef = { insertionId: frag.insertionId, offset: frag.insertionOffset };
+      } else if (localOffset >= frag.length) {
+        // Insert AFTER this fragment
+        const nextFrag = this.fragments.get(index + 1);
+        leftLocator = frag.locator;
+        rightLocator = nextFrag?.locator ?? MAX_LOCATOR;
+        insertIndex = index + 1;
+        afterRef = { insertionId: frag.insertionId, offset: frag.insertionOffset + frag.length };
+        beforeRef = nextFrag
+          ? { insertionId: nextFrag.insertionId, offset: nextFrag.insertionOffset }
+          : { insertionId: MAX_OPERATION_ID, offset: 0 };
+      } else {
+        // Split the fragment - insert point is strictly inside
+        const [left, right] = splitFragment(frag, localOffset);
+
+        // Compute explicit Locator using the 2*k-1 scheme to avoid collisions
+        const k = right.insertionOffset;
+        insertLocator = { levels: [...frag.baseLocator.levels, 2 * k - 1] };
+
+        leftLocator = left.locator;
+        rightLocator = right.locator;
+        insertIndex = index + 1; // Insert between left and right
+
+        afterRef = { insertionId: left.insertionId, offset: left.insertionOffset + left.length };
+        beforeRef = { insertionId: right.insertionId, offset: right.insertionOffset };
+
+        // Replace original with split fragments using O(log n) spliceAt
+        this.fragments = this.fragments.spliceAt(index, 1, left, right);
+      }
+    }
+
+    // Compute the locator
     const locator = insertLocator ?? locatorBetween(leftLocator, rightLocator);
 
     // Create the new fragment
     const newFrag = createFragment(opId, 0, locator, text, true);
 
-    // Build new fragment array (no sort for local ops - undo relies on insertion order)
-    const newFrags = [...frags.slice(0, insertIndex), newFrag, ...frags.slice(insertIndex)];
-
-    // Rebuild the SumTree
-    this.fragments = SumTree.fromItems(newFrags, fragmentSummaryOps);
+    // Insert using O(log n) insertAt
+    this.fragments = this.fragments.insertAt(insertIndex, newFrag);
 
     return {
       type: "insert",
@@ -721,6 +792,104 @@ export class TextBuffer {
   // Internal: delete
   // ---------------------------------------------------------------------------
 
+  /**
+   * Try to perform a fast O(log n) delete for the common case where
+   * the delete is entirely within a single fragment.
+   * Returns null if the fast path can't be used (delete spans multiple fragments).
+   */
+  private tryFastDelete(
+    start: number,
+    end: number,
+    opId: OperationId,
+  ): DeleteOperation | null {
+    // Find the fragment at the start position
+    const { index, position, item: frag } = this.fragments.seekIndexAtPosition(
+      visibleLenDimension,
+      start,
+      "right",
+    );
+
+    if (frag === undefined || !frag.visible) {
+      return null; // Fall back to slow path
+    }
+
+    const fragStart = position;
+    const fragEnd = position + frag.length;
+
+    // Check if the entire delete range is within this single fragment
+    if (start >= fragStart && end <= fragEnd) {
+      const ranges: Array<{ insertionId: OperationId; offset: number; length: number }> = [];
+
+      if (start === fragStart && end === fragEnd) {
+        // Delete entire fragment - use replaceAt
+        const deletedFrag = deleteFragment(frag, opId);
+        this.fragments = this.fragments.replaceAt(index, deletedFrag);
+        ranges.push({
+          insertionId: frag.insertionId,
+          offset: frag.insertionOffset,
+          length: frag.length,
+        });
+      } else if (start === fragStart) {
+        // Delete from start of fragment
+        const splitPoint = end - fragStart;
+        const [deletedPart, keepPart] = splitFragment(frag, splitPoint);
+        this.fragments = this.fragments.spliceAt(
+          index,
+          1,
+          deleteFragment(deletedPart, opId),
+          keepPart,
+        );
+        ranges.push({
+          insertionId: deletedPart.insertionId,
+          offset: deletedPart.insertionOffset,
+          length: deletedPart.length,
+        });
+      } else if (end === fragEnd) {
+        // Delete to end of fragment
+        const splitPoint = start - fragStart;
+        const [keepPart, deletedPart] = splitFragment(frag, splitPoint);
+        this.fragments = this.fragments.spliceAt(
+          index,
+          1,
+          keepPart,
+          deleteFragment(deletedPart, opId),
+        );
+        ranges.push({
+          insertionId: deletedPart.insertionId,
+          offset: deletedPart.insertionOffset,
+          length: deletedPart.length,
+        });
+      } else {
+        // Delete from middle - split into 3 parts
+        const deleteStart = start - fragStart;
+        const deleteEnd = end - fragStart;
+        const [beforePart, rest] = splitFragment(frag, deleteStart);
+        const [deletedPart, afterPart] = splitFragment(rest, deleteEnd - deleteStart);
+        this.fragments = this.fragments.spliceAt(
+          index,
+          1,
+          beforePart,
+          deleteFragment(deletedPart, opId),
+          afterPart,
+        );
+        ranges.push({
+          insertionId: deletedPart.insertionId,
+          offset: deletedPart.insertionOffset,
+          length: deletedPart.length,
+        });
+      }
+
+      return {
+        type: "delete",
+        id: opId,
+        ranges,
+        version: cloneVersionVector(this._version),
+      };
+    }
+
+    return null; // Delete spans multiple fragments, use slow path
+  }
+
   private deleteInternal(start: number, end: number): DeleteOperation {
     const opId = this.clock.tick();
     observeVersion(this._version, this._replicaId, opId.counter);
@@ -732,6 +901,13 @@ export class TextBuffer {
       this.recordImplicitOp(opId, "delete");
     }
 
+    // Fast path: check if this is a single-fragment delete (common case)
+    const fastResult = this.tryFastDelete(start, end, opId);
+    if (fastResult !== null) {
+      return fastResult;
+    }
+
+    // Slow path: full array rebuild for complex deletes
     const frags = this.fragmentsArray();
     const newFrags: Fragment[] = [];
     const ranges: Array<{ insertionId: OperationId; offset: number; length: number }> = [];
