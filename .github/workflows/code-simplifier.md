@@ -1,4 +1,5 @@
 ---
+engine: claude
 name: Code Simplifier
 description: Analyzes recently modified code and creates pull requests with simplifications that improve clarity, consistency, and maintainability while preserving functionality
 on:
@@ -36,6 +37,7 @@ tools:
 timeout-minutes: 30
 source: githubnext/agentics/workflows/code-simplifier.md@4957663821dbb3260348084fa2f1659701950fef
 ---
+engine: claude
 
 <!-- This prompt will be imported in the agentic workflow .github/workflows/code-simplifier.md at runtime. -->
 <!-- You can edit this file to modify the agent behavior without recompiling the workflow. -->
@@ -270,6 +272,7 @@ Please verify:
 - No unintended side effects
 
 ---
+engine: claude
 
 *Automated by Code Simplifier Agent*
 ```

@@ -1,4 +1,5 @@
 ---
+engine: claude
 description: |
   This workflow makes fixes to pull requests on-demand by the '/pr-fix' command.
   Analyzes failing CI checks, identifies root causes from error logs, implements fixes,
@@ -33,6 +34,7 @@ timeout-minutes: 20
 
 source: githubnext/agentics/workflows/pr-fix.md@4957663821dbb3260348084fa2f1659701950fef
 ---
+engine: claude
 
 # PR Fix
 

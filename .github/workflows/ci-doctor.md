@@ -1,4 +1,5 @@
 ---
+engine: claude
 description: |
   This workflow is an automated CI failure investigator that triggers when monitored workflows fail.
   Performs deep analysis of GitHub Actions workflow failures to identify root causes,
@@ -34,6 +35,7 @@ timeout-minutes: 10
 
 source: githubnext/agentics/workflows/ci-doctor.md@4957663821dbb3260348084fa2f1659701950fef
 ---
+engine: claude
 
 # CI Failure Doctor
 

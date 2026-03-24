@@ -1,4 +1,5 @@
 ---
+engine: claude
 description: |
   Intelligent issue triage assistant that processes new and reopened issues.
   Analyzes issue content, selects appropriate labels, detects spam, gathers context
@@ -30,6 +31,7 @@ tools:
 timeout-minutes: 10
 source: githubnext/agentics/workflows/issue-triage.md@4957663821dbb3260348084fa2f1659701950fef
 ---
+engine: claude
 
 # Agentic Triage
 

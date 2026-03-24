@@ -1,4 +1,5 @@
 ---
+engine: claude
 description: |
   A testing-focused repository assistant that runs daily to improve test quality and coverage.
   Can also be triggered on-demand via '/test-assist <instructions>' to perform specific tasks.
@@ -63,6 +64,7 @@ tools:
 
 source: githubnext/agentics/workflows/daily-test-improver.md@4957663821dbb3260348084fa2f1659701950fef
 ---
+engine: claude
 
 # Daily Test Improver
 

@@ -1,4 +1,5 @@
 ---
+engine: claude
 description: |
   A performance-focused repository assistant that runs daily to identify and implement performance improvements.
   Can also be triggered on-demand via '/perf-assist <instructions>' to perform specific tasks.
@@ -63,6 +64,7 @@ tools:
 
 source: githubnext/agentics/workflows/daily-perf-improver.md@4957663821dbb3260348084fa2f1659701950fef
 ---
+engine: claude
 
 # Daily Perf Improver
 
