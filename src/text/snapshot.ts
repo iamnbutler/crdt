@@ -260,6 +260,52 @@ export class TextBufferSnapshot implements DocumentSnapshot {
   }
 
   // ---------------------------------------------------------------------------
+  // Iterators
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Iterate over lines in the document.
+   *
+   * @param startLine - Starting line number (0-based, inclusive). Defaults to 0.
+   * @param endLine - Ending line number (0-based, exclusive). Defaults to lineCount.
+   *
+   * @example
+   * ```ts
+   * for (const line of snapshot.lines()) {
+   *   console.log(line);
+   * }
+   *
+   * // Iterate lines 5-10
+   * for (const line of snapshot.lines(5, 10)) {
+   *   console.log(line);
+   * }
+   * ```
+   */
+  *lines(startLine?: number, endLine?: number): IterableIterator<string> {
+    yield* this.getRope().lines(startLine, endLine);
+  }
+
+  /**
+   * Iterate over raw text chunks in the document.
+   *
+   * Chunks are the internal storage units. This provides efficient
+   * access to the underlying data without constructing the full string.
+   *
+   * @param start - Starting UTF-16 offset (inclusive). Defaults to 0.
+   * @param end - Ending UTF-16 offset (exclusive). Defaults to length.
+   *
+   * @example
+   * ```ts
+   * for (const chunk of snapshot.chunks()) {
+   *   process(chunk);
+   * }
+   * ```
+   */
+  *chunks(start?: number, end?: number): IterableIterator<string> {
+    yield* this.getRope().chunks(start, end);
+  }
+
+  // ---------------------------------------------------------------------------
   // Internal helpers
   // ---------------------------------------------------------------------------
 

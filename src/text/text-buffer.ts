@@ -1082,11 +1082,16 @@ export class TextBuffer {
     observeVersion(this._version, op.id.replicaId, op.id.counter);
     mergeVersionVectors(this._version, op.version);
 
-    const frags = this.fragmentsArray();
-    const newFrags: Fragment[] = [];
+    // Use a work list approach: when a fragment is split, the resulting parts
+    // may still overlap with other delete ranges and need re-processing.
+    const workList = [...this.fragmentsArray()];
+    const resultFrags: Fragment[] = [];
 
-    for (const frag of frags) {
-      let handled = false;
+    while (workList.length > 0) {
+      const frag = workList.shift();
+      if (frag === undefined) break; // Should never happen, but satisfies lint
+      let wasProcessed = false;
+
       for (const range of op.ranges) {
         if (!operationIdsEqual(frag.insertionId, range.insertionId)) {
           continue;
@@ -1104,24 +1109,25 @@ export class TextBuffer {
         }
 
         if (fragStart >= rangeStart && fragEnd <= rangeEnd) {
-          // Fragment is entirely within the delete range
-          newFrags.push(deleteFragment(frag, op.id));
-          handled = true;
+          // Fragment is entirely within the delete range - done with this fragment
+          resultFrags.push(deleteFragment(frag, op.id));
+          wasProcessed = true;
           break;
         }
 
         if (fragStart < rangeStart && fragEnd > rangeEnd) {
           // Delete range is entirely within this fragment — split into 3 parts
+          // The "after" part might still overlap with other ranges, so re-check it.
           const deleteLocalStart = rangeStart - fragStart;
           const deleteLocalEnd = rangeEnd - fragStart;
 
           const [beforePart, rest] = splitFragment(frag, deleteLocalStart);
           const [deletedPart, afterPart] = splitFragment(rest, deleteLocalEnd - deleteLocalStart);
 
-          newFrags.push(beforePart);
-          newFrags.push(deleteFragment(deletedPart, op.id));
-          newFrags.push(afterPart);
-          handled = true;
+          resultFrags.push(beforePart);
+          resultFrags.push(deleteFragment(deletedPart, op.id));
+          workList.unshift(afterPart); // Re-check against remaining ranges
+          wasProcessed = true;
           break;
         }
 
@@ -1130,27 +1136,38 @@ export class TextBuffer {
           const splitPoint = rangeStart - fragStart;
           const [keepPart, deletedPart] = splitFragment(frag, splitPoint);
 
-          newFrags.push(keepPart);
-          newFrags.push(deleteFragment(deletedPart, op.id));
-          handled = true;
+          resultFrags.push(keepPart);
+          resultFrags.push(deleteFragment(deletedPart, op.id));
+          wasProcessed = true;
           break;
         }
 
         // Delete range overlaps the start of this fragment (fragEnd > rangeEnd)
+        // The "keep" part might still overlap with other ranges, so re-check it.
         const splitPoint = rangeEnd - fragStart;
         const [deletedPart, keepPart] = splitFragment(frag, splitPoint);
 
-        newFrags.push(deleteFragment(deletedPart, op.id));
-        newFrags.push(keepPart);
-        handled = true;
+        resultFrags.push(deleteFragment(deletedPart, op.id));
+        workList.unshift(keepPart); // Re-check against remaining ranges
+        wasProcessed = true;
         break;
       }
-      if (!handled) {
-        newFrags.push(frag);
+      if (!wasProcessed) {
+        resultFrags.push(frag);
       }
     }
 
-    this.fragments = SumTree.fromItems(newFrags, fragmentSummaryOps);
+    // Sort by (locator, insertionId, insertionOffset) to maintain canonical order
+    // after splits. This matches the sorting in applyRemoteInsertDirect.
+    resultFrags.sort((a, b) => {
+      const locCmp = compareLocators(a.locator, b.locator);
+      if (locCmp !== 0) return locCmp;
+      const idCmp = compareOperationIds(a.insertionId, b.insertionId);
+      if (idCmp !== 0) return idCmp;
+      return a.insertionOffset - b.insertionOffset;
+    });
+
+    this.fragments = SumTree.fromItems(resultFrags, fragmentSummaryOps);
   }
 
   private applyRemoteUndo(op: UndoOperation): void {
