@@ -47,8 +47,8 @@
     "test": "bun test",
     "bench": "bun run benchmarks/index.ts",
     "bench:ci": "bun run benchmarks/index.ts --ci",
-    "bench:compare": "bun run benchmarks/competitors.ts",
-    "bench:compare:ci": "bun run benchmarks/competitors.ts --ci",
+    "bench:compare": "bun run benchmarks/comparison.ts",
+    "bench:compare:ci": "bun run benchmarks/comparison.ts --ci",
     "fixtures:download": "bun run scripts/download-fixtures.ts"
   },
   "devDependencies": {
