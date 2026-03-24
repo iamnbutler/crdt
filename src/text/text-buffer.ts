@@ -71,29 +71,18 @@ import { UndoMap } from "./undo-map.js";
 // ---------------------------------------------------------------------------
 
 /**
- * Compare locators for fragment sorting. This differs from lexicographic
- * comparison: when one locator is a prefix of another, we consider them
- * "at the same position" and return 0 to allow tie-breaking by operation ID.
+ * Compare locators for fragment sorting using full lexicographic comparison.
  *
- * This ensures that when a fragment is split (getting child locators) and
- * another fragment has the same parent locator, they interleave correctly
- * based on operation ID, rather than the parent always sorting first.
+ * When one locator is a prefix of another, the shorter one sorts FIRST.
+ * This is correct because child locators (e.g., [L, X]) represent positions
+ * INSIDE the parent's original span - they should come after the parent's
+ * left portion and before concurrent siblings that sort later.
+ *
+ * Operation ID tie-breaking only applies when locators are EXACTLY equal,
+ * which happens with concurrent inserts at the same position.
  */
 function compareLocatorsForSort(a: Locator, b: Locator): number {
-  const minLen = Math.min(a.levels.length, b.levels.length);
-
-  // Compare common prefix
-  for (let i = 0; i < minLen; i++) {
-    const aLevel = a.levels[i];
-    const bLevel = b.levels[i];
-    if (aLevel !== undefined && bLevel !== undefined && aLevel !== bLevel) {
-      return aLevel - bLevel;
-    }
-  }
-
-  // One is a prefix of the other (or they're equal).
-  // Treat as "same position" to allow tie-breaking by operation ID.
-  return 0;
+  return compareLocators(a, b);
 }
 
 /**
@@ -1049,7 +1038,10 @@ export class TextBuffer {
 
     // Create the new fragment with its original locator.
     // The sort function handles interleaving with children based on operation ID.
-    const newFrag = createFragment(op.id, 0, op.locator, op.text, true);
+    // Check the undo map to determine initial visibility - an undo operation
+    // for this insert might have arrived before the insert itself.
+    const visible = !this.undoMap.isUndone(op.id);
+    const newFrag = createFragment(op.id, 0, op.locator, op.text, visible);
 
     // Insert the fragment at its locator-sorted position (no re-sort needed
     // since insertFragmentByLocator uses consistent comparison logic)
