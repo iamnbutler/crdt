@@ -19,7 +19,7 @@ const MAX_VALUE = Number.MAX_SAFE_INTEGER;
 const FIRST_LEVEL_SHIFT = 37;
 
 /** Maximum number of levels in a Locator. */
-const MAX_DEPTH = 8;
+const MAX_DEPTH = 16;
 
 /** The minimum Locator — sorts before all others. */
 export const MIN_LOCATOR: Locator = { levels: [0] };
@@ -51,6 +51,9 @@ export function compareLocators(a: Locator, b: Locator): number {
  * 2. If there's room between them (gap > 1), pick a midpoint.
  * 3. If not, extend to next level with a midpoint value.
  *
+ * IMPORTANT: This function returns EVEN values for the last level to avoid
+ * collision with inside inserts, which use ODD values (2*k-1 scheme).
+ *
  * Throws if left >= right or if MAX_DEPTH would be exceeded.
  */
 export function locatorBetween(left: Locator, right: Locator): Locator {
@@ -59,6 +62,11 @@ export function locatorBetween(left: Locator, right: Locator): Locator {
   // The effective max value for each level. The first level uses the shifted range.
   const maxForLevel = (depth: number): number => {
     return depth === 0 ? Math.floor(MAX_VALUE / 2 ** FIRST_LEVEL_SHIFT) : MAX_VALUE;
+  };
+
+  // Make value even (round down to nearest even number)
+  const makeEven = (n: number): number => {
+    return n % 2 === 0 ? n : n - 1;
   };
 
   const leftLen = left.levels.length;
@@ -75,13 +83,26 @@ export function locatorBetween(left: Locator, right: Locator): Locator {
       continue;
     }
 
+    // Try to find an EVEN midpoint between lv and rv to avoid collision with
+    // inside inserts (which use odd 2*k-1 values).
     if (rv - lv > 1) {
-      // There's room between lv and rv — pick the midpoint
-      levels.push(lv + Math.floor((rv - lv) / 2));
-      return { levels };
+      // Compute midpoint, then round to nearest even number
+      const mid = lv + Math.floor((rv - lv) / 2);
+      const evenMid = mid % 2 === 0 ? mid : mid - 1;
+      if (evenMid > lv && evenMid < rv) {
+        levels.push(evenMid);
+        return { levels };
+      }
+      // Try the next even after midpoint
+      const nextEven = mid % 2 === 0 ? mid + 2 : mid + 1;
+      if (nextEven > lv && nextEven < rv) {
+        levels.push(nextEven);
+        return { levels };
+      }
+      // Gap too small for an even number, need to go deeper (fall through)
     }
 
-    // rv - lv === 1 (or lv > rv which shouldn't happen if left < right)
+    // rv - lv <= 1, or no even number fits
     // We need to go deeper. Carry `lv` at this level and extend.
     levels.push(lv);
 
@@ -91,19 +112,21 @@ export function locatorBetween(left: Locator, right: Locator): Locator {
     const nextLeft = i + 1 < leftLen ? (left.levels[i + 1] ?? 0) : 0;
 
     if (levels.length >= MAX_DEPTH) {
-      // At max depth, just pick next value after nextLeft
-      levels.push(nextLeft + 1);
+      // At max depth, just pick next value after nextLeft (make it even)
+      const next = nextLeft + 2; // +2 to ensure > nextLeft and even
+      levels.push(makeEven(next));
       return { levels };
     }
 
-    levels.push(nextLeft + Math.floor((nextMax - nextLeft) / 2));
+    const nextMid = nextLeft + Math.floor((nextMax - nextLeft) / 2);
+    levels.push(makeEven(nextMid) > nextLeft ? makeEven(nextMid) : nextMid);
     return { levels };
   }
 
-  // Fallback: extend with a midpoint at the next level
+  // Fallback: extend with an even midpoint at the next level
   if (levels.length < MAX_DEPTH) {
     const nextMax = maxForLevel(levels.length);
-    levels.push(Math.floor(nextMax / 2));
+    levels.push(makeEven(Math.floor(nextMax / 2)));
   }
 
   return { levels };
