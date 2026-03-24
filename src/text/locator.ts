@@ -58,7 +58,7 @@ export function locatorBetween(left: Locator, right: Locator): Locator {
 
   // The effective max value for each level. The first level uses the shifted range.
   const maxForLevel = (depth: number): number => {
-    return depth === 0 ? Math.floor(MAX_VALUE / (2 ** FIRST_LEVEL_SHIFT)) : MAX_VALUE;
+    return depth === 0 ? Math.floor(MAX_VALUE / 2 ** FIRST_LEVEL_SHIFT) : MAX_VALUE;
   };
 
   const leftLen = left.levels.length;
