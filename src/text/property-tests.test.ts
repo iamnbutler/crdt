@@ -11,7 +11,7 @@
  *   5. Undo correctness — undo all => original text; undo+redo round-trips
  *   6. Anchor stability — anchors survive unrelated edits
  *
- * Each property is checked over 100 seeds with 20-50 random ops per seed.
+ * Each property is checked over 500 seeds with 20-50 random ops per seed.
  * Seed is logged in the test name so failures are reproducible.
  */
 
@@ -119,7 +119,7 @@ function shuffle<T>(arr: T[], rng: () => number): T[] {
 // How many iterations / ops per iteration
 // ---------------------------------------------------------------------------
 
-const ITERATIONS = 100;
+const ITERATIONS = 500;
 
 function opsPerIteration(rng: () => number): number {
   return 20 + Math.floor(rng() * 31); // 20..50

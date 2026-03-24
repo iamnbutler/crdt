@@ -568,7 +568,7 @@ export class TextBuffer {
     // Create the new fragment
     const newFrag = createFragment(opId, 0, locator, text, true);
 
-    // Build new fragment array
+    // Build new fragment array (no sort for local ops - undo relies on insertion order)
     const newFrags = [...frags.slice(0, insertIndex), newFrag, ...frags.slice(insertIndex)];
 
     // Rebuild the SumTree
@@ -615,8 +615,33 @@ export class TextBuffer {
 
       if (frag.visible) {
         if (visibleOffset + frag.length > offset) {
-          // The insert point is within this fragment — split it
           const localOffset = offset - visibleOffset;
+
+          // If localOffset === 0, insert BEFORE this fragment (at boundary)
+          // Don't split — that would create a zero-length fragment and use 2*0-1 = -1
+          if (localOffset === 0) {
+            const leftLocator = i > 0 ? (frags[i - 1]?.locator ?? MIN_LOCATOR) : MIN_LOCATOR;
+            const rightLocator = frag.locator;
+
+            return {
+              leftLocator,
+              rightLocator,
+              insertIndex: i,
+              afterRef:
+                i > 0 && frags[i - 1] !== undefined
+                  ? {
+                      insertionId: frags[i - 1]!.insertionId,
+                      offset: frags[i - 1]!.insertionOffset + frags[i - 1]!.length,
+                    }
+                  : { insertionId: MIN_OPERATION_ID, offset: 0 },
+              beforeRef: {
+                insertionId: frag.insertionId,
+                offset: frag.insertionOffset,
+              },
+            };
+          }
+
+          // The insert point is strictly inside this fragment — split it
           const [left, right] = splitFragment(frag, localOffset);
 
           // Replace the original fragment with the split pair
