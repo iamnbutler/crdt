@@ -522,4 +522,175 @@ describe("SumTree", () => {
       }
     }
   });
+
+  describe("setAt", () => {
+    it("replaces an item at a specific index", () => {
+      let tree = new SumTree<CountItem, CountSummary>(countSummaryOps);
+      tree = tree.push(new CountItem(1));
+      tree = tree.push(new CountItem(2));
+      tree = tree.push(new CountItem(3));
+
+      tree = tree.setAt(1, new CountItem(20));
+
+      expect(tree.get(0)?.value).toBe(1);
+      expect(tree.get(1)?.value).toBe(20);
+      expect(tree.get(2)?.value).toBe(3);
+      expect(tree.length()).toBe(3);
+    });
+
+    it("does not mutate the original tree", () => {
+      let tree = new SumTree<CountItem, CountSummary>(countSummaryOps);
+      tree = tree.push(new CountItem(1));
+      tree = tree.push(new CountItem(2));
+
+      const original = tree;
+      const modified = tree.setAt(0, new CountItem(10));
+
+      expect(original.get(0)?.value).toBe(1);
+      expect(modified.get(0)?.value).toBe(10);
+    });
+
+    it("updates summary correctly", () => {
+      let tree = new SumTree<CountItem, CountSummary>(countSummaryOps);
+      tree = tree.push(new CountItem(1));
+      tree = tree.push(new CountItem(2));
+      tree = tree.push(new CountItem(3));
+
+      const modified = tree.setAt(1, new CountItem(20));
+      expect(modified.summary()).toEqual({ count: 3 });
+    });
+  });
+
+  describe("spliceAt", () => {
+    it("inserts items at a position (deleteCount=0)", () => {
+      let tree = new SumTree<CountItem, CountSummary>(countSummaryOps);
+      tree = tree.push(new CountItem(1));
+      tree = tree.push(new CountItem(3));
+
+      tree = tree.spliceAt(1, 0, new CountItem(2));
+
+      expect(tree.toArray().map((i) => i.value)).toEqual([1, 2, 3]);
+    });
+
+    it("removes items at a position (no new items)", () => {
+      let tree = new SumTree<CountItem, CountSummary>(countSummaryOps);
+      tree = tree.push(new CountItem(1));
+      tree = tree.push(new CountItem(2));
+      tree = tree.push(new CountItem(3));
+
+      tree = tree.spliceAt(1, 1);
+
+      expect(tree.toArray().map((i) => i.value)).toEqual([1, 3]);
+    });
+
+    it("replaces items with new items", () => {
+      let tree = new SumTree<CountItem, CountSummary>(countSummaryOps);
+      tree = tree.push(new CountItem(1));
+      tree = tree.push(new CountItem(2));
+      tree = tree.push(new CountItem(3));
+
+      tree = tree.spliceAt(1, 1, new CountItem(20));
+
+      expect(tree.toArray().map((i) => i.value)).toEqual([1, 20, 3]);
+    });
+
+    it("replaces one item with multiple items", () => {
+      let tree = new SumTree<CountItem, CountSummary>(countSummaryOps);
+      tree = tree.push(new CountItem(1));
+      tree = tree.push(new CountItem(5));
+
+      tree = tree.spliceAt(1, 1, new CountItem(2), new CountItem(3), new CountItem(4));
+
+      expect(tree.toArray().map((i) => i.value)).toEqual([1, 2, 3, 4]);
+    });
+
+    it("returns same tree for no-op splice", () => {
+      let tree = new SumTree<CountItem, CountSummary>(countSummaryOps);
+      tree = tree.push(new CountItem(1));
+      tree = tree.push(new CountItem(2));
+
+      const result = tree.spliceAt(1, 0);
+      expect(result).toBe(tree);
+    });
+  });
+
+  describe("findIndexByDimension", () => {
+    it("finds the correct index by count dimension", () => {
+      let tree = new SumTree<CountItem, CountSummary>(countSummaryOps);
+      tree = tree.push(new CountItem(10));
+      tree = tree.push(new CountItem(20));
+      tree = tree.push(new CountItem(30));
+
+      const result = tree.findIndexByDimension(countDimension, 1, "right");
+      expect(result.index).toBe(1);
+      expect(result.item?.value).toBe(20);
+      expect(result.position).toBe(1);
+    });
+
+    it("returns correct index for position 0", () => {
+      let tree = new SumTree<CountItem, CountSummary>(countSummaryOps);
+      tree = tree.push(new CountItem(10));
+      tree = tree.push(new CountItem(20));
+
+      const result = tree.findIndexByDimension(countDimension, 0, "right");
+      expect(result.index).toBe(0);
+      expect(result.item?.value).toBe(10);
+      expect(result.position).toBe(0);
+    });
+
+    it("returns end index for position past all items", () => {
+      let tree = new SumTree<CountItem, CountSummary>(countSummaryOps);
+      tree = tree.push(new CountItem(10));
+      tree = tree.push(new CountItem(20));
+
+      const result = tree.findIndexByDimension(countDimension, 5, "right");
+      expect(result.index).toBe(2);
+      expect(result.item).toBeUndefined();
+    });
+
+    it("handles empty tree", () => {
+      const tree = new SumTree<CountItem, CountSummary>(countSummaryOps);
+      const result = tree.findIndexByDimension(countDimension, 0, "right");
+      expect(result.index).toBe(0);
+      expect(result.item).toBeUndefined();
+    });
+  });
+
+  describe("cursor itemIndex", () => {
+    it("returns correct item index after seeking", () => {
+      let tree = new SumTree<CountItem, CountSummary>(countSummaryOps);
+      for (let i = 0; i < 10; i++) {
+        tree = tree.push(new CountItem(i));
+      }
+
+      const cursor = tree.cursor(countDimension);
+      cursor.seekForward(5, "right");
+
+      expect(cursor.itemIndex()).toBe(5);
+      expect(cursor.item()?.value).toBe(5);
+    });
+
+    it("returns 0 at the beginning", () => {
+      let tree = new SumTree<CountItem, CountSummary>(countSummaryOps);
+      tree = tree.push(new CountItem(1));
+      tree = tree.push(new CountItem(2));
+
+      const cursor = tree.cursor(countDimension);
+      cursor.reset();
+
+      expect(cursor.itemIndex()).toBe(0);
+    });
+
+    it("returns tree length at the end", () => {
+      let tree = new SumTree<CountItem, CountSummary>(countSummaryOps);
+      tree = tree.push(new CountItem(1));
+      tree = tree.push(new CountItem(2));
+
+      const cursor = tree.cursor(countDimension);
+      cursor.seekForward(10, "right"); // Past end
+
+      expect(cursor.itemIndex()).toBe(2);
+      expect(cursor.atEnd).toBe(true);
+    });
+  });
 });

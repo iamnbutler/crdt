@@ -23,6 +23,7 @@ import {
   deleteFragment,
   fragmentSummaryOps,
   splitFragment,
+  visibleLenDimension,
   withVisibility,
 } from "./fragment.js";
 import { MAX_LOCATOR, MIN_LOCATOR, compareLocators, locatorBetween } from "./locator.js";
@@ -556,23 +557,148 @@ export class TextBuffer {
       this.recordImplicitOp(opId, "insert");
     }
 
-    const frags = this.fragmentsArray();
+    // Use O(log n) seek to find position
+    const {
+      index,
+      item: frag,
+      position,
+    } = this.fragments.findIndexByDimension(visibleLenDimension, offset, "right");
 
-    // Find the position to insert: seek to the visible offset
-    const { leftLocator, rightLocator, insertLocator, insertIndex, afterRef, beforeRef } =
-      this.findInsertPosition(frags, offset);
+    // Compute locators and refs based on position
+    let leftLocator: Locator = MIN_LOCATOR;
+    let rightLocator: Locator = MAX_LOCATOR;
+    let insertLocator: Locator | undefined;
+    const insertIndex = index;
+    let afterRef: { insertionId: OperationId; offset: number } = {
+      insertionId: MIN_OPERATION_ID,
+      offset: 0,
+    };
+    let beforeRef: { insertionId: OperationId; offset: number } = {
+      insertionId: MAX_OPERATION_ID,
+      offset: 0,
+    };
 
-    // Use explicit insertLocator if provided (for split cases), otherwise compute via locatorBetween
+    const len = this.fragments.length();
+
+    if (len === 0) {
+      // Empty tree - just insert
+      const locator = locatorBetween(leftLocator, rightLocator);
+      const newFrag = createFragment(opId, 0, locator, text, true);
+      this.fragments = this.fragments.insertAt(0, newFrag);
+
+      return {
+        type: "insert",
+        id: opId,
+        text,
+        after: afterRef,
+        before: beforeRef,
+        version: cloneVersionVector(this._version),
+        locator,
+      };
+    }
+
+    if (frag?.visible) {
+      const localOffset = offset - position;
+
+      if (localOffset === 0) {
+        // Insert BEFORE this fragment (at boundary)
+        rightLocator = frag.locator;
+        beforeRef = {
+          insertionId: frag.insertionId,
+          offset: frag.insertionOffset,
+        };
+
+        if (index > 0) {
+          const prevFrag = this.fragments.get(index - 1);
+          if (prevFrag !== undefined) {
+            leftLocator = prevFrag.locator;
+            afterRef = {
+              insertionId: prevFrag.insertionId,
+              offset: prevFrag.insertionOffset + prevFrag.length,
+            };
+          }
+        }
+
+        const locator = locatorBetween(leftLocator, rightLocator);
+        const newFrag = createFragment(opId, 0, locator, text, true);
+        this.fragments = this.fragments.insertAt(insertIndex, newFrag);
+
+        return {
+          type: "insert",
+          id: opId,
+          text,
+          after: afterRef,
+          before: beforeRef,
+          version: cloneVersionVector(this._version),
+          locator,
+        };
+      }
+
+      if (localOffset > 0 && localOffset < frag.length) {
+        // Insert INSIDE this fragment - need to split
+        const [left, right] = splitFragment(frag, localOffset);
+
+        // Compute explicit Locator using the 2*k-1 scheme
+        const k = right.insertionOffset;
+        insertLocator = {
+          levels: [...frag.baseLocator.levels, 2 * k - 1],
+        };
+
+        leftLocator = left.locator;
+        rightLocator = right.locator;
+        afterRef = {
+          insertionId: left.insertionId,
+          offset: left.insertionOffset + left.length,
+        };
+        beforeRef = {
+          insertionId: right.insertionId,
+          offset: right.insertionOffset,
+        };
+
+        const locator = insertLocator;
+        const newFrag = createFragment(opId, 0, locator, text, true);
+
+        // Replace 1 fragment with 3 (left, new, right) using spliceAt
+        this.fragments = this.fragments.spliceAt(index, 1, left, newFrag, right);
+
+        return {
+          type: "insert",
+          id: opId,
+          text,
+          after: afterRef,
+          before: beforeRef,
+          version: cloneVersionVector(this._version),
+          locator,
+        };
+      }
+    }
+
+    // Insert after current fragment (or at end if at end of tree)
+    if (index > 0) {
+      const prevFrag = frag ?? this.fragments.get(index - 1);
+      if (prevFrag !== undefined) {
+        leftLocator = prevFrag.locator;
+        afterRef = {
+          insertionId: prevFrag.insertionId,
+          offset: prevFrag.insertionOffset + prevFrag.length,
+        };
+      }
+    }
+
+    if (index < len) {
+      const nextFrag = this.fragments.get(index);
+      if (nextFrag !== undefined) {
+        rightLocator = nextFrag.locator;
+        beforeRef = {
+          insertionId: nextFrag.insertionId,
+          offset: nextFrag.insertionOffset,
+        };
+      }
+    }
+
     const locator = insertLocator ?? locatorBetween(leftLocator, rightLocator);
-
-    // Create the new fragment
     const newFrag = createFragment(opId, 0, locator, text, true);
-
-    // Build new fragment array (no sort for local ops - undo relies on insertion order)
-    const newFrags = [...frags.slice(0, insertIndex), newFrag, ...frags.slice(insertIndex)];
-
-    // Rebuild the SumTree
-    this.fragments = SumTree.fromItems(newFrags, fragmentSummaryOps);
+    this.fragments = this.fragments.insertAt(insertIndex, newFrag);
 
     return {
       type: "insert",
@@ -627,13 +753,16 @@ export class TextBuffer {
               leftLocator,
               rightLocator,
               insertIndex: i,
-              afterRef:
-                i > 0 && frags[i - 1] !== undefined
-                  ? {
-                      insertionId: frags[i - 1]!.insertionId,
-                      offset: frags[i - 1]!.insertionOffset + frags[i - 1]!.length,
-                    }
-                  : { insertionId: MIN_OPERATION_ID, offset: 0 },
+              afterRef: (() => {
+                const prevFrag = frags[i - 1];
+                if (i > 0 && prevFrag !== undefined) {
+                  return {
+                    insertionId: prevFrag.insertionId,
+                    offset: prevFrag.insertionOffset + prevFrag.length,
+                  };
+                }
+                return { insertionId: MIN_OPERATION_ID, offset: 0 };
+              })(),
               beforeRef: {
                 insertionId: frag.insertionId,
                 offset: frag.insertionOffset,
@@ -732,18 +861,39 @@ export class TextBuffer {
       this.recordImplicitOp(opId, "delete");
     }
 
-    const frags = this.fragmentsArray();
-    const newFrags: Fragment[] = [];
     const ranges: Array<{ insertionId: OperationId; offset: number; length: number }> = [];
 
-    let visibleOffset = 0;
+    // Find the first fragment that overlaps the delete range using O(log n) seek
+    const { index: startIndex, position: startPos } = this.fragments.findIndexByDimension(
+      visibleLenDimension,
+      start,
+      "right",
+    );
 
-    for (let i = 0; i < frags.length; i++) {
-      const frag = frags[i];
-      if (frag === undefined) continue;
+    // Find the last fragment that overlaps the delete range
+    const { index: endIndex } = this.fragments.findIndexByDimension(
+      visibleLenDimension,
+      end,
+      "left",
+    );
+
+    // Collect replacement fragments for the affected range
+    const replacements: Fragment[] = [];
+    let visibleOffset = startPos;
+    let currentIndex = startIndex;
+
+    // Process fragments in the affected range
+    while (currentIndex <= endIndex && currentIndex < this.fragments.length()) {
+      const frag = this.fragments.get(currentIndex);
+      if (frag === undefined) {
+        currentIndex++;
+        continue;
+      }
 
       if (!frag.visible) {
-        newFrags.push(frag);
+        // Invisible fragments pass through unchanged
+        replacements.push(frag);
+        currentIndex++;
         continue;
       }
 
@@ -752,10 +902,10 @@ export class TextBuffer {
 
       if (fragEnd <= start || fragStart >= end) {
         // Fragment is entirely outside the delete range
-        newFrags.push(frag);
+        replacements.push(frag);
       } else if (fragStart >= start && fragEnd <= end) {
         // Fragment is entirely within the delete range
-        newFrags.push(deleteFragment(frag, opId));
+        replacements.push(deleteFragment(frag, opId));
         ranges.push({
           insertionId: frag.insertionId,
           offset: frag.insertionOffset,
@@ -769,9 +919,9 @@ export class TextBuffer {
         const [beforePart, rest] = splitFragment(frag, deleteStart);
         const [deletedPart, afterPart] = splitFragment(rest, deleteEnd - deleteStart);
 
-        newFrags.push(beforePart);
-        newFrags.push(deleteFragment(deletedPart, opId));
-        newFrags.push(afterPart);
+        replacements.push(beforePart);
+        replacements.push(deleteFragment(deletedPart, opId));
+        replacements.push(afterPart);
 
         ranges.push({
           insertionId: deletedPart.insertionId,
@@ -783,8 +933,8 @@ export class TextBuffer {
         const splitPoint = start - fragStart;
         const [keepPart, deletedPart] = splitFragment(frag, splitPoint);
 
-        newFrags.push(keepPart);
-        newFrags.push(deleteFragment(deletedPart, opId));
+        replacements.push(keepPart);
+        replacements.push(deleteFragment(deletedPart, opId));
 
         ranges.push({
           insertionId: deletedPart.insertionId,
@@ -796,8 +946,8 @@ export class TextBuffer {
         const splitPoint = end - fragStart;
         const [deletedPart, keepPart] = splitFragment(frag, splitPoint);
 
-        newFrags.push(deleteFragment(deletedPart, opId));
-        newFrags.push(keepPart);
+        replacements.push(deleteFragment(deletedPart, opId));
+        replacements.push(keepPart);
 
         ranges.push({
           insertionId: deletedPart.insertionId,
@@ -807,9 +957,14 @@ export class TextBuffer {
       }
 
       visibleOffset = fragEnd;
+      currentIndex++;
     }
 
-    this.fragments = SumTree.fromItems(newFrags, fragmentSummaryOps);
+    // Replace the affected range with the new fragments using spliceAt
+    const deleteCount = endIndex - startIndex + 1;
+    if (deleteCount > 0 && replacements.length > 0) {
+      this.fragments = this.fragments.spliceAt(startIndex, deleteCount, ...replacements);
+    }
 
     return {
       type: "delete",
@@ -824,22 +979,17 @@ export class TextBuffer {
   // ---------------------------------------------------------------------------
 
   private recomputeVisibility(): void {
-    const frags = this.fragmentsArray();
-    let changed = false;
-    const newFrags: Fragment[] = [];
+    // Use setAt for O(log n) per changed fragment instead of O(n) rebuild
+    const len = this.fragments.length();
 
-    for (const frag of frags) {
+    for (let i = 0; i < len; i++) {
+      const frag = this.fragments.get(i);
+      if (frag === undefined) continue;
+
       const shouldBeVisible = this.undoMap.isVisible(frag.insertionId, frag.deletions);
       if (shouldBeVisible !== frag.visible) {
-        newFrags.push(withVisibility(frag, shouldBeVisible));
-        changed = true;
-      } else {
-        newFrags.push(frag);
+        this.fragments = this.fragments.setAt(i, withVisibility(frag, shouldBeVisible));
       }
-    }
-
-    if (changed) {
-      this.fragments = SumTree.fromItems(newFrags, fragmentSummaryOps);
     }
   }
 

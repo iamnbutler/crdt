@@ -210,6 +210,43 @@ export class Cursor<T extends Summarizable<S>, S, D> {
   }
 
   /**
+   * Get the item index (0-based) of the current cursor position.
+   * Returns the total number of items before the current position.
+   * Returns tree length if at end.
+   */
+  itemIndex(): number {
+    if (this._atEnd) {
+      return this.tree.length();
+    }
+
+    if (this.stack.length === 0) {
+      return 0;
+    }
+
+    let index = 0;
+    const arena = this.tree.getArena();
+
+    for (let i = 0; i < this.stack.length; i++) {
+      const entry = this.stack[i];
+      if (entry === undefined) continue;
+
+      // Count items/children before the current index at this level
+      for (let j = 0; j < entry.childIndex; j++) {
+        if (arena.isLeaf(entry.nodeId)) {
+          index++;
+        } else {
+          const childId = arena.getChild(entry.nodeId, j);
+          if (childId !== INVALID_NODE_ID) {
+            index += this.tree.countItems(childId);
+          }
+        }
+      }
+    }
+
+    return index;
+  }
+
+  /**
    * Get the summary of remaining items from cursor to end.
    * Includes the current item.
    */
@@ -674,6 +711,122 @@ export class SumTree<T extends Summarizable<S>, S> {
   }
 
   /**
+   * Replace item at the given index.
+   * Returns a new tree (path copying), leaving the original unchanged.
+   */
+  setAt(index: number, item: T): SumTree<T, S> {
+    if (index < 0 || index >= this.length()) {
+      throw new Error(`Index ${index} out of bounds`);
+    }
+
+    const newTree = this.shallowClone();
+    const path = newTree.findLeafForIndex(index);
+    if (path.length === 0) {
+      return newTree;
+    }
+
+    // Clone the path
+    const clonedPath = newTree.clonePath(path);
+
+    // Replace in the leaf
+    const leafEntry = clonedPath[clonedPath.length - 1];
+    if (leafEntry === undefined) {
+      return newTree;
+    }
+
+    const leafData = newTree.arena.getItem(leafEntry.nodeId);
+    const items = leafData?.items ?? [];
+    items[leafEntry.indexInNode] = item;
+
+    // Update leaf
+    newTree.arena.setItem(leafEntry.nodeId, { items });
+
+    // Update summaries up the path (no structural changes)
+    newTree.updateSummariesUp(clonedPath);
+
+    return newTree;
+  }
+
+  /**
+   * Replace a range of items with new items (like Array.splice).
+   * Returns a new tree (path copying), leaving the original unchanged.
+   *
+   * This is more efficient than individual remove/insert operations when
+   * replacing multiple items, as it only does path copying once.
+   */
+  spliceAt(index: number, deleteCount: number, ...newItems: T[]): SumTree<T, S> {
+    const len = this.length();
+
+    // Clamp index to valid range
+    const clampedIndex = Math.max(0, Math.min(index, len));
+    // Clamp deleteCount to not exceed remaining items
+    const clampedDeleteCount = Math.min(deleteCount, len - clampedIndex);
+
+    // Optimize common cases
+    if (clampedDeleteCount === 0 && newItems.length === 0) {
+      return this;
+    }
+
+    if (clampedDeleteCount === 0 && newItems.length === 1 && newItems[0] !== undefined) {
+      // Pure insert
+      return this.insertAt(clampedIndex, newItems[0]);
+    }
+
+    if (clampedDeleteCount === 1 && newItems.length === 1 && newItems[0] !== undefined) {
+      // Pure replace
+      return this.setAt(clampedIndex, newItems[0]);
+    }
+
+    if (newItems.length === 0 && clampedDeleteCount === 1) {
+      // Pure delete
+      return this.removeAt(clampedIndex);
+    }
+
+    // General case: chain operations
+    // Remove items from right to left (to preserve indices), then insert
+    let tree: SumTree<T, S> = this;
+
+    // Remove items (in reverse order to preserve indices)
+    for (let i = clampedDeleteCount - 1; i >= 0; i--) {
+      tree = tree.removeAt(clampedIndex + i);
+    }
+
+    // Insert new items (in order)
+    for (let i = 0; i < newItems.length; i++) {
+      const item = newItems[i];
+      if (item !== undefined) {
+        tree = tree.insertAt(clampedIndex + i, item);
+      }
+    }
+
+    return tree;
+  }
+
+  /**
+   * Find the item index for a target position in a dimension.
+   * Returns { index, item, position } where:
+   * - index: the item index (0-based) at or after the target
+   * - item: the item at that index (if any)
+   * - position: the accumulated position up to that item
+   *
+   * With bias="right" (default): returns the first item whose end position > target
+   * With bias="left": returns the first item whose end position >= target
+   */
+  findIndexByDimension<D>(
+    dimension: Dimension<S, D>,
+    target: D,
+    bias: SeekBias = "right",
+  ): { index: number; item: T | undefined; position: D } {
+    const cursor = this.cursor(dimension);
+    cursor.seekForward(target, bias);
+    return {
+      index: cursor.itemIndex(),
+      item: cursor.item(),
+      position: cursor.position,
+    };
+  }
+
+  /**
    * Get item at index.
    */
   get(index: number): T | undefined {
@@ -897,7 +1050,8 @@ export class SumTree<T extends Summarizable<S>, S> {
     return id;
   }
 
-  private countItems(nodeId: NodeId): number {
+  /** Count items in a subtree (used by Cursor.itemIndex) */
+  countItems(nodeId: NodeId): number {
     if (this.arena.isLeaf(nodeId)) {
       return this.arena.getCount(nodeId);
     }
