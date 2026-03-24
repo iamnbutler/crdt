@@ -99,6 +99,9 @@ function countNewlines(text: string): number {
 
 /**
  * Create a Fragment with a precomputed summary.
+ *
+ * @param baseLocator The Locator from the original InsertOperation. If not
+ *   provided, defaults to the fragment's locator (for new insertions).
  */
 export function createFragment(
   insertionId: OperationId,
@@ -107,9 +110,11 @@ export function createFragment(
   text: string,
   visible: boolean,
   deletions: ReadonlyArray<OperationId> = [],
+  baseLocator?: Locator,
 ): Fragment {
   const lines = countNewlines(text);
   const len = text.length;
+  const base = baseLocator ?? locator;
 
   const summaryValue: FragmentSummary = visible
     ? {
@@ -131,6 +136,7 @@ export function createFragment(
     insertionId,
     insertionOffset,
     locator,
+    baseLocator: base,
     length: len,
     visible,
     deletions,
@@ -143,29 +149,60 @@ export function createFragment(
 
 /**
  * Split a fragment at the given local offset (relative to the fragment start).
- * Returns [left, right] fragments. Both inherit the same locator, insertionId,
- * and deletions.
+ * Returns [left, right] fragments.
+ *
+ * Locator computation uses baseLocator (the original insertion's Locator):
+ * - left keeps its current Locator
+ * - right gets Locator [...baseLocator, 2 * rightInsertionOffset]
+ *
+ * Using baseLocator (not the current locator) ensures deterministic Locators:
+ * a fragment at insertion offset k always gets the same Locator regardless of
+ * how many times its parent fragment was split.
+ *
+ * The 2*offset scheme leaves room for inter-character inserts at 2*k-1.
  */
 export function splitFragment(fragment: Fragment, localOffset: number): [Fragment, Fragment] {
   const leftText = fragment.text.slice(0, localOffset);
   const rightText = fragment.text.slice(localOffset);
 
+  // BOTH parts get Locators computed from baseLocator for determinism.
+  // A fragment at insertionOffset K always gets Locator [...baseLocator, 2*K],
+  // except when K == 0 (the original insertion position), which uses baseLocator directly.
+  // This ensures the same Locator regardless of split history.
+
+  // Left: uses baseLocator if at offset 0, otherwise [...baseLocator, 2*offset]
+  const leftInsertionOffset = fragment.insertionOffset;
+  const leftLocator: Locator =
+    leftInsertionOffset === 0
+      ? fragment.baseLocator
+      : { levels: [...fragment.baseLocator.levels, 2 * leftInsertionOffset] };
+
   const left = createFragment(
     fragment.insertionId,
-    fragment.insertionOffset,
-    fragment.locator,
+    leftInsertionOffset,
+    leftLocator,
     leftText,
     fragment.visible,
     fragment.deletions,
+    fragment.baseLocator,
   );
+
+  // Right: uses baseLocator if at offset 0, otherwise [...baseLocator, 2*offset]
+  // (offset 0 can happen when splitting at position 0, creating an empty left part)
+  const rightInsertionOffset = fragment.insertionOffset + localOffset;
+  const rightLocator: Locator =
+    rightInsertionOffset === 0
+      ? fragment.baseLocator
+      : { levels: [...fragment.baseLocator.levels, 2 * rightInsertionOffset] };
 
   const right = createFragment(
     fragment.insertionId,
-    fragment.insertionOffset + localOffset,
-    fragment.locator,
+    rightInsertionOffset,
+    rightLocator,
     rightText,
     fragment.visible,
     fragment.deletions,
+    fragment.baseLocator,
   );
 
   return [left, right];
@@ -183,6 +220,7 @@ export function deleteFragment(fragment: Fragment, deletionId: OperationId): Fra
     fragment.text,
     false,
     [...fragment.deletions, deletionId],
+    fragment.baseLocator,
   );
 }
 
@@ -198,5 +236,6 @@ export function withVisibility(fragment: Fragment, visible: boolean): Fragment {
     fragment.text,
     visible,
     fragment.deletions,
+    fragment.baseLocator,
   );
 }
