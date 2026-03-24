@@ -563,6 +563,11 @@ export class SumTree<T extends Summarizable<S>, S> {
     return this.summaries.get(nodeId);
   }
 
+  /** Get all summaries for snapshot creation */
+  getSummaries(): ReadonlyMap<NodeId, S> {
+    return this.summaries;
+  }
+
   /** Get leaf items for cursor use */
   getLeafItems(nodeId: NodeId): T[] {
     const data = this.arena.getItem(nodeId);

@@ -26,7 +26,7 @@ import {
   withVisibility,
 } from "./fragment.js";
 import { MAX_LOCATOR, MIN_LOCATOR, compareLocators, locatorBetween } from "./locator.js";
-import { TextBufferSnapshot } from "./snapshot.js";
+import { type SnapshotOptions, type TextBufferSnapshot, createSnapshot } from "./snapshot.js";
 import type {
   DeleteOperation,
   Fragment,
@@ -413,9 +413,18 @@ export class TextBuffer {
 
   /**
    * Create an immutable snapshot of the current buffer state.
+   * This is an O(1) operation that captures the current tree root.
+   * The snapshot must be released when no longer needed to allow reclamation.
    */
-  snapshot(): TextBufferSnapshot {
-    return new TextBufferSnapshot(this.fragmentsArray(), cloneVersionVector(this._version));
+  snapshot(options?: SnapshotOptions): TextBufferSnapshot {
+    return createSnapshot(
+      this.fragments.root,
+      this.fragments.getArena(),
+      this.fragments.getSummaries(),
+      this.fragments.getSummaryOps(),
+      cloneVersionVector(this._version),
+      options,
+    );
   }
 
   // ---------------------------------------------------------------------------

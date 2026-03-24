@@ -87,4 +87,9 @@ export {
 export { TextBuffer } from "./text-buffer.js";
 
 // Snapshot
-export { TextBufferSnapshot } from "./snapshot.js";
+export {
+  TextBufferSnapshot,
+  createSnapshot,
+  DEFAULT_MAX_SNAPSHOT_AGE_MS,
+  type SnapshotOptions,
+} from "./snapshot.js";
