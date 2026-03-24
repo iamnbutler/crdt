@@ -31,6 +31,8 @@ interface TextCRDTAdapter {
   insert(doc: unknown, position: number, text: string): void;
   delete(doc: unknown, position: number, length: number): void;
   getText(doc: unknown): string;
+  /** O(1) length accessor - avoids materializing the full text string */
+  length(doc: unknown): number;
   serialize(doc: unknown): Uint8Array | string;
   deserialize(data: Uint8Array | string): unknown;
 }
@@ -52,6 +54,9 @@ const ourAdapter: TextCRDTAdapter = {
   },
   getText(doc: unknown) {
     return (doc as TextBuffer).getText();
+  },
+  length(doc: unknown) {
+    return (doc as TextBuffer).length;
   },
   serialize(doc: unknown) {
     // Real CRDT serialization that preserves full state
@@ -90,6 +95,10 @@ const loroAdapter: TextCRDTAdapter = {
     const loroDoc = doc as LoroDoc;
     return loroDoc.getText("content").toString();
   },
+  length(doc: unknown) {
+    const loroDoc = doc as LoroDoc;
+    return loroDoc.getText("content").length;
+  },
   serialize(doc: unknown) {
     return (doc as LoroDoc).export({ mode: "snapshot" });
   },
@@ -127,6 +136,10 @@ const yjsAdapter: TextCRDTAdapter = {
   getText(doc: unknown) {
     const yDoc = doc as Y.Doc;
     return yDoc.getText("content").toString();
+  },
+  length(doc: unknown) {
+    const yDoc = doc as Y.Doc;
+    return yDoc.getText("content").length;
   },
   serialize(doc: unknown) {
     return Y.encodeStateAsUpdate(doc as Y.Doc);
@@ -171,6 +184,10 @@ const automergeAdapter: TextCRDTAdapter = {
   getText(doc: unknown) {
     const amDoc = doc as Automerge.Doc<AutomergeDoc>;
     return amDoc.text;
+  },
+  length(doc: unknown) {
+    const amDoc = doc as Automerge.Doc<AutomergeDoc>;
+    return amDoc.text.length;
   },
   serialize(doc: unknown) {
     return Automerge.save(doc as Automerge.Doc<AutomergeDoc>);
@@ -242,7 +259,7 @@ group("insert-at-end", () => {
     bench(adapter.name, () => {
       let doc = adapter.create();
       for (let i = 0; i < SEQUENTIAL_OPS; i++) {
-        const len = adapter.getText(doc).length;
+        const len = adapter.length(doc);
         // Automerge returns new doc on change
         const result = adapter.insert(doc, len, "x");
         if (result !== undefined) doc = result;
@@ -270,7 +287,7 @@ group("insert-at-middle", () => {
     bench(adapter.name, () => {
       let doc = adapter.create();
       for (let i = 0; i < SEQUENTIAL_OPS; i++) {
-        const len = adapter.getText(doc).length;
+        const len = adapter.length(doc);
         const mid = Math.floor(len / 2);
         const result = adapter.insert(doc, mid, "x");
         if (result !== undefined) doc = result;
@@ -286,7 +303,7 @@ group("delete-from-end", () => {
     bench(adapter.name, () => {
       let doc = adapter.fromString("x".repeat(SEQUENTIAL_OPS));
       for (let i = 0; i < SEQUENTIAL_OPS; i++) {
-        const len = adapter.getText(doc).length;
+        const len = adapter.length(doc);
         if (len > 0) {
           const result = adapter.delete(doc, len - 1, 1);
           if (result !== undefined) doc = result;
@@ -302,7 +319,7 @@ group("delete-from-start", () => {
     bench(adapter.name, () => {
       let doc = adapter.fromString("x".repeat(SEQUENTIAL_OPS));
       for (let i = 0; i < SEQUENTIAL_OPS; i++) {
-        const len = adapter.getText(doc).length;
+        const len = adapter.length(doc);
         if (len > 0) {
           const result = adapter.delete(doc, 0, 1);
           if (result !== undefined) doc = result;

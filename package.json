@@ -39,7 +39,9 @@
     "dist"
   ],
   "scripts": {
-    "build": "bun build ./src/index.ts --outdir ./dist --target node",
+    "build": "bun run build:js && bun run build:types",
+    "build:js": "bun build ./src/index.ts ./src/arena/index.ts ./src/sum-tree/index.ts ./src/rope/index.ts ./src/text/index.ts ./src/protocol/index.ts ./src/anchor/index.ts --outdir ./dist --target node --splitting",
+    "build:types": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
@@ -47,8 +49,16 @@
     "test": "bun test",
     "bench": "bun run benchmarks/index.ts",
     "bench:ci": "bun run benchmarks/index.ts --ci",
+    "bench:text": "bun run benchmarks/text-buffer.ts",
+    "bench:text:ci": "bun run benchmarks/text-buffer.ts --ci",
+    "bench:sum-tree": "bun run benchmarks/sum-tree.ts",
+    "bench:sum-tree:ci": "bun run benchmarks/sum-tree.ts --ci",
+    "bench:anchor": "bun run benchmarks/anchor-bench.ts",
+    "bench:memory": "bun run benchmarks/memory.ts",
+    "bench:memory:ci": "bun run benchmarks/memory.ts --ci",
     "bench:compare": "bun run benchmarks/comparison.ts",
     "bench:compare:ci": "bun run benchmarks/comparison.ts --ci",
+    "bench:all": "bun run bench && bun run bench:text && bun run bench:sum-tree && bun run bench:anchor && bun run bench:memory",
     "fixtures:download": "bun run scripts/download-fixtures.ts"
   },
   "devDependencies": {
