@@ -24,6 +24,7 @@ import {
   deleteFragment,
   fragmentSummaryOps,
   splitFragment,
+  visibleLenDimension,
   withVisibility,
 } from "./fragment.js";
 import { MAX_LOCATOR, MIN_LOCATOR, compareLocators, locatorBetween } from "./locator.js";
@@ -328,7 +329,7 @@ export class TextBuffer {
       };
     }
 
-    return this.deleteInternal(clampedStart, clampedEnd);
+    return this.deleteInternalOptimized(clampedStart, clampedEnd);
   }
 
   // ---------------------------------------------------------------------------
@@ -886,14 +887,144 @@ export class TextBuffer {
   }
 
   // ---------------------------------------------------------------------------
-  // Internal: delete
+  // Internal: delete (optimized with O(log n) for single-fragment case)
   // ---------------------------------------------------------------------------
 
-  private deleteInternal(start: number, end: number): DeleteOperation {
+  /**
+   * Optimized delete for single-fragment case using O(log n) tree operations.
+   * Falls back to full delete for multi-fragment deletes.
+   */
+  private deleteInternalOptimized(start: number, end: number): DeleteOperation {
+    const deleteLen = end - start;
+
+    // Find the fragment at the start position using O(log n) seeking
+    const startResult = this.fragments.findByDimension(visibleLenDimension, start, "right");
+    if (startResult === undefined) {
+      // Empty or past end - fall back to regular delete
+      return this.deleteInternalSlow(start, end);
+    }
+
+    // Check if entire delete range fits within this single fragment
+    const startPath = startResult.path;
+    const startLeaf = startPath[startPath.length - 1];
+    if (startLeaf === undefined) {
+      return this.deleteInternalSlow(start, end);
+    }
+
+    const leafData = this.fragments.getArena().getItem(startLeaf.nodeId);
+    const items = (leafData as { items?: Fragment[] } | undefined)?.items;
+    if (!items) {
+      return this.deleteInternalSlow(start, end);
+    }
+
+    const fragment = items[startLeaf.indexInNode];
+    if (fragment === undefined || !fragment.visible) {
+      return this.deleteInternalSlow(start, end);
+    }
+
+    const localOffset = startResult.localOffset as number;
+    const fragRemaining = fragment.length - localOffset;
+
+    // Check if delete fits entirely within this fragment
+    if (deleteLen <= fragRemaining) {
+      // Single-fragment delete - use optimized path
+      return this.deleteSingleFragmentOptimized(start, end, fragment, localOffset);
+    }
+
+    // Multi-fragment delete - use slow path
+    return this.deleteInternalSlow(start, end);
+  }
+
+  /**
+   * Optimized delete when the range is entirely within a single fragment.
+   * Uses O(log n) tree editing instead of O(n) rebuild.
+   */
+  private deleteSingleFragmentOptimized(
+    start: number,
+    end: number,
+    fragment: Fragment,
+    localOffset: number,
+  ): DeleteOperation {
     const opId = this.clock.tick();
     observeVersion(this._version, this._replicaId, opId.counter);
 
-    // Record in active (explicit) transaction or implicit (time-based) group
+    // Record in transaction
+    if (this.activeTransaction !== null) {
+      this.activeTransaction.operationIds.push(opId);
+    } else {
+      this.recordImplicitOp(opId, "delete");
+    }
+
+    const deleteLen = end - start;
+    const ranges: Array<{ insertionId: OperationId; offset: number; length: number }> = [];
+
+    // Use editByDimension to transform the fragment in-place
+    this.fragments = this.fragments.editByDimension(
+      visibleLenDimension,
+      start,
+      (frag, fragLocalOffset) => {
+        const offset = fragLocalOffset as number;
+
+        if (offset === 0 && deleteLen >= frag.length) {
+          // Delete entire fragment
+          ranges.push({
+            insertionId: frag.insertionId,
+            offset: frag.insertionOffset,
+            length: frag.length,
+          });
+          return deleteFragment(frag, opId);
+        }
+
+        if (offset === 0) {
+          // Delete from start of fragment
+          const [toDelete, keep] = splitFragment(frag, deleteLen);
+          ranges.push({
+            insertionId: toDelete.insertionId,
+            offset: toDelete.insertionOffset,
+            length: toDelete.length,
+          });
+          return [deleteFragment(toDelete, opId), keep];
+        }
+
+        if (offset + deleteLen >= frag.length) {
+          // Delete to end of fragment
+          const [keep, toDelete] = splitFragment(frag, offset);
+          ranges.push({
+            insertionId: toDelete.insertionId,
+            offset: toDelete.insertionOffset,
+            length: toDelete.length,
+          });
+          return [keep, deleteFragment(toDelete, opId)];
+        }
+
+        // Delete in middle of fragment - split into 3 parts
+        const [left, rest] = splitFragment(frag, offset);
+        const [toDelete, right] = splitFragment(rest, deleteLen);
+        ranges.push({
+          insertionId: toDelete.insertionId,
+          offset: toDelete.insertionOffset,
+          length: toDelete.length,
+        });
+        return [left, deleteFragment(toDelete, opId), right];
+      },
+      "right",
+    );
+
+    return {
+      type: "delete",
+      id: opId,
+      ranges,
+      version: cloneVersionVector(this._version),
+    };
+  }
+
+  /**
+   * Original O(n) delete implementation, used as fallback for multi-fragment deletes.
+   */
+  private deleteInternalSlow(start: number, end: number): DeleteOperation {
+    const opId = this.clock.tick();
+    observeVersion(this._version, this._replicaId, opId.counter);
+
     if (this.activeTransaction !== null) {
       this.activeTransaction.operationIds.push(opId);
     } else {
@@ -919,10 +1050,8 @@ export class TextBuffer {
       const fragEnd = visibleOffset + frag.length;
 
       if (fragEnd <= start || fragStart >= end) {
-        // Fragment is entirely outside the delete range
         newFrags.push(frag);
       } else if (fragStart >= start && fragEnd <= end) {
-        // Fragment is entirely within the delete range
         newFrags.push(deleteFragment(frag, opId));
         ranges.push({
           insertionId: frag.insertionId,
@@ -930,7 +1059,6 @@ export class TextBuffer {
           length: frag.length,
         });
       } else if (fragStart < start && fragEnd > end) {
-        // Delete range is entirely within this fragment — split into 3 parts
         const deleteStart = start - fragStart;
         const deleteEnd = end - fragStart;
 
@@ -947,7 +1075,6 @@ export class TextBuffer {
           length: deletedPart.length,
         });
       } else if (fragStart < start) {
-        // Delete range overlaps the end of this fragment
         const splitPoint = start - fragStart;
         const [keepPart, deletedPart] = splitFragment(frag, splitPoint);
 
@@ -960,7 +1087,6 @@ export class TextBuffer {
           length: deletedPart.length,
         });
       } else {
-        // Delete range overlaps the start of this fragment (fragEnd > end)
         const splitPoint = end - fragStart;
         const [deletedPart, keepPart] = splitFragment(frag, splitPoint);
 
@@ -977,9 +1103,6 @@ export class TextBuffer {
       visibleOffset = fragEnd;
     }
 
-    // Sort fragments after splits to maintain canonical order.
-    // Split fragments get child locators that must interleave correctly
-    // with fragments from other operations at the same parent locator.
     sortFragments(newFrags);
     this.fragments = SumTree.fromItems(newFrags, fragmentSummaryOps);
 
