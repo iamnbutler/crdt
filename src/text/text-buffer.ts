@@ -977,6 +977,10 @@ export class TextBuffer {
       visibleOffset = fragEnd;
     }
 
+    // Sort fragments after splits to maintain canonical order.
+    // Split fragments get child locators that must interleave correctly
+    // with fragments from other operations at the same parent locator.
+    sortFragments(newFrags);
     this.fragments = SumTree.fromItems(newFrags, fragmentSummaryOps);
 
     return {
