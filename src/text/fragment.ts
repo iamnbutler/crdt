@@ -151,26 +151,22 @@ export function createFragment(
  * Split a fragment at the given local offset (relative to the fragment start).
  * Returns [left, right] fragments.
  *
- * Locator computation uses baseLocator (the original insertion's Locator):
- * - left keeps its current Locator
- * - right gets Locator [...baseLocator, 2 * rightInsertionOffset]
+ * Locator computation uses baseLocator and absolute insertionOffset:
+ * - left: locator = baseLocator if insertionOffset is 0, else [...baseLocator, 2*insertionOffset]
+ * - right: locator = [...baseLocator, 2*rightInsertionOffset]
  *
- * Using baseLocator (not the current locator) ensures deterministic Locators:
- * a fragment at insertion offset k always gets the same Locator regardless of
- * how many times its parent fragment was split.
+ * Using baseLocator (the original insertion's locator) and absolute insertionOffset ensures
+ * deterministic locators regardless of split history. The 2*offset scheme leaves room for
+ * inter-character inserts at 2*k-1.
  *
- * The 2*offset scheme leaves room for inter-character inserts at 2*k-1.
+ * @param fragment The fragment to split
+ * @param localOffset The offset within the fragment to split at
  */
 export function splitFragment(fragment: Fragment, localOffset: number): [Fragment, Fragment] {
   const leftText = fragment.text.slice(0, localOffset);
   const rightText = fragment.text.slice(localOffset);
 
-  // BOTH parts get Locators computed from baseLocator for determinism.
-  // A fragment at insertionOffset K always gets Locator [...baseLocator, 2*K],
-  // except when K == 0 (the original insertion position), which uses baseLocator directly.
-  // This ensures the same Locator regardless of split history.
-
-  // Left: uses baseLocator if at offset 0, otherwise [...baseLocator, 2*offset]
+  // Left: uses baseLocator if at absolute offset 0, otherwise [...baseLocator, 2*offset]
   const leftInsertionOffset = fragment.insertionOffset;
   const leftLocator: Locator =
     leftInsertionOffset === 0
@@ -187,8 +183,7 @@ export function splitFragment(fragment: Fragment, localOffset: number): [Fragmen
     fragment.baseLocator,
   );
 
-  // Right: uses baseLocator if at offset 0, otherwise [...baseLocator, 2*offset]
-  // (offset 0 can happen when splitting at position 0, creating an empty left part)
+  // Right: uses baseLocator if at absolute offset 0, otherwise [...baseLocator, 2*offset]
   const rightInsertionOffset = fragment.insertionOffset + localOffset;
   const rightLocator: Locator =
     rightInsertionOffset === 0

@@ -568,8 +568,15 @@ export class TextBuffer {
     // Create the new fragment
     const newFrag = createFragment(opId, 0, locator, text, true);
 
-    // Build new fragment array (no sort for local ops - undo relies on insertion order)
+    // Build new fragment array and sort by locator for canonical order
     const newFrags = [...frags.slice(0, insertIndex), newFrag, ...frags.slice(insertIndex)];
+    newFrags.sort((a, b) => {
+      const locCmp = compareLocators(a.locator, b.locator);
+      if (locCmp !== 0) return locCmp;
+      const idCmp = compareOperationIds(a.insertionId, b.insertionId);
+      if (idCmp !== 0) return idCmp;
+      return a.insertionOffset - b.insertionOffset;
+    });
 
     // Rebuild the SumTree
     this.fragments = SumTree.fromItems(newFrags, fragmentSummaryOps);
@@ -591,7 +598,6 @@ export class TextBuffer {
   ): {
     leftLocator: Locator;
     rightLocator: Locator;
-    /** Explicit Locator for the new insert (computed for split cases to avoid collisions) */
     insertLocator?: Locator;
     insertIndex: number;
     afterRef: { insertionId: OperationId; offset: number };
@@ -627,13 +633,16 @@ export class TextBuffer {
               leftLocator,
               rightLocator,
               insertIndex: i,
-              afterRef:
-                i > 0 && frags[i - 1] !== undefined
-                  ? {
-                      insertionId: frags[i - 1]!.insertionId,
-                      offset: frags[i - 1]!.insertionOffset + frags[i - 1]!.length,
-                    }
-                  : { insertionId: MIN_OPERATION_ID, offset: 0 },
+              afterRef: (() => {
+                const prevFrag = i > 0 ? frags[i - 1] : undefined;
+                if (prevFrag !== undefined) {
+                  return {
+                    insertionId: prevFrag.insertionId,
+                    offset: prevFrag.insertionOffset + prevFrag.length,
+                  };
+                }
+                return { insertionId: MIN_OPERATION_ID, offset: 0 };
+              })(),
               beforeRef: {
                 insertionId: frag.insertionId,
                 offset: frag.insertionOffset,
@@ -647,9 +656,10 @@ export class TextBuffer {
           // Replace the original fragment with the split pair
           frags.splice(i, 1, left, right);
 
-          // Compute explicit Locator using the 2*k-1 scheme to avoid collisions
-          // with the 2*k scheme used for split fragments
-          const k = right.insertionOffset;
+          // Compute insert locator using 2*k - 1 where k is the absolute insertion offset
+          // This ensures the insert sorts between left and right, avoiding collisions with
+          // split locators (which use 2*k for even numbers)
+          const k = right.insertionOffset; // absolute offset within original insertion
           const insertLocator: Locator = {
             levels: [...frag.baseLocator.levels, 2 * k - 1],
           };
@@ -809,6 +819,15 @@ export class TextBuffer {
       visibleOffset = fragEnd;
     }
 
+    // Sort fragments by (locator, insertionId, insertionOffset) for canonical order
+    newFrags.sort((a, b) => {
+      const locCmp = compareLocators(a.locator, b.locator);
+      if (locCmp !== 0) return locCmp;
+      const idCmp = compareOperationIds(a.insertionId, b.insertionId);
+      if (idCmp !== 0) return idCmp;
+      return a.insertionOffset - b.insertionOffset;
+    });
+
     this.fragments = SumTree.fromItems(newFrags, fragmentSummaryOps);
 
     return {
@@ -871,33 +890,6 @@ export class TextBuffer {
     }
     if (!operationIdsEqual(op.before.insertionId, MAX_OPERATION_ID)) {
       this.findRefIndex(frags, op.before, "before");
-    }
-
-    // Binary search the entire array for the Locator-sorted position.
-    // Tie-break by (replicaId, counter, insertionOffset) for determinism.
-    let insertIndex = 0;
-    for (let i = 0; i < frags.length; i++) {
-      const frag = frags[i];
-      if (frag === undefined) continue;
-
-      const cmp = compareLocators(op.locator, frag.locator);
-      if (cmp < 0) {
-        break;
-      }
-      if (cmp === 0) {
-        // Same locator — tie-break by (replicaId, counter, insertionOffset)
-        const idCmp = compareOperationIds(op.id, frag.insertionId);
-        if (idCmp < 0) {
-          break;
-        }
-        if (idCmp === 0) {
-          // Same operation — compare insertionOffset (new frag has offset 0)
-          if (0 < frag.insertionOffset) {
-            break;
-          }
-        }
-      }
-      insertIndex = i + 1;
     }
 
     // Add the new fragment and sort by (Locator, insertionId, insertionOffset)
@@ -1019,7 +1011,10 @@ export class TextBuffer {
     const frags = this.fragmentsArray();
     const newFrags: Fragment[] = [];
 
-    for (const frag of frags) {
+    for (let i = 0; i < frags.length; i++) {
+      const frag = frags[i];
+      if (frag === undefined) continue;
+
       let handled = false;
       for (const range of op.ranges) {
         if (!operationIdsEqual(frag.insertionId, range.insertionId)) {
@@ -1084,6 +1079,15 @@ export class TextBuffer {
       }
     }
 
+    // Sort fragments by (locator, insertionId, insertionOffset) for canonical order
+    newFrags.sort((a, b) => {
+      const locCmp = compareLocators(a.locator, b.locator);
+      if (locCmp !== 0) return locCmp;
+      const idCmp = compareOperationIds(a.insertionId, b.insertionId);
+      if (idCmp !== 0) return idCmp;
+      return a.insertionOffset - b.insertionOffset;
+    });
+
     this.fragments = SumTree.fromItems(newFrags, fragmentSummaryOps);
   }
 
@@ -1106,5 +1110,16 @@ export class TextBuffer {
   /** Get all fragments as an array. */
   private fragmentsArray(): Fragment[] {
     return this.fragments.toArray();
+  }
+
+  /** Debug: get all visible fragments with their locators. */
+  debugFragments(): Array<{ text: string; locator: readonly number[]; insertionOffset: number }> {
+    return this.fragmentsArray()
+      .filter((f) => f.visible)
+      .map((f) => ({
+        text: f.text,
+        locator: f.locator.levels,
+        insertionOffset: f.insertionOffset,
+      }));
   }
 }
