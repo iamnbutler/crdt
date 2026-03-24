@@ -23,6 +23,7 @@ import {
   deleteFragment,
   fragmentSummaryOps,
   splitFragment,
+  visibleLenDimension,
   withVisibility,
 } from "./fragment.js";
 import { MAX_LOCATOR, MIN_LOCATOR, compareLocators, locatorBetween } from "./locator.js";
@@ -556,164 +557,185 @@ export class TextBuffer {
       this.recordImplicitOp(opId, "insert");
     }
 
-    const frags = this.fragmentsArray();
-
-    // Find the position to insert: seek to the visible offset
-    const { leftLocator, rightLocator, insertLocator, insertIndex, afterRef, beforeRef } =
-      this.findInsertPosition(frags, offset);
-
-    // Use explicit insertLocator if provided (for split cases), otherwise compute via locatorBetween
-    const locator = insertLocator ?? locatorBetween(leftLocator, rightLocator);
+    // Fast path: use O(log n) seek and insert
+    const result = this.findInsertPositionFast(offset);
+    const locator = result.insertLocator ?? locatorBetween(result.leftLocator, result.rightLocator);
 
     // Create the new fragment
     const newFrag = createFragment(opId, 0, locator, text, true);
 
-    // Build new fragment array (no sort for local ops - undo relies on insertion order)
-    const newFrags = [...frags.slice(0, insertIndex), newFrag, ...frags.slice(insertIndex)];
-
-    // Rebuild the SumTree
-    this.fragments = SumTree.fromItems(newFrags, fragmentSummaryOps);
+    // Apply any split and insert in O(log n)
+    if (result.splitFragments !== undefined) {
+      // Need to split: replace original fragment with split parts, then insert new fragment
+      this.fragments = this.fragments.spliceAt(
+        result.splitIndex,
+        1,
+        result.splitFragments[0],
+        result.splitFragments[1],
+      );
+      this.fragments = this.fragments.insertAt(result.insertIndex, newFrag);
+    } else {
+      // No split needed: just insert
+      this.fragments = this.fragments.insertAt(result.insertIndex, newFrag);
+    }
 
     return {
       type: "insert",
       id: opId,
       text,
-      after: afterRef,
-      before: beforeRef,
+      after: result.afterRef,
+      before: result.beforeRef,
       version: cloneVersionVector(this._version),
       locator,
     };
   }
 
-  private findInsertPosition(
-    frags: Fragment[],
-    offset: number,
-  ): {
+  /**
+   * Find the insert position using O(log n) operations.
+   * Returns all metadata needed for the insert operation.
+   */
+  private findInsertPositionFast(offset: number): {
     leftLocator: Locator;
     rightLocator: Locator;
-    /** Explicit Locator for the new insert (computed for split cases to avoid collisions) */
     insertLocator?: Locator;
     insertIndex: number;
+    splitIndex: number;
+    splitFragments?: [Fragment, Fragment];
     afterRef: { insertionId: OperationId; offset: number };
     beforeRef: { insertionId: OperationId; offset: number };
   } {
-    if (frags.length === 0) {
+    const len = this.fragments.length();
+
+    // Empty tree case
+    if (len === 0) {
       return {
         leftLocator: MIN_LOCATOR,
         rightLocator: MAX_LOCATOR,
         insertIndex: 0,
+        splitIndex: 0,
         afterRef: { insertionId: MIN_OPERATION_ID, offset: 0 },
         beforeRef: { insertionId: MAX_OPERATION_ID, offset: 0 },
       };
     }
 
-    let visibleOffset = 0;
+    // Use O(log n) seek to find the fragment containing the offset
+    const { index, position: accumulatedVisible } = this.fragments.seekIndexAndPosition(
+      visibleLenDimension,
+      offset,
+      "right",
+    );
 
-    for (let i = 0; i < frags.length; i++) {
-      const frag = frags[i];
-      if (frag === undefined) continue;
-
-      if (frag.visible) {
-        if (visibleOffset + frag.length > offset) {
-          const localOffset = offset - visibleOffset;
-
-          // If localOffset === 0, insert BEFORE this fragment (at boundary)
-          // Don't split — that would create a zero-length fragment and use 2*0-1 = -1
-          if (localOffset === 0) {
-            const leftLocator = i > 0 ? (frags[i - 1]?.locator ?? MIN_LOCATOR) : MIN_LOCATOR;
-            const rightLocator = frag.locator;
-
-            return {
-              leftLocator,
-              rightLocator,
-              insertIndex: i,
-              afterRef:
-                i > 0 && frags[i - 1] !== undefined
-                  ? {
-                      insertionId: frags[i - 1]!.insertionId,
-                      offset: frags[i - 1]!.insertionOffset + frags[i - 1]!.length,
-                    }
-                  : { insertionId: MIN_OPERATION_ID, offset: 0 },
-              beforeRef: {
-                insertionId: frag.insertionId,
-                offset: frag.insertionOffset,
-              },
-            };
-          }
-
-          // The insert point is strictly inside this fragment — split it
-          const [left, right] = splitFragment(frag, localOffset);
-
-          // Replace the original fragment with the split pair
-          frags.splice(i, 1, left, right);
-
-          // Compute explicit Locator using the 2*k-1 scheme to avoid collisions
-          // with the 2*k scheme used for split fragments
-          const k = right.insertionOffset;
-          const insertLocator: Locator = {
-            levels: [...frag.baseLocator.levels, 2 * k - 1],
-          };
-
-          return {
-            leftLocator: left.locator,
-            rightLocator: right.locator,
-            insertLocator,
-            insertIndex: i + 1,
-            afterRef: {
-              insertionId: left.insertionId,
-              offset: left.insertionOffset + left.length,
-            },
-            beforeRef: {
-              insertionId: right.insertionId,
-              offset: right.insertionOffset,
-            },
-          };
-        }
-        visibleOffset += frag.length;
-
-        if (visibleOffset === offset) {
-          // Insert right after this fragment
-          const leftLocator = frag.locator;
-          const rightLocator =
-            i + 1 < frags.length ? (frags[i + 1]?.locator ?? MAX_LOCATOR) : MAX_LOCATOR;
-
-          return {
-            leftLocator,
-            rightLocator,
-            insertIndex: i + 1,
-            afterRef: {
-              insertionId: frag.insertionId,
-              offset: frag.insertionOffset + frag.length,
-            },
-            beforeRef: (() => {
-              const nextFrag = frags[i + 1];
-              if (nextFrag !== undefined) {
-                return {
-                  insertionId: nextFrag.insertionId,
-                  offset: nextFrag.insertionOffset,
-                };
+    // Handle insert at end
+    if (index >= len) {
+      const lastFrag = this.fragments.get(len - 1);
+      return {
+        leftLocator: lastFrag !== undefined ? lastFrag.locator : MIN_LOCATOR,
+        rightLocator: MAX_LOCATOR,
+        insertIndex: len,
+        splitIndex: len,
+        afterRef:
+          lastFrag !== undefined
+            ? {
+                insertionId: lastFrag.insertionId,
+                offset: lastFrag.insertionOffset + lastFrag.length,
               }
-              return { insertionId: MAX_OPERATION_ID, offset: 0 };
-            })(),
-          };
-        }
-      }
+            : { insertionId: MIN_OPERATION_ID, offset: 0 },
+        beforeRef: { insertionId: MAX_OPERATION_ID, offset: 0 },
+      };
     }
 
-    // Insert at the end
-    const lastFrag = frags[frags.length - 1];
+    const frag = this.fragments.get(index);
+    if (frag === undefined) {
+      // Should not happen, but handle gracefully
+      return {
+        leftLocator: MIN_LOCATOR,
+        rightLocator: MAX_LOCATOR,
+        insertIndex: index,
+        splitIndex: index,
+        afterRef: { insertionId: MIN_OPERATION_ID, offset: 0 },
+        beforeRef: { insertionId: MAX_OPERATION_ID, offset: 0 },
+      };
+    }
+
+    // Calculate local offset within the fragment
+    const localOffset = offset - accumulatedVisible;
+
+    // Get neighboring fragments for locator calculation
+    const prevFrag = index > 0 ? this.fragments.get(index - 1) : undefined;
+    const nextFrag = index + 1 < len ? this.fragments.get(index + 1) : undefined;
+
+    // Case 1: Insert at the start of a visible fragment (localOffset === 0 or fragment is invisible)
+    if (localOffset === 0 || !frag.visible) {
+      const leftLocator = prevFrag !== undefined ? prevFrag.locator : MIN_LOCATOR;
+      const rightLocator = frag.locator;
+
+      return {
+        leftLocator,
+        rightLocator,
+        insertIndex: index,
+        splitIndex: index,
+        afterRef:
+          prevFrag !== undefined
+            ? {
+                insertionId: prevFrag.insertionId,
+                offset: prevFrag.insertionOffset + prevFrag.length,
+              }
+            : { insertionId: MIN_OPERATION_ID, offset: 0 },
+        beforeRef: {
+          insertionId: frag.insertionId,
+          offset: frag.insertionOffset,
+        },
+      };
+    }
+
+    // Case 2: Insert at the end of a visible fragment
+    if (localOffset >= frag.length) {
+      const leftLocator = frag.locator;
+      const rightLocator = nextFrag !== undefined ? nextFrag.locator : MAX_LOCATOR;
+
+      return {
+        leftLocator,
+        rightLocator,
+        insertIndex: index + 1,
+        splitIndex: index + 1,
+        afterRef: {
+          insertionId: frag.insertionId,
+          offset: frag.insertionOffset + frag.length,
+        },
+        beforeRef:
+          nextFrag !== undefined
+            ? {
+                insertionId: nextFrag.insertionId,
+                offset: nextFrag.insertionOffset,
+              }
+            : { insertionId: MAX_OPERATION_ID, offset: 0 },
+      };
+    }
+
+    // Case 3: Insert in the middle of a visible fragment - need to split
+    const [left, right] = splitFragment(frag, localOffset);
+
+    // Compute explicit Locator using the 2*k-1 scheme to avoid collisions
+    const k = right.insertionOffset;
+    const insertLocator: Locator = {
+      levels: [...frag.baseLocator.levels, 2 * k - 1],
+    };
+
     return {
-      leftLocator: lastFrag !== undefined ? lastFrag.locator : MIN_LOCATOR,
-      rightLocator: MAX_LOCATOR,
-      insertIndex: frags.length,
-      afterRef:
-        lastFrag !== undefined
-          ? {
-              insertionId: lastFrag.insertionId,
-              offset: lastFrag.insertionOffset + lastFrag.length,
-            }
-          : { insertionId: MIN_OPERATION_ID, offset: 0 },
-      beforeRef: { insertionId: MAX_OPERATION_ID, offset: 0 },
+      leftLocator: left.locator,
+      rightLocator: right.locator,
+      insertLocator,
+      insertIndex: index + 1, // Insert after the left split part
+      splitIndex: index,
+      splitFragments: [left, right],
+      afterRef: {
+        insertionId: left.insertionId,
+        offset: left.insertionOffset + left.length,
+      },
+      beforeRef: {
+        insertionId: right.insertionId,
+        offset: right.insertionOffset,
+      },
     };
   }
 

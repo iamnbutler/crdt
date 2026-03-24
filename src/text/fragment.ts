@@ -82,6 +82,22 @@ export const visibleLinesDimension: Dimension<FragmentSummary, number> = {
   },
 };
 
+/** Dimension for seeking by total length (visible + deleted). */
+export const totalLenDimension: Dimension<FragmentSummary, number> = {
+  measure(summary: FragmentSummary): number {
+    return summary.visibleLen + summary.deletedLen;
+  },
+  compare(a: number, b: number): number {
+    return a - b;
+  },
+  add(a: number, b: number): number {
+    return a + b;
+  },
+  zero(): number {
+    return 0;
+  },
+};
+
 // ---------------------------------------------------------------------------
 // Fragment construction
 // ---------------------------------------------------------------------------

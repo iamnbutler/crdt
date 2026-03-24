@@ -522,4 +522,137 @@ describe("SumTree", () => {
       }
     }
   });
+
+  describe("seekIndex and seekIndexAndPosition", () => {
+    it("returns index at dimension position", () => {
+      const items = Array.from({ length: 10 }, (_, i) => new CountItem(i));
+      const tree = SumTree.fromItems(items, countSummaryOps);
+
+      // Count dimension: each item contributes 1
+      expect(tree.seekIndex(countDimension, 0, "right")).toBe(0);
+      expect(tree.seekIndex(countDimension, 5, "right")).toBe(5);
+      expect(tree.seekIndex(countDimension, 10, "right")).toBe(10);
+    });
+
+    it("returns index and position", () => {
+      const items = Array.from({ length: 10 }, (_, i) => new CountItem(i));
+      const tree = SumTree.fromItems(items, countSummaryOps);
+
+      const result = tree.seekIndexAndPosition(countDimension, 5, "right");
+      expect(result.index).toBe(5);
+      expect(result.position).toBe(5); // accumulated count before item 5
+    });
+
+    it("handles empty tree", () => {
+      const tree = new SumTree<CountItem, CountSummary>(countSummaryOps);
+
+      expect(tree.seekIndex(countDimension, 0, "right")).toBe(0);
+      expect(tree.seekIndex(countDimension, 5, "right")).toBe(0);
+    });
+
+    it("works with text dimensions", () => {
+      const chunks = [new TextChunk("abc"), new TextChunk("def"), new TextChunk("ghi")];
+      const tree = SumTree.fromItems(chunks, textSummaryOps);
+
+      // UTF-16 dimension
+      expect(tree.seekIndex(utf16Dimension, 0, "right")).toBe(0);
+      expect(tree.seekIndex(utf16Dimension, 3, "right")).toBe(1); // at start of "def"
+      expect(tree.seekIndex(utf16Dimension, 6, "right")).toBe(2); // at start of "ghi"
+      expect(tree.seekIndex(utf16Dimension, 9, "right")).toBe(3); // past end
+    });
+  });
+
+  describe("replaceAt", () => {
+    it("replaces item at index", () => {
+      let tree = SumTree.fromItems(
+        [new CountItem(1), new CountItem(2), new CountItem(3)],
+        countSummaryOps,
+      );
+
+      tree = tree.replaceAt(1, new CountItem(99));
+
+      expect(tree.get(0)?.value).toBe(1);
+      expect(tree.get(1)?.value).toBe(99);
+      expect(tree.get(2)?.value).toBe(3);
+      expect(tree.length()).toBe(3);
+    });
+
+    it("does not mutate original", () => {
+      const original = SumTree.fromItems(
+        [new CountItem(1), new CountItem(2), new CountItem(3)],
+        countSummaryOps,
+      );
+
+      const modified = original.replaceAt(1, new CountItem(99));
+
+      expect(original.get(1)?.value).toBe(2);
+      expect(modified.get(1)?.value).toBe(99);
+    });
+
+    it("updates summary correctly", () => {
+      let tree = SumTree.fromItems(
+        [new CountItem(1), new CountItem(2), new CountItem(3)],
+        countSummaryOps,
+      );
+
+      tree = tree.replaceAt(1, new CountItem(99));
+
+      expect(tree.summary().count).toBe(3);
+    });
+  });
+
+  describe("spliceAt", () => {
+    it("replaces one item with two", () => {
+      let tree = SumTree.fromItems(
+        [new CountItem(1), new CountItem(2), new CountItem(3)],
+        countSummaryOps,
+      );
+
+      tree = tree.spliceAt(1, 1, new CountItem(20), new CountItem(21));
+
+      expect(tree.length()).toBe(4);
+      expect(tree.get(0)?.value).toBe(1);
+      expect(tree.get(1)?.value).toBe(20);
+      expect(tree.get(2)?.value).toBe(21);
+      expect(tree.get(3)?.value).toBe(3);
+    });
+
+    it("replaces two items with one", () => {
+      let tree = SumTree.fromItems(
+        [new CountItem(1), new CountItem(2), new CountItem(3), new CountItem(4)],
+        countSummaryOps,
+      );
+
+      tree = tree.spliceAt(1, 2, new CountItem(99));
+
+      expect(tree.length()).toBe(3);
+      expect(tree.get(0)?.value).toBe(1);
+      expect(tree.get(1)?.value).toBe(99);
+      expect(tree.get(2)?.value).toBe(4);
+    });
+
+    it("inserts without deleting", () => {
+      let tree = SumTree.fromItems([new CountItem(1), new CountItem(3)], countSummaryOps);
+
+      tree = tree.spliceAt(1, 0, new CountItem(2));
+
+      expect(tree.length()).toBe(3);
+      expect(tree.get(0)?.value).toBe(1);
+      expect(tree.get(1)?.value).toBe(2);
+      expect(tree.get(2)?.value).toBe(3);
+    });
+
+    it("deletes without inserting", () => {
+      let tree = SumTree.fromItems(
+        [new CountItem(1), new CountItem(2), new CountItem(3)],
+        countSummaryOps,
+      );
+
+      tree = tree.spliceAt(1, 1);
+
+      expect(tree.length()).toBe(2);
+      expect(tree.get(0)?.value).toBe(1);
+      expect(tree.get(1)?.value).toBe(3);
+    });
+  });
 });
