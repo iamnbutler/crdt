@@ -556,6 +556,8 @@ export class TextBuffer {
       this.recordImplicitOp(opId, "insert");
     }
 
+    // Use the original O(n) approach for correctness (maintains fragment ordering)
+    // TODO: Issue #33 - Implement Locator-keyed SumTree for O(log n) insertion
     const frags = this.fragmentsArray();
 
     // Find the position to insert: seek to the visible offset
