@@ -54,11 +54,11 @@ const ourAdapter: TextCRDTAdapter = {
     return (doc as TextBuffer).getText();
   },
   serialize(doc: unknown) {
-    // Use getText for simple serialization (no toJSON available)
-    return (doc as TextBuffer).getText();
+    // Real CRDT serialization that preserves full state
+    return (doc as TextBuffer).serialize();
   },
   deserialize(data: Uint8Array | string) {
-    return TextBuffer.fromString(data as string);
+    return TextBuffer.deserialize(data as Uint8Array);
   },
 };
 

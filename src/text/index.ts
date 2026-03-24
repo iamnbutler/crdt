@@ -88,3 +88,30 @@ export { TextBuffer } from "./text-buffer.js";
 
 // Snapshot
 export { TextBufferSnapshot } from "./snapshot.js";
+
+// Serialization
+export {
+  SERIALIZATION_VERSION,
+  decodeBinary,
+  decodeJSON,
+  deserializeLocator,
+  deserializeOperationId,
+  deserializeTransactionId,
+  deserializeVersionVector,
+  encodeBinary,
+  encodeJSON,
+  serializeFragment,
+  serializeLocator,
+  serializeOperationId,
+  serializeVersionVector,
+} from "./serialization.js";
+
+export type {
+  SerializedFragment,
+  SerializedLocator,
+  SerializedOperationId,
+  SerializedSnapshot,
+  SerializedUndoEntry,
+  SerializedUndoStackEntry,
+  SerializedVersionEntry,
+} from "./serialization.js";
