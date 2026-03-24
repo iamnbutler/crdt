@@ -97,6 +97,29 @@ function compareLocatorsForSort(a: Locator, b: Locator): number {
 }
 
 /**
+ * Compare two fragments for canonical ordering.
+ * Sort key: (locator prefix, insertionId, insertionOffset, locator length)
+ *
+ * This is the core comparison used both for sorting and binary search insertion.
+ */
+function compareFragmentsForSort(a: Fragment, b: Fragment): number {
+  // First, compare by locator prefix
+  const locCmp = compareLocatorsForSort(a.locator, b.locator);
+  if (locCmp !== 0) return locCmp;
+
+  // Same prefix: tie-break by operation ID
+  const idCmp = compareOperationIds(a.insertionId, b.insertionId);
+  if (idCmp !== 0) return idCmp;
+
+  // Same operation: sort by insertionOffset (split parts)
+  const offsetCmp = a.insertionOffset - b.insertionOffset;
+  if (offsetCmp !== 0) return offsetCmp;
+
+  // Finally, sort by locator length (children after parent)
+  return a.locator.levels.length - b.locator.levels.length;
+}
+
+/**
  * Sort fragments to ensure canonical order regardless of operation application
  * sequence.
  *
@@ -108,22 +131,35 @@ function compareLocatorsForSort(a: Locator, b: Locator): number {
  * 3. Child locators sort after parent locators with lower operation IDs
  */
 function sortFragments(frags: Fragment[]): void {
-  frags.sort((a, b) => {
-    // First, compare by locator prefix
-    const locCmp = compareLocatorsForSort(a.locator, b.locator);
-    if (locCmp !== 0) return locCmp;
+  frags.sort(compareFragmentsForSort);
+}
 
-    // Same prefix: tie-break by operation ID
-    const idCmp = compareOperationIds(a.insertionId, b.insertionId);
-    if (idCmp !== 0) return idCmp;
+/**
+ * Binary search to find the insertion position for a new fragment.
+ * Returns the index where the fragment should be inserted to maintain sorted order.
+ * Uses the same comparison function as sortFragments to ensure consistency.
+ */
+function binarySearchInsertPosition(frags: Fragment[], newFrag: Fragment): number {
+  let low = 0;
+  let high = frags.length;
 
-    // Same operation: sort by insertionOffset (split parts)
-    const offsetCmp = a.insertionOffset - b.insertionOffset;
-    if (offsetCmp !== 0) return offsetCmp;
+  while (low < high) {
+    const mid = (low + high) >>> 1;
+    const midFrag = frags[mid];
+    if (midFrag === undefined) {
+      // Should not happen, but handle gracefully
+      low = mid + 1;
+      continue;
+    }
+    const cmp = compareFragmentsForSort(newFrag, midFrag);
+    if (cmp < 0) {
+      high = mid;
+    } else {
+      low = mid + 1;
+    }
+  }
 
-    // Finally, sort by locator length (children after parent)
-    return a.locator.levels.length - b.locator.levels.length;
-  });
+  return low;
 }
 
 // ---------------------------------------------------------------------------
@@ -737,9 +773,14 @@ export class TextBuffer {
     // Create the new fragment
     const newFrag = createFragment(opId, 0, locator, text, true);
 
-    // Insert and sort using the same approach as remote inserts for consistency.
+    // Only sort if a split occurred (indicated by insertLocator being set).
+    // Split fragments may need to interleave with existing child fragments from remote ops.
+    // When no split occurs, the array is already sorted.
+    if (insertLocator !== undefined) {
+      sortFragments(frags);
+    }
+    // Insert using O(log n) binary search which maintains sorted order.
     this.insertFragmentByLocator(frags, newFrag);
-    sortFragments(frags);
     this.fragments = SumTree.fromItems(frags, fragmentSummaryOps);
 
     return {
@@ -903,6 +944,7 @@ export class TextBuffer {
     const frags = this.fragmentsArray();
     const newFrags: Fragment[] = [];
     const ranges: Array<{ insertionId: OperationId; offset: number; length: number }> = [];
+    let didSplit = false;
 
     let visibleOffset = 0;
 
@@ -940,6 +982,7 @@ export class TextBuffer {
         newFrags.push(beforePart);
         newFrags.push(deleteFragment(deletedPart, opId));
         newFrags.push(afterPart);
+        didSplit = true;
 
         ranges.push({
           insertionId: deletedPart.insertionId,
@@ -953,6 +996,7 @@ export class TextBuffer {
 
         newFrags.push(keepPart);
         newFrags.push(deleteFragment(deletedPart, opId));
+        didSplit = true;
 
         ranges.push({
           insertionId: deletedPart.insertionId,
@@ -966,6 +1010,7 @@ export class TextBuffer {
 
         newFrags.push(deleteFragment(deletedPart, opId));
         newFrags.push(keepPart);
+        didSplit = true;
 
         ranges.push({
           insertionId: deletedPart.insertionId,
@@ -977,10 +1022,11 @@ export class TextBuffer {
       visibleOffset = fragEnd;
     }
 
-    // Sort fragments after splits to maintain canonical order.
-    // Split fragments get child locators that must interleave correctly
-    // with fragments from other operations at the same parent locator.
-    sortFragments(newFrags);
+    // Only sort if splits occurred. Split fragments may need to interleave
+    // with existing child fragments from remote ops at the same parent locator.
+    if (didSplit) {
+      sortFragments(newFrags);
+    }
     this.fragments = SumTree.fromItems(newFrags, fragmentSummaryOps);
 
     return {
@@ -1051,44 +1097,22 @@ export class TextBuffer {
     // The sort function handles interleaving with children based on operation ID.
     const newFrag = createFragment(op.id, 0, op.locator, op.text, true);
 
-    // Insert the fragment at its locator-sorted position
+    // Insert the fragment at its locator-sorted position using O(log n) binary search.
+    // Since we use the same comparison function as sortFragments, this maintains
+    // sorted order without needing a full re-sort after insertion.
     this.insertFragmentByLocator(frags, newFrag);
-
-    // Re-sort after insertion to ensure correct interleaving
-    sortFragments(frags);
 
     this.fragments = SumTree.fromItems(frags, fragmentSummaryOps);
   }
 
   /**
    * Insert a fragment into the array at its locator-sorted position.
+   * Uses O(log n) binary search with the same comparison as sortFragments
+   * to maintain sorted order without requiring a full re-sort.
    * Modifies the array in place.
    */
   private insertFragmentByLocator(frags: Fragment[], newFrag: Fragment): void {
-    let insertIndex = 0;
-    for (let i = 0; i < frags.length; i++) {
-      const frag = frags[i];
-      if (frag === undefined) continue;
-
-      const cmp = compareLocators(newFrag.locator, frag.locator);
-      if (cmp < 0) {
-        break;
-      }
-      if (cmp === 0) {
-        // Same locator — tie-break by (replicaId, counter, insertionOffset)
-        const idCmp = compareOperationIds(newFrag.insertionId, frag.insertionId);
-        if (idCmp < 0) {
-          break;
-        }
-        if (idCmp === 0) {
-          // Same operation — compare insertionOffset
-          if (newFrag.insertionOffset < frag.insertionOffset) {
-            break;
-          }
-        }
-      }
-      insertIndex = i + 1;
-    }
+    const insertIndex = binarySearchInsertPosition(frags, newFrag);
     frags.splice(insertIndex, 0, newFrag);
   }
 
