@@ -19,10 +19,12 @@ import {
   observeVersion,
 } from "./clock.js";
 import {
+  countDimension,
   createFragment,
   deleteFragment,
   fragmentSummaryOps,
   splitFragment,
+  visibleLenDimension,
   withVisibility,
 } from "./fragment.js";
 import { MAX_LOCATOR, MIN_LOCATOR, compareLocators, locatorBetween } from "./locator.js";
@@ -732,84 +734,146 @@ export class TextBuffer {
       this.recordImplicitOp(opId, "delete");
     }
 
-    const frags = this.fragmentsArray();
-    const newFrags: Fragment[] = [];
     const ranges: Array<{ insertionId: OperationId; offset: number; length: number }> = [];
 
-    let visibleOffset = 0;
+    // Use dimension-based seeking to find the starting fragment - O(log n)
+    // Pass countDimension to enable O(log n) index computation
+    const result = this.fragments.findIndexByDimension(
+      visibleLenDimension,
+      start,
+      "right",
+      countDimension,
+    );
 
-    for (let i = 0; i < frags.length; i++) {
-      const frag = frags[i];
-      if (frag === undefined) continue;
+    if (result === null) {
+      // No visible content at or after start
+      return {
+        type: "delete",
+        id: opId,
+        ranges,
+        version: cloneVersionVector(this._version),
+      };
+    }
+
+    let index = result.index;
+    let visibleOffset = result.localOffset; // Visible offset before this fragment
+
+    // Process fragments until we've covered the entire delete range
+    // Each iteration: O(log n) for tree operations
+    // Total iterations: O(k) where k is number of affected fragments (typically 1-3)
+    while (visibleOffset < end) {
+      const frag = this.fragments.get(index, countDimension);
+      if (frag === undefined) break;
 
       if (!frag.visible) {
-        newFrags.push(frag);
+        // Skip invisible fragments - they don't affect visible offsets
+        index++;
         continue;
       }
 
       const fragStart = visibleOffset;
-      const fragEnd = visibleOffset + frag.length;
+      const fragEnd = fragStart + frag.length;
 
-      if (fragEnd <= start || fragStart >= end) {
-        // Fragment is entirely outside the delete range
-        newFrags.push(frag);
-      } else if (fragStart >= start && fragEnd <= end) {
-        // Fragment is entirely within the delete range
-        newFrags.push(deleteFragment(frag, opId));
+      if (fragEnd <= start) {
+        // Fragment is entirely before delete range - move to next
+        visibleOffset = fragEnd;
+        index++;
+        continue;
+      }
+
+      if (fragStart >= end) {
+        // Fragment is entirely after delete range - we're done
+        break;
+      }
+
+      // Fragment overlaps with delete range
+      if (fragStart >= start && fragEnd <= end) {
+        // Fragment is entirely within delete range - just mark as deleted
+        const deletedFrag = deleteFragment(frag, opId);
+        this.fragments = this.fragments.updateAt(index, deletedFrag, countDimension);
+
         ranges.push({
           insertionId: frag.insertionId,
           offset: frag.insertionOffset,
           length: frag.length,
         });
+
+        // Deleted fragment no longer contributes to visible offset
+        // But we still move past it in the array
+        visibleOffset = fragEnd;
+        index++;
       } else if (fragStart < start && fragEnd > end) {
-        // Delete range is entirely within this fragment — split into 3 parts
+        // Delete range is entirely within this fragment - split into 3 parts
         const deleteStart = start - fragStart;
         const deleteEnd = end - fragStart;
 
         const [beforePart, rest] = splitFragment(frag, deleteStart);
         const [deletedPart, afterPart] = splitFragment(rest, deleteEnd - deleteStart);
+        const deletedMarked = deleteFragment(deletedPart, opId);
 
-        newFrags.push(beforePart);
-        newFrags.push(deleteFragment(deletedPart, opId));
-        newFrags.push(afterPart);
+        // Replace 1 fragment with 3
+        this.fragments = this.fragments.spliceAt(
+          index,
+          1,
+          [beforePart, deletedMarked, afterPart],
+          countDimension,
+        );
 
         ranges.push({
           insertionId: deletedPart.insertionId,
           offset: deletedPart.insertionOffset,
           length: deletedPart.length,
         });
+
+        // We're done - the delete range is fully contained within this fragment
+        break;
       } else if (fragStart < start) {
-        // Delete range overlaps the end of this fragment
+        // Delete range starts inside this fragment (overlaps end of fragment)
         const splitPoint = start - fragStart;
         const [keepPart, deletedPart] = splitFragment(frag, splitPoint);
+        const deletedMarked = deleteFragment(deletedPart, opId);
 
-        newFrags.push(keepPart);
-        newFrags.push(deleteFragment(deletedPart, opId));
+        // Replace 1 fragment with 2
+        this.fragments = this.fragments.spliceAt(
+          index,
+          1,
+          [keepPart, deletedMarked],
+          countDimension,
+        );
 
         ranges.push({
           insertionId: deletedPart.insertionId,
           offset: deletedPart.insertionOffset,
           length: deletedPart.length,
         });
+
+        // Move past both fragments (keepPart contributes to visible, deletedMarked doesn't)
+        visibleOffset = fragEnd;
+        index += 2;
       } else {
-        // Delete range overlaps the start of this fragment (fragEnd > end)
+        // Delete range ends inside this fragment (fragEnd > end, overlaps start of fragment)
         const splitPoint = end - fragStart;
         const [deletedPart, keepPart] = splitFragment(frag, splitPoint);
+        const deletedMarked = deleteFragment(deletedPart, opId);
 
-        newFrags.push(deleteFragment(deletedPart, opId));
-        newFrags.push(keepPart);
+        // Replace 1 fragment with 2
+        this.fragments = this.fragments.spliceAt(
+          index,
+          1,
+          [deletedMarked, keepPart],
+          countDimension,
+        );
 
         ranges.push({
           insertionId: deletedPart.insertionId,
           offset: deletedPart.insertionOffset,
           length: deletedPart.length,
         });
+
+        // We're done - we've reached the end of the delete range
+        break;
       }
-
-      visibleOffset = fragEnd;
     }
-
-    this.fragments = SumTree.fromItems(newFrags, fragmentSummaryOps);
 
     return {
       type: "delete",

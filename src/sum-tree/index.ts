@@ -579,6 +579,102 @@ export class SumTree<T extends Summarizable<S>, S> {
   }
 
   /**
+   * Find the index of the item at or after the given dimension position.
+   * Returns { index, localOffset } where:
+   * - index is the item's position in the tree (0-based)
+   * - localOffset is how far into the item the target position falls
+   *
+   * Uses O(log n) traversal with summary-based counting.
+   *
+   * @param countDimension Optional dimension that extracts item count from summary.
+   *   If provided, uses O(log n) summary-based counting instead of O(n) traversal.
+   */
+  findIndexByDimension<D>(
+    dimension: Dimension<S, D>,
+    target: D,
+    bias: SeekBias = "right",
+    countDimension?: Dimension<S, number>,
+  ): { index: number; localOffset: D } | null {
+    if (this.isEmpty()) {
+      return null;
+    }
+
+    let index = 0;
+    let position = dimension.zero();
+    let current = this._root;
+
+    while (true) {
+      if (this.arena.isLeaf(current)) {
+        // At a leaf, scan items
+        const data = this.arena.getItem(current);
+        const items = data?.items ?? [];
+
+        for (let i = 0; i < items.length; i++) {
+          const item = items[i];
+          if (item === undefined) continue;
+
+          const itemSummary = item.summary();
+          const itemMeasure = dimension.measure(itemSummary);
+          const nextPos = dimension.add(position, itemMeasure);
+
+          const cmp = dimension.compare(nextPos, target);
+
+          if (cmp > 0 || (cmp === 0 && bias === "left")) {
+            // Found the item containing or at the target
+            // localOffset is how far into the item we are
+            // We need to compute target - position, but Dimension doesn't have subtract
+            // So we return position and let caller compute if needed
+            return { index, localOffset: position };
+          }
+
+          position = nextPos;
+          index++;
+        }
+
+        // Target is past this leaf
+        return null;
+      }
+
+      // At internal node, find the right child
+      const children = this.arena.getChildren(current);
+      let found = false;
+
+      for (let i = 0; i < children.length; i++) {
+        const childId = children[i];
+        if (childId === undefined) continue;
+
+        const childSummary = this.summaries.get(childId);
+        if (childSummary === undefined) continue;
+
+        const childMeasure = dimension.measure(childSummary);
+        const nextPos = dimension.add(position, childMeasure);
+
+        const cmp = dimension.compare(nextPos, target);
+
+        if (cmp > 0 || (cmp === 0 && bias === "left")) {
+          // Target is in this child
+          current = childId;
+          found = true;
+          break;
+        }
+
+        // Skip this child entirely
+        position = nextPos;
+        // Use countDimension if provided for O(log n), otherwise fall back to O(n) traversal
+        if (countDimension !== undefined) {
+          index += countDimension.measure(childSummary);
+        } else {
+          index += this.countItems(childId);
+        }
+      }
+
+      if (!found) {
+        return null;
+      }
+    }
+  }
+
+  /**
    * Push an item to the end of the tree.
    * Returns a new tree (path copying), leaving the original unchanged.
    */
@@ -589,12 +685,13 @@ export class SumTree<T extends Summarizable<S>, S> {
   /**
    * Insert an item at the given index.
    * Returns a new tree (path copying), leaving the original unchanged.
+   * @param countDimension Optional dimension that extracts item count from summary for O(log n) indexing.
    */
-  insertAt(index: number, item: T): SumTree<T, S> {
+  insertAt(index: number, item: T, countDimension?: Dimension<S, number>): SumTree<T, S> {
     const newTree = this.shallowClone();
 
     // Find the leaf and position for insertion
-    const path = newTree.findLeafForIndex(index);
+    const path = newTree.findLeafForIndex(index, countDimension);
     if (path.length === 0) {
       // Empty tree, insert into root
       const items = [item];
@@ -633,14 +730,16 @@ export class SumTree<T extends Summarizable<S>, S> {
   /**
    * Remove item at the given index.
    * Returns a new tree (path copying), leaving the original unchanged.
+   * @param countDimension Optional dimension that extracts item count from summary for O(log n) indexing.
    */
-  removeAt(index: number): SumTree<T, S> {
-    if (index < 0 || index >= this.length()) {
+  removeAt(index: number, countDimension?: Dimension<S, number>): SumTree<T, S> {
+    const len = countDimension ? this.lengthByDimension(countDimension) : this.length();
+    if (index < 0 || index >= len) {
       throw new Error(`Index ${index} out of bounds`);
     }
 
     const newTree = this.shallowClone();
-    const path = newTree.findLeafForIndex(index);
+    const path = newTree.findLeafForIndex(index, countDimension);
     if (path.length === 0) {
       return newTree;
     }
@@ -674,14 +773,102 @@ export class SumTree<T extends Summarizable<S>, S> {
   }
 
   /**
-   * Get item at index.
+   * Update item at the given index.
+   * Returns a new tree (path copying), leaving the original unchanged.
+   * @param countDimension Optional dimension that extracts item count from summary for O(log n) indexing.
    */
-  get(index: number): T | undefined {
-    if (index < 0 || index >= this.length()) {
+  updateAt(index: number, newItem: T, countDimension?: Dimension<S, number>): SumTree<T, S> {
+    const len = countDimension ? this.lengthByDimension(countDimension) : this.length();
+    if (index < 0 || index >= len) {
+      throw new Error(`Index ${index} out of bounds`);
+    }
+
+    const newTree = this.shallowClone();
+    const path = newTree.findLeafForIndex(index, countDimension);
+    if (path.length === 0) {
+      return newTree;
+    }
+
+    // Clone the path
+    const clonedPath = newTree.clonePath(path);
+
+    // Update the item in the leaf
+    const leafEntry = clonedPath[clonedPath.length - 1];
+    if (leafEntry === undefined) {
+      return newTree;
+    }
+
+    const leafData = newTree.arena.getItem(leafEntry.nodeId);
+    const items = leafData?.items ?? [];
+    items[leafEntry.indexInNode] = newItem;
+
+    // Update leaf
+    newTree.arena.setItem(leafEntry.nodeId, { items });
+
+    // Update summaries up the path
+    newTree.updateSummariesUp(clonedPath);
+
+    return newTree;
+  }
+
+  /**
+   * Replace items at the given index with new items.
+   * Similar to Array.splice but for the tree.
+   * Returns a new tree (path copying), leaving the original unchanged.
+   * @param countDimension Optional dimension that extracts item count from summary for O(log n) indexing.
+   */
+  spliceAt(
+    index: number,
+    deleteCount: number,
+    newItems: T[],
+    countDimension?: Dimension<S, number>,
+  ): SumTree<T, S> {
+    const len = countDimension ? this.lengthByDimension(countDimension) : this.length();
+    if (index < 0 || index > len) {
+      throw new Error(`Index ${index} out of bounds`);
+    }
+
+    // Clamp deleteCount to available items
+    const actualDeleteCount = Math.min(deleteCount, len - index);
+
+    // Fast path: replacing same number of items
+    if (actualDeleteCount === newItems.length && actualDeleteCount === 1) {
+      const item = newItems[0];
+      if (item !== undefined) {
+        return this.updateAt(index, item, countDimension);
+      }
+    }
+
+    // General case: remove then insert
+    let tree: SumTree<T, S> = this;
+
+    // Remove items from end to start to keep indices valid
+    for (let i = actualDeleteCount - 1; i >= 0; i--) {
+      tree = tree.removeAt(index + i, countDimension);
+    }
+
+    // Insert new items from start to end
+    for (let i = 0; i < newItems.length; i++) {
+      const item = newItems[i];
+      if (item !== undefined) {
+        tree = tree.insertAt(index + i, item, countDimension);
+      }
+    }
+
+    return tree;
+  }
+
+  /**
+   * Get item at index.
+   * @param countDimension Optional dimension that extracts item count from summary for O(log n) indexing.
+   */
+  get(index: number, countDimension?: Dimension<S, number>): T | undefined {
+    const len = countDimension ? this.lengthByDimension(countDimension) : this.length();
+    if (index < 0 || index >= len) {
       return undefined;
     }
 
-    const path = this.findLeafForIndex(index);
+    const path = this.findLeafForIndex(index, countDimension);
     const leafEntry = path[path.length - 1];
     if (leafEntry === undefined) {
       return undefined;
@@ -696,6 +883,17 @@ export class SumTree<T extends Summarizable<S>, S> {
    */
   length(): number {
     return this.countItems(this._root);
+  }
+
+  /**
+   * Get the number of items using a count dimension - O(1).
+   */
+  lengthByDimension(countDimension: Dimension<S, number>): number {
+    const summary = this.summaries.get(this._root);
+    if (summary === undefined) {
+      return 0;
+    }
+    return countDimension.measure(summary);
   }
 
   /**
@@ -935,7 +1133,10 @@ export class SumTree<T extends Summarizable<S>, S> {
     return newTree;
   }
 
-  private findLeafForIndex(index: number): Array<{ nodeId: NodeId; indexInNode: number }> {
+  private findLeafForIndex(
+    index: number,
+    countDimension?: Dimension<S, number>,
+  ): Array<{ nodeId: NodeId; indexInNode: number }> {
     const path: Array<{ nodeId: NodeId; indexInNode: number }> = [];
     let remaining = index;
     let current = this._root;
@@ -957,7 +1158,14 @@ export class SumTree<T extends Summarizable<S>, S> {
         const childId = children[i];
         if (childId === undefined) continue;
 
-        const childCount = this.countItems(childId);
+        // Use countDimension if provided for O(log n), otherwise fall back to O(n) traversal
+        let childCount: number;
+        if (countDimension !== undefined) {
+          const childSummary = this.summaries.get(childId);
+          childCount = childSummary !== undefined ? countDimension.measure(childSummary) : 0;
+        } else {
+          childCount = this.countItems(childId);
+        }
 
         if (remaining < childCount || i === children.length - 1) {
           path.push({ nodeId: current, indexInNode: i });

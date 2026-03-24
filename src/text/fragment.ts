@@ -24,6 +24,7 @@ import type { Fragment, FragmentSummary, Locator, OperationId } from "./types.js
 export const fragmentSummaryOps: Summary<FragmentSummary> = {
   identity(): FragmentSummary {
     return {
+      count: 0,
       visibleLen: 0,
       visibleLines: 0,
       deletedLen: 0,
@@ -34,6 +35,7 @@ export const fragmentSummaryOps: Summary<FragmentSummary> = {
 
   combine(left: FragmentSummary, right: FragmentSummary): FragmentSummary {
     return {
+      count: left.count + right.count,
       visibleLen: left.visibleLen + right.visibleLen,
       visibleLines: left.visibleLines + right.visibleLines,
       deletedLen: left.deletedLen + right.deletedLen,
@@ -43,6 +45,22 @@ export const fragmentSummaryOps: Summary<FragmentSummary> = {
           ? left.maxInsertionId
           : right.maxInsertionId,
     };
+  },
+};
+
+/** Dimension for seeking by item count (for efficient index-based operations). */
+export const countDimension: Dimension<FragmentSummary, number> = {
+  measure(summary: FragmentSummary): number {
+    return summary.count;
+  },
+  compare(a: number, b: number): number {
+    return a - b;
+  },
+  add(a: number, b: number): number {
+    return a + b;
+  },
+  zero(): number {
+    return 0;
   },
 };
 
@@ -118,6 +136,7 @@ export function createFragment(
 
   const summaryValue: FragmentSummary = visible
     ? {
+        count: 1,
         visibleLen: len,
         visibleLines: lines,
         deletedLen: 0,
@@ -125,6 +144,7 @@ export function createFragment(
         maxInsertionId: insertionId,
       }
     : {
+        count: 1,
         visibleLen: 0,
         visibleLines: 0,
         deletedLen: len,

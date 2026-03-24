@@ -124,6 +124,7 @@ export interface Fragment extends Summarizable<FragmentSummary> {
  * text metrics for efficient seeking.
  */
 export interface FragmentSummary {
+  readonly count: number;
   readonly visibleLen: number;
   readonly visibleLines: number;
   readonly deletedLen: number;
