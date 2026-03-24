@@ -194,13 +194,30 @@ export class TextBuffer {
 
   /**
    * Create a TextBuffer initialized with the given text.
+   * Uses a fast path that bypasses most CRDT infrastructure for initial content.
    */
   static fromString(text: string, rid?: ReplicaId): TextBuffer {
     const buffer = TextBuffer.create(rid);
     if (text.length > 0) {
-      // Normalize line endings
-      const normalized = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
-      buffer.insertInternal(0, normalized);
+      // Only normalize if \r characters are present (rare case)
+      const normalized = text.includes("\r")
+        ? text.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
+        : text;
+
+      // Fast path: create fragment directly without full CRDT insert machinery.
+      // We still need: clock tick, version update, and undo tracking.
+      const opId = buffer.clock.tick();
+      observeVersion(buffer._version, buffer._replicaId, opId.counter);
+
+      // Record for undo support (initial content should be undoable)
+      buffer.recordImplicitOp(opId, "insert");
+
+      // Use a simple locator between MIN and MAX
+      const locator = locatorBetween(MIN_LOCATOR, MAX_LOCATOR);
+      const fragment = createFragment(opId, 0, locator, normalized, true);
+
+      // Build SumTree with single fragment
+      buffer.fragments = SumTree.fromItems([fragment], fragmentSummaryOps);
     }
     return buffer;
   }
