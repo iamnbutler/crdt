@@ -859,9 +859,16 @@ export class TextBuffer {
         break;
       }
       if (cmp === 0) {
-        // Same locator — tie-break by operation ID
-        if (compareOperationIds(op.id, frag.insertionId) < 0) {
+        // Same locator — tie-break by (replicaId, counter, insertionOffset)
+        const idCmp = compareOperationIds(op.id, frag.insertionId);
+        if (idCmp < 0) {
           break;
+        }
+        if (idCmp === 0) {
+          // Same operation — compare insertionOffset (new frag has offset 0)
+          if (0 < frag.insertionOffset) {
+            break;
+          }
         }
       }
       insertIndex = i + 1;
