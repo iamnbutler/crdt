@@ -10,6 +10,7 @@
  */
 
 import type { Dimension, Summary } from "../sum-tree/index.js";
+import { MIN_LOCATOR, compareLocators } from "./locator.js";
 import { MIN_OPERATION_ID, compareOperationIds } from "./types.js";
 import type { Fragment, FragmentSummary, Locator, OperationId } from "./types.js";
 
@@ -29,6 +30,7 @@ export const fragmentSummaryOps: Summary<FragmentSummary> = {
       deletedLen: 0,
       deletedLines: 0,
       maxInsertionId: MIN_OPERATION_ID,
+      maxLocator: MIN_LOCATOR,
     };
   },
 
@@ -42,6 +44,10 @@ export const fragmentSummaryOps: Summary<FragmentSummary> = {
         compareOperationIds(left.maxInsertionId, right.maxInsertionId) >= 0
           ? left.maxInsertionId
           : right.maxInsertionId,
+      maxLocator:
+        compareLocators(left.maxLocator, right.maxLocator) >= 0
+          ? left.maxLocator
+          : right.maxLocator,
     };
   },
 };
@@ -70,6 +76,22 @@ export const visibleLenDimension: Dimension<FragmentSummary, number> = {
 export const visibleLinesDimension: Dimension<FragmentSummary, number> = {
   measure(summary: FragmentSummary): number {
     return summary.visibleLines;
+  },
+  compare(a: number, b: number): number {
+    return a - b;
+  },
+  add(a: number, b: number): number {
+    return a + b;
+  },
+  zero(): number {
+    return 0;
+  },
+};
+
+/** Dimension for seeking by item count (used for index-based operations). */
+export const countDimension: Dimension<FragmentSummary, number> = {
+  measure(_summary: FragmentSummary): number {
+    return 1; // Each fragment counts as 1
   },
   compare(a: number, b: number): number {
     return a - b;
@@ -123,6 +145,7 @@ export function createFragment(
         deletedLen: 0,
         deletedLines: 0,
         maxInsertionId: insertionId,
+        maxLocator: locator,
       }
     : {
         visibleLen: 0,
@@ -130,6 +153,7 @@ export function createFragment(
         deletedLen: len,
         deletedLines: lines,
         maxInsertionId: insertionId,
+        maxLocator: locator,
       };
 
   return {

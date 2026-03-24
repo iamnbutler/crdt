@@ -88,6 +88,53 @@ export class Cursor<T extends Summarizable<S>, S, D> {
     return this._atEnd;
   }
 
+  /**
+   * Get the item index (0-based position) of the current cursor position.
+   * This counts all items before the current position in the tree.
+   * Returns tree length if cursor is at end or stack is empty.
+   */
+  itemIndex(): number {
+    if (this._atEnd || this.stack.length === 0) {
+      return this.tree.length();
+    }
+
+    const arena = this.tree.getArena();
+    let index = 0;
+
+    for (let i = 0; i < this.stack.length; i++) {
+      const entry = this.stack[i];
+      if (entry === undefined) continue;
+
+      if (arena.isLeaf(entry.nodeId)) {
+        // Leaf node: add the childIndex (position within the leaf)
+        index += entry.childIndex;
+      } else {
+        // Internal node: find which child we descended into
+        // by looking at the next stack entry's nodeId
+        const nextEntry = this.stack[i + 1];
+        if (nextEntry === undefined) continue;
+
+        // Find which child index contains nextEntry.nodeId
+        const count = arena.getCount(entry.nodeId);
+        for (let j = 0; j < count; j++) {
+          const childId = arena.getChild(entry.nodeId, j);
+          if (childId === nextEntry.nodeId) {
+            // Child j is where we descended, count items in children before j
+            for (let k = 0; k < j; k++) {
+              const kid = arena.getChild(entry.nodeId, k);
+              if (kid !== INVALID_NODE_ID) {
+                index += this.tree.countItemsInSubtree(kid);
+              }
+            }
+            break;
+          }
+        }
+      }
+    }
+
+    return index;
+  }
+
   /** Reset cursor to the beginning */
   reset(): void {
     this.stack = [];
@@ -569,6 +616,11 @@ export class SumTree<T extends Summarizable<S>, S> {
     return data?.items ?? [];
   }
 
+  /** Count items in a subtree (for cursor use) */
+  countItemsInSubtree(nodeId: NodeId): number {
+    return this.countItems(nodeId);
+  }
+
   /**
    * Create a cursor for navigating the tree in the given dimension.
    */
@@ -669,6 +721,44 @@ export class SumTree<T extends Summarizable<S>, S> {
     } else {
       newTree.updateSummariesUp(clonedPath);
     }
+
+    return newTree;
+  }
+
+  /**
+   * Replace item at the given index with a new item.
+   * Returns a new tree (path copying), leaving the original unchanged.
+   * Does not change the tree structure (no splits or merges needed).
+   */
+  replaceAt(index: number, item: T): SumTree<T, S> {
+    if (index < 0 || index >= this.length()) {
+      throw new Error(`Index ${index} out of bounds`);
+    }
+
+    const newTree = this.shallowClone();
+    const path = newTree.findLeafForIndex(index);
+    if (path.length === 0) {
+      return newTree;
+    }
+
+    // Clone the path
+    const clonedPath = newTree.clonePath(path);
+
+    // Replace in the leaf
+    const leafEntry = clonedPath[clonedPath.length - 1];
+    if (leafEntry === undefined) {
+      return newTree;
+    }
+
+    const leafData = newTree.arena.getItem(leafEntry.nodeId);
+    const items = leafData?.items ?? [];
+    items[leafEntry.indexInNode] = item;
+
+    // Update leaf (count stays the same)
+    newTree.arena.setItem(leafEntry.nodeId, { items });
+
+    // Update summaries up the path
+    newTree.updateSummariesUp(clonedPath);
 
     return newTree;
   }

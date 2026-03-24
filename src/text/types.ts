@@ -129,6 +129,11 @@ export interface FragmentSummary {
   readonly deletedLen: number;
   readonly deletedLines: number;
   readonly maxInsertionId: OperationId;
+  /**
+   * Maximum Locator in this subtree. Enables O(log n) seeking by Locator
+   * for CRDT-ordered fragment insertion.
+   */
+  readonly maxLocator: Locator;
 }
 
 // ---------------------------------------------------------------------------
