@@ -354,18 +354,18 @@ describe("CRDT Property: Undo Correctness", () => {
       // Undo all, checking intermediate states in reverse
       for (let i = numOps - 1; i >= 0; i--) {
         buf.undo();
-        const expectedState = states[i];
-        if (expectedState !== undefined) {
-          expect(buf.getText()).toBe(expectedState);
+        const expected = states[i];
+        if (expected !== undefined) {
+          expect(buf.getText()).toBe(expected);
         }
       }
 
       // Redo all, checking intermediate states forward
       for (let i = 0; i < numOps; i++) {
         buf.redo();
-        const expectedState = states[i + 1];
-        if (expectedState !== undefined) {
-          expect(buf.getText()).toBe(expectedState);
+        const expected = states[i + 1];
+        if (expected !== undefined) {
+          expect(buf.getText()).toBe(expected);
         }
       }
     });

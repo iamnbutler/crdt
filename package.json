@@ -39,7 +39,9 @@
     "dist"
   ],
   "scripts": {
-    "build": "bun build ./src/index.ts --outdir ./dist --target node",
+    "build": "bun run build:js && bun run build:types",
+    "build:js": "bun build ./src/index.ts ./src/arena/index.ts ./src/sum-tree/index.ts ./src/rope/index.ts ./src/text/index.ts ./src/protocol/index.ts ./src/anchor/index.ts --outdir ./dist --target node --splitting",
+    "build:types": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
