@@ -927,6 +927,15 @@ export class SumTree<T extends Summarizable<S>, S> {
     }
   }
 
+  /**
+   * Create a shallow clone of this tree for O(1) snapshot creation.
+   * The clone shares the arena with the original (immutable view via path copying).
+   * This is O(1) as it only copies the root NodeId and creates a new summaries Map.
+   */
+  snapshotClone(): SumTree<T, S> {
+    return this.shallowClone();
+  }
+
   private shallowClone(): SumTree<T, S> {
     const newTree = new SumTree<T, S>(this.summaryOps, this.branchingFactor);
     newTree.arena = this.arena; // Share arena (immutable view via path copying)
