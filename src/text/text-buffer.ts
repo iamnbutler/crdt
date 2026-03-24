@@ -9,7 +9,8 @@
  * Multi-replica collaboration (applyRemote) is supported for basic convergence.
  */
 
-import { SumTree } from "../sum-tree/index.js";
+import type { Epoch } from "../arena/index.js";
+import { type NodeId, SumTree } from "../sum-tree/index.js";
 import {
   LamportClock,
   cloneVersionVector,
@@ -26,7 +27,7 @@ import {
   withVisibility,
 } from "./fragment.js";
 import { MAX_LOCATOR, MIN_LOCATOR, compareLocators, locatorBetween } from "./locator.js";
-import { TextBufferSnapshot } from "./snapshot.js";
+import { type SnapshotOptions, TextBufferSnapshot } from "./snapshot.js";
 import type {
   DeleteOperation,
   Fragment,
@@ -48,6 +49,66 @@ import {
   transactionId,
 } from "./types.js";
 import { UndoMap } from "./undo-map.js";
+
+// ---------------------------------------------------------------------------
+// Fragment sorting for canonical order
+// ---------------------------------------------------------------------------
+
+/**
+ * Compare locators for fragment sorting. This differs from lexicographic
+ * comparison: when one locator is a prefix of another, we consider them
+ * "at the same position" and return 0 to allow tie-breaking by operation ID.
+ *
+ * This ensures that when a fragment is split (getting child locators) and
+ * another fragment has the same parent locator, they interleave correctly
+ * based on operation ID, rather than the parent always sorting first.
+ */
+function compareLocatorsForSort(a: Locator, b: Locator): number {
+  const minLen = Math.min(a.levels.length, b.levels.length);
+
+  // Compare common prefix
+  for (let i = 0; i < minLen; i++) {
+    const aLevel = a.levels[i];
+    const bLevel = b.levels[i];
+    if (aLevel !== undefined && bLevel !== undefined && aLevel !== bLevel) {
+      return aLevel - bLevel;
+    }
+  }
+
+  // One is a prefix of the other (or they're equal).
+  // Treat as "same position" to allow tie-breaking by operation ID.
+  return 0;
+}
+
+/**
+ * Sort fragments to ensure canonical order regardless of operation application
+ * sequence.
+ *
+ * Sort key: (locator prefix, insertionId, insertionOffset, locator length)
+ *
+ * This ensures:
+ * 1. Fragments at the same position (locator prefix) sort by operation ID
+ * 2. Split parts of the same operation sort by offset
+ * 3. Child locators sort after parent locators with lower operation IDs
+ */
+function sortFragments(frags: Fragment[]): void {
+  frags.sort((a, b) => {
+    // First, compare by locator prefix
+    const locCmp = compareLocatorsForSort(a.locator, b.locator);
+    if (locCmp !== 0) return locCmp;
+
+    // Same prefix: tie-break by operation ID
+    const idCmp = compareOperationIds(a.insertionId, b.insertionId);
+    if (idCmp !== 0) return idCmp;
+
+    // Same operation: sort by insertionOffset (split parts)
+    const offsetCmp = a.insertionOffset - b.insertionOffset;
+    if (offsetCmp !== 0) return offsetCmp;
+
+    // Finally, sort by locator length (children after parent)
+    return a.locator.levels.length - b.locator.levels.length;
+  });
+}
 
 // ---------------------------------------------------------------------------
 // Transaction tracking
@@ -100,6 +161,9 @@ export class TextBuffer {
   /** Injectable time source for testing. */
   private _now: () => number;
 
+  // Snapshot tracking for epoch-based reclamation
+  private _liveSnapshots: number;
+
   private constructor(rid: ReplicaId) {
     this._replicaId = rid;
     this.clock = new LamportClock(rid);
@@ -117,6 +181,7 @@ export class TextBuffer {
     this.appliedOps = new Set();
     this.pendingOps = [];
     this._now = Date.now;
+    this._liveSnapshots = 0;
   }
 
   /**
@@ -412,10 +477,81 @@ export class TextBuffer {
   // ---------------------------------------------------------------------------
 
   /**
-   * Create an immutable snapshot of the current buffer state.
+   * Create an immutable O(1) snapshot of the current buffer state.
+   *
+   * The snapshot captures:
+   * - Root NodeId of the fragment SumTree (O(1))
+   * - Cloned VersionVector (O(replicas))
+   * - Epoch for reclamation tracking
+   *
+   * Call snapshot.release() when done to enable memory reclamation.
    */
-  snapshot(): TextBufferSnapshot {
-    return new TextBufferSnapshot(this.fragmentsArray(), cloneVersionVector(this._version));
+  snapshot(options?: SnapshotOptions): TextBufferSnapshot {
+    // Advance epoch and get the new one for this snapshot
+    const arena = this.fragments.getArena();
+    const snapshotEpoch = arena.advanceEpoch();
+
+    // Retain the epoch (increment ref count)
+    arena.retainEpoch(snapshotEpoch);
+    this._liveSnapshots++;
+
+    // Create a shallow clone of the tree (O(1))
+    const treeSnapshot = this.fragments.snapshotClone();
+
+    // Create the snapshot with release callback
+    return new TextBufferSnapshot(treeSnapshot, cloneVersionVector(this._version), snapshotEpoch, {
+      ...options,
+      onRelease: (epoch: Epoch, wasAutoRelease: boolean) => {
+        this.onSnapshotReleased(epoch, wasAutoRelease);
+        // Call user's onRelease if provided
+        if (options?.onRelease) {
+          options.onRelease(epoch, wasAutoRelease);
+        }
+      },
+    });
+  }
+
+  /**
+   * Called when a snapshot is released. Updates epoch tracking.
+   */
+  private onSnapshotReleased(epoch: Epoch, _wasAutoRelease: boolean): void {
+    const arena = this.fragments.getArena();
+    arena.releaseEpoch(epoch);
+    this._liveSnapshots = Math.max(0, this._liveSnapshots - 1);
+  }
+
+  /** Number of live (unreleased) snapshots. */
+  get liveSnapshots(): number {
+    return this._liveSnapshots;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Arena utilization and garbage collection
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Get utilization statistics for the underlying arena.
+   */
+  arenaUtilization(): import("../arena/index.js").ArenaUtilization {
+    return this.fragments.getArena().utilization();
+  }
+
+  /**
+   * Perform garbage collection on the arena.
+   * Frees nodes that are no longer reachable from any live snapshot or the current tree.
+   * Returns the number of nodes freed.
+   */
+  collectGarbage(): number {
+    const arena = this.fragments.getArena();
+    return arena.collectGarbage([this.fragments.root]);
+  }
+
+  /**
+   * Get the current root NodeId of the fragment tree.
+   * Useful for debugging and testing structural sharing.
+   */
+  get fragmentsRoot(): NodeId {
+    return this.fragments.root;
   }
 
   // ---------------------------------------------------------------------------
@@ -559,7 +695,7 @@ export class TextBuffer {
     const frags = this.fragmentsArray();
 
     // Find the position to insert: seek to the visible offset
-    const { leftLocator, rightLocator, insertLocator, insertIndex, afterRef, beforeRef } =
+    const { leftLocator, rightLocator, insertLocator, afterRef, beforeRef } =
       this.findInsertPosition(frags, offset);
 
     // Use explicit insertLocator if provided (for split cases), otherwise compute via locatorBetween
@@ -568,11 +704,10 @@ export class TextBuffer {
     // Create the new fragment
     const newFrag = createFragment(opId, 0, locator, text, true);
 
-    // Build new fragment array (no sort for local ops - undo relies on insertion order)
-    const newFrags = [...frags.slice(0, insertIndex), newFrag, ...frags.slice(insertIndex)];
-
-    // Rebuild the SumTree
-    this.fragments = SumTree.fromItems(newFrags, fragmentSummaryOps);
+    // Insert and sort using the same approach as remote inserts for consistency.
+    this.insertFragmentByLocator(frags, newFrag);
+    sortFragments(frags);
+    this.fragments = SumTree.fromItems(frags, fragmentSummaryOps);
 
     return {
       type: "insert",
@@ -862,7 +997,6 @@ export class TextBuffer {
     mergeVersionVectors(this._version, op.version);
 
     const frags = this.fragmentsArray();
-    const newFrag = createFragment(op.id, 0, op.locator, op.text, true);
 
     // findRefIndex calls may split fragments, which is necessary for causal
     // correctness, but we don't use the returned indices for positioning.
@@ -873,44 +1007,52 @@ export class TextBuffer {
       this.findRefIndex(frags, op.before, "before");
     }
 
-    // Binary search the entire array for the Locator-sorted position.
-    // Tie-break by (replicaId, counter, insertionOffset) for determinism.
+    // After splits, the array may not be in locator order. Re-sort it.
+    sortFragments(frags);
+
+    // Create the new fragment with its original locator.
+    // The sort function handles interleaving with children based on operation ID.
+    const newFrag = createFragment(op.id, 0, op.locator, op.text, true);
+
+    // Insert the fragment at its locator-sorted position
+    this.insertFragmentByLocator(frags, newFrag);
+
+    // Re-sort after insertion to ensure correct interleaving
+    sortFragments(frags);
+
+    this.fragments = SumTree.fromItems(frags, fragmentSummaryOps);
+  }
+
+  /**
+   * Insert a fragment into the array at its locator-sorted position.
+   * Modifies the array in place.
+   */
+  private insertFragmentByLocator(frags: Fragment[], newFrag: Fragment): void {
     let insertIndex = 0;
     for (let i = 0; i < frags.length; i++) {
       const frag = frags[i];
       if (frag === undefined) continue;
 
-      const cmp = compareLocators(op.locator, frag.locator);
+      const cmp = compareLocators(newFrag.locator, frag.locator);
       if (cmp < 0) {
         break;
       }
       if (cmp === 0) {
         // Same locator — tie-break by (replicaId, counter, insertionOffset)
-        const idCmp = compareOperationIds(op.id, frag.insertionId);
+        const idCmp = compareOperationIds(newFrag.insertionId, frag.insertionId);
         if (idCmp < 0) {
           break;
         }
         if (idCmp === 0) {
-          // Same operation — compare insertionOffset (new frag has offset 0)
-          if (0 < frag.insertionOffset) {
+          // Same operation — compare insertionOffset
+          if (newFrag.insertionOffset < frag.insertionOffset) {
             break;
           }
         }
       }
       insertIndex = i + 1;
     }
-
-    // Add the new fragment and sort by (Locator, insertionId, insertionOffset)
-    // to ensure canonical order regardless of application sequence.
-    frags.push(newFrag);
-    frags.sort((a, b) => {
-      const locCmp = compareLocators(a.locator, b.locator);
-      if (locCmp !== 0) return locCmp;
-      const idCmp = compareOperationIds(a.insertionId, b.insertionId);
-      if (idCmp !== 0) return idCmp;
-      return a.insertionOffset - b.insertionOffset;
-    });
-    this.fragments = SumTree.fromItems(frags, fragmentSummaryOps);
+    frags.splice(insertIndex, 0, newFrag);
   }
 
   /**
@@ -1016,11 +1158,16 @@ export class TextBuffer {
     observeVersion(this._version, op.id.replicaId, op.id.counter);
     mergeVersionVectors(this._version, op.version);
 
-    const frags = this.fragmentsArray();
-    const newFrags: Fragment[] = [];
+    // Use a work list approach: when a fragment is split, the resulting parts
+    // may still overlap with other delete ranges and need re-processing.
+    const workList = [...this.fragmentsArray()];
+    const resultFrags: Fragment[] = [];
 
-    for (const frag of frags) {
-      let handled = false;
+    while (workList.length > 0) {
+      const frag = workList.shift();
+      if (frag === undefined) break; // Should never happen, but satisfies lint
+      let wasProcessed = false;
+
       for (const range of op.ranges) {
         if (!operationIdsEqual(frag.insertionId, range.insertionId)) {
           continue;
@@ -1038,24 +1185,25 @@ export class TextBuffer {
         }
 
         if (fragStart >= rangeStart && fragEnd <= rangeEnd) {
-          // Fragment is entirely within the delete range
-          newFrags.push(deleteFragment(frag, op.id));
-          handled = true;
+          // Fragment is entirely within the delete range - done with this fragment
+          resultFrags.push(deleteFragment(frag, op.id));
+          wasProcessed = true;
           break;
         }
 
         if (fragStart < rangeStart && fragEnd > rangeEnd) {
           // Delete range is entirely within this fragment — split into 3 parts
+          // The "after" part might still overlap with other ranges, so re-check it.
           const deleteLocalStart = rangeStart - fragStart;
           const deleteLocalEnd = rangeEnd - fragStart;
 
           const [beforePart, rest] = splitFragment(frag, deleteLocalStart);
           const [deletedPart, afterPart] = splitFragment(rest, deleteLocalEnd - deleteLocalStart);
 
-          newFrags.push(beforePart);
-          newFrags.push(deleteFragment(deletedPart, op.id));
-          newFrags.push(afterPart);
-          handled = true;
+          resultFrags.push(beforePart);
+          resultFrags.push(deleteFragment(deletedPart, op.id));
+          workList.unshift(afterPart); // Re-check against remaining ranges
+          wasProcessed = true;
           break;
         }
 
@@ -1064,27 +1212,38 @@ export class TextBuffer {
           const splitPoint = rangeStart - fragStart;
           const [keepPart, deletedPart] = splitFragment(frag, splitPoint);
 
-          newFrags.push(keepPart);
-          newFrags.push(deleteFragment(deletedPart, op.id));
-          handled = true;
+          resultFrags.push(keepPart);
+          resultFrags.push(deleteFragment(deletedPart, op.id));
+          wasProcessed = true;
           break;
         }
 
         // Delete range overlaps the start of this fragment (fragEnd > rangeEnd)
+        // The "keep" part might still overlap with other ranges, so re-check it.
         const splitPoint = rangeEnd - fragStart;
         const [deletedPart, keepPart] = splitFragment(frag, splitPoint);
 
-        newFrags.push(deleteFragment(deletedPart, op.id));
-        newFrags.push(keepPart);
-        handled = true;
+        resultFrags.push(deleteFragment(deletedPart, op.id));
+        workList.unshift(keepPart); // Re-check against remaining ranges
+        wasProcessed = true;
         break;
       }
-      if (!handled) {
-        newFrags.push(frag);
+      if (!wasProcessed) {
+        resultFrags.push(frag);
       }
     }
 
-    this.fragments = SumTree.fromItems(newFrags, fragmentSummaryOps);
+    // Sort by (locator, insertionId, insertionOffset) to maintain canonical order
+    // after splits. This matches the sorting in applyRemoteInsertDirect.
+    resultFrags.sort((a, b) => {
+      const locCmp = compareLocators(a.locator, b.locator);
+      if (locCmp !== 0) return locCmp;
+      const idCmp = compareOperationIds(a.insertionId, b.insertionId);
+      if (idCmp !== 0) return idCmp;
+      return a.insertionOffset - b.insertionOffset;
+    });
+
+    this.fragments = SumTree.fromItems(resultFrags, fragmentSummaryOps);
   }
 
   private applyRemoteUndo(op: UndoOperation): void {

@@ -70,6 +70,20 @@ export type {
   DeltaSyncRequest,
 } from "./protocol/index.js";
 
+// Branded types for public API
+export {
+  type ByteOffset,
+  type Column,
+  type LineColumn,
+  type LineNumber,
+  type Utf16Offset,
+  byteOffset,
+  column,
+  lineColumn,
+  lineNumber,
+  utf16Offset,
+} from "./types.js";
+
 // Anchor module — these are the "public" anchor types
 export * from "./anchor/index.js";
 
