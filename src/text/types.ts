@@ -101,6 +101,13 @@ export interface Fragment extends Summarizable<FragmentSummary> {
   readonly insertionId: OperationId;
   readonly insertionOffset: number;
   readonly locator: Locator;
+  /**
+   * The Locator from the original InsertOperation that created this text.
+   * Used to compute deterministic Locators when splitting: a fragment at
+   * insertion offset k always gets Locator [...baseLocator, 2*k] regardless
+   * of split history.
+   */
+  readonly baseLocator: Locator;
   readonly length: number;
   readonly visible: boolean;
   readonly deletions: ReadonlyArray<OperationId>;

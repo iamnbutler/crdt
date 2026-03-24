@@ -559,13 +559,11 @@ export class TextBuffer {
     const frags = this.fragmentsArray();
 
     // Find the position to insert: seek to the visible offset
-    const { leftLocator, rightLocator, insertIndex, afterRef, beforeRef } = this.findInsertPosition(
-      frags,
-      offset,
-    );
+    const { leftLocator, rightLocator, insertLocator, insertIndex, afterRef, beforeRef } =
+      this.findInsertPosition(frags, offset);
 
-    // Compute locator between left and right neighbors
-    const locator = locatorBetween(leftLocator, rightLocator);
+    // Use explicit insertLocator if provided (for split cases), otherwise compute via locatorBetween
+    const locator = insertLocator ?? locatorBetween(leftLocator, rightLocator);
 
     // Create the new fragment
     const newFrag = createFragment(opId, 0, locator, text, true);
@@ -593,6 +591,8 @@ export class TextBuffer {
   ): {
     leftLocator: Locator;
     rightLocator: Locator;
+    /** Explicit Locator for the new insert (computed for split cases to avoid collisions) */
+    insertLocator?: Locator;
     insertIndex: number;
     afterRef: { insertionId: OperationId; offset: number };
     beforeRef: { insertionId: OperationId; offset: number };
@@ -622,12 +622,17 @@ export class TextBuffer {
           // Replace the original fragment with the split pair
           frags.splice(i, 1, left, right);
 
-          const rightLocator =
-            i + 2 < frags.length ? (frags[i + 2]?.locator ?? MAX_LOCATOR) : MAX_LOCATOR;
+          // Compute explicit Locator using the 2*k-1 scheme to avoid collisions
+          // with the 2*k scheme used for split fragments
+          const k = right.insertionOffset;
+          const insertLocator: Locator = {
+            levels: [...frag.baseLocator.levels, 2 * k - 1],
+          };
 
           return {
             leftLocator: left.locator,
-            rightLocator: rightLocator,
+            rightLocator: right.locator,
+            insertLocator,
             insertIndex: i + 1,
             afterRef: {
               insertionId: left.insertionId,
@@ -820,6 +825,10 @@ export class TextBuffer {
   /**
    * Apply a remote insert operation. Causal ordering is guaranteed by the
    * caller (applyRemote), so all referenced fragments should exist.
+   *
+   * Key insight: the operation's Locator determines its canonical position.
+   * We binary search the ENTIRE array by Locator — the after/before refs are
+   * only for causal ordering (ensuring dependencies exist), not positioning.
    */
   private applyRemoteInsertDirect(op: InsertOperation): void {
     // Update clock
@@ -830,27 +839,19 @@ export class TextBuffer {
     const frags = this.fragmentsArray();
     const newFrag = createFragment(op.id, 0, op.locator, op.text, true);
 
-    // Step 1: Find the fragment referenced by "after" (insert goes after this).
-    let afterIndex = -1;
+    // findRefIndex calls may split fragments, which is necessary for causal
+    // correctness, but we don't use the returned indices for positioning.
     if (!operationIdsEqual(op.after.insertionId, MIN_OPERATION_ID)) {
-      const found = this.findRefIndex(frags, op.after, "after");
-      if (found !== null) afterIndex = found;
+      this.findRefIndex(frags, op.after, "after");
     }
-
-    // Step 2: Find the fragment referenced by "before" (insert goes before this).
-    let beforeIndex = frags.length;
     if (!operationIdsEqual(op.before.insertionId, MAX_OPERATION_ID)) {
-      const found = this.findRefIndex(frags, op.before, "before");
-      if (found !== null) beforeIndex = found;
+      this.findRefIndex(frags, op.before, "before");
     }
 
-    // Step 3: Find the exact position within [afterIndex+1, beforeIndex)
-    // using locator comparison for ordering among concurrent inserts.
-    const searchStart = afterIndex + 1;
-    const searchEnd = Math.min(beforeIndex, frags.length);
-    let insertIndex = searchStart;
-
-    for (let i = searchStart; i < searchEnd; i++) {
+    // Binary search the entire array for the Locator-sorted position.
+    // Tie-break by (replicaId, counter, insertionOffset) for determinism.
+    let insertIndex = 0;
+    for (let i = 0; i < frags.length; i++) {
       const frag = frags[i];
       if (frag === undefined) continue;
 
@@ -859,16 +860,32 @@ export class TextBuffer {
         break;
       }
       if (cmp === 0) {
-        // Same locator — tie-break by operation ID
-        if (compareOperationIds(op.id, frag.insertionId) < 0) {
+        // Same locator — tie-break by (replicaId, counter, insertionOffset)
+        const idCmp = compareOperationIds(op.id, frag.insertionId);
+        if (idCmp < 0) {
           break;
+        }
+        if (idCmp === 0) {
+          // Same operation — compare insertionOffset (new frag has offset 0)
+          if (0 < frag.insertionOffset) {
+            break;
+          }
         }
       }
       insertIndex = i + 1;
     }
 
-    const newFrags = [...frags.slice(0, insertIndex), newFrag, ...frags.slice(insertIndex)];
-    this.fragments = SumTree.fromItems(newFrags, fragmentSummaryOps);
+    // Add the new fragment and sort by (Locator, insertionId, insertionOffset)
+    // to ensure canonical order regardless of application sequence.
+    frags.push(newFrag);
+    frags.sort((a, b) => {
+      const locCmp = compareLocators(a.locator, b.locator);
+      if (locCmp !== 0) return locCmp;
+      const idCmp = compareOperationIds(a.insertionId, b.insertionId);
+      if (idCmp !== 0) return idCmp;
+      return a.insertionOffset - b.insertionOffset;
+    });
+    this.fragments = SumTree.fromItems(frags, fragmentSummaryOps);
   }
 
   /**
