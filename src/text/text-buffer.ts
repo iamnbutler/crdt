@@ -133,8 +133,9 @@ export class TextBuffer {
   static fromString(text: string, rid?: ReplicaId): TextBuffer {
     const buffer = TextBuffer.create(rid);
     if (text.length > 0) {
-      // Normalize line endings
-      const normalized = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+      // Only normalize if needed (fast path for common case of no \r)
+      const normalized =
+        text.indexOf("\r") === -1 ? text : text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
       buffer.insertInternal(0, normalized);
     }
     return buffer;

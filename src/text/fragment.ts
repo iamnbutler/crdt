@@ -86,13 +86,16 @@ export const visibleLinesDimension: Dimension<FragmentSummary, number> = {
 // Fragment construction
 // ---------------------------------------------------------------------------
 
-/** Count newlines in a string. */
+/**
+ * Count newlines in a string.
+ * Uses indexOf which is implemented natively and can use SIMD operations.
+ */
 function countNewlines(text: string): number {
   let count = 0;
-  for (let i = 0; i < text.length; i++) {
-    if (text.charCodeAt(i) === 0x0a) {
-      count++;
-    }
+  let idx = 0;
+  while ((idx = text.indexOf("\n", idx)) !== -1) {
+    count++;
+    idx++;
   }
   return count;
 }
