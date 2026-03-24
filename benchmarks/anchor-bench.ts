@@ -326,7 +326,7 @@ for (const { fragments, chars } of sizes) {
   }
 
   const result = runBenchmark(
-    `${(fragments * chars / 1000).toFixed(0)}K chars, ${fragments} frags, 1K anchors`,
+    `${((fragments * chars) / 1000).toFixed(0)}K chars, ${fragments} frags, 1K anchors`,
     () => {
       set.resolveAll(doc);
     },
@@ -346,8 +346,12 @@ console.log("=".repeat(70));
 console.log();
 
 console.log("Performance characteristics:");
-console.log(`  - Single anchor creation: ${((createResult.opsPerSec ?? 0) / 1000).toFixed(0)}K ops/sec`);
-console.log(`  - Single anchor resolution: ${((resolveResult.opsPerSec ?? 0) / 1000).toFixed(0)}K ops/sec`);
+console.log(
+  `  - Single anchor creation: ${((createResult.opsPerSec ?? 0) / 1000).toFixed(0)}K ops/sec`,
+);
+console.log(
+  `  - Single anchor resolution: ${((resolveResult.opsPerSec ?? 0) / 1000).toFixed(0)}K ops/sec`,
+);
 console.log(`  - Batch resolution (10K): ${batchResolveResult.mean.toFixed(2)}ms`);
 console.log();
 

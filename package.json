@@ -47,12 +47,17 @@
     "test": "bun test",
     "bench": "bun run benchmarks/index.ts",
     "bench:ci": "bun run benchmarks/index.ts --ci",
+    "bench:compare": "bun run benchmarks/competitors.ts",
+    "bench:compare:ci": "bun run benchmarks/competitors.ts --ci",
     "fixtures:download": "bun run scripts/download-fixtures.ts"
   },
   "devDependencies": {
+    "@automerge/automerge": "^3.2.4",
     "@biomejs/biome": "1.9.4",
     "@types/bun": "latest",
+    "loro-crdt": "^1.10.8",
     "mitata": "1.0.34",
-    "typescript": "5.7.2"
+    "typescript": "5.7.2",
+    "yjs": "^13.6.30"
   }
 }

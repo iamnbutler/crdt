@@ -937,7 +937,11 @@ export class TextBuffer {
       const firstIdx = matchingIndices[0];
       if (firstIdx === undefined) return null;
       const firstFrag = frags[firstIdx];
-      if (firstFrag !== undefined && firstFrag.insertionOffset === ref.offset && firstFrag.length > 0) {
+      if (
+        firstFrag !== undefined &&
+        firstFrag.insertionOffset === ref.offset &&
+        firstFrag.length > 0
+      ) {
         // Create zero-length left split to match sender state
         const [leftPart, rightPart] = splitFragment(firstFrag, 0);
         frags.splice(firstIdx, 1, leftPart, rightPart);
