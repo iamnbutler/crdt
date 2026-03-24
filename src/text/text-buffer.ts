@@ -133,8 +133,10 @@ export class TextBuffer {
   static fromString(text: string, rid?: ReplicaId): TextBuffer {
     const buffer = TextBuffer.create(rid);
     if (text.length > 0) {
-      // Normalize line endings
-      const normalized = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+      // Normalize line endings (skip regex if no \r present - common case)
+      const normalized = text.includes("\r")
+        ? text.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
+        : text;
       buffer.insertInternal(0, normalized);
     }
     return buffer;
@@ -207,7 +209,10 @@ export class TextBuffer {
       };
     }
 
-    const normalized = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+    // Normalize line endings (skip regex if no \r present - common case)
+    const normalized = text.includes("\r")
+      ? text.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
+      : text;
     return this.insertInternal(offset, normalized);
   }
 

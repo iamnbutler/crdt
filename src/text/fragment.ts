@@ -86,15 +86,10 @@ export const visibleLinesDimension: Dimension<FragmentSummary, number> = {
 // Fragment construction
 // ---------------------------------------------------------------------------
 
-/** Count newlines in a string. */
+/** Count newlines in a string. Uses regex match which is highly optimized. */
 function countNewlines(text: string): number {
-  let count = 0;
-  for (let i = 0; i < text.length; i++) {
-    if (text.charCodeAt(i) === 0x0a) {
-      count++;
-    }
-  }
-  return count;
+  const matches = text.match(/\n/g);
+  return matches ? matches.length : 0;
 }
 
 /**
