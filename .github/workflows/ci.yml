@@ -17,6 +17,14 @@ jobs:
         with:
           bun-version: latest
 
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lockb') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
@@ -34,10 +42,28 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: latest
+
+      - name: Cache Bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: ${{ runner.os }}-bun-${{ hashFiles('**/bun.lockb') }}
+          restore-keys: |
+            ${{ runner.os }}-bun-
+
+      - name: Cache fixtures
+        uses: actions/cache@v4
+        with:
+          path: fixtures
+          key: ${{ runner.os }}-fixtures-v1
+          restore-keys: |
+            ${{ runner.os }}-fixtures-
 
       - name: Install dependencies
         run: bun install --frozen-lockfile
@@ -55,7 +81,7 @@ jobs:
         if: github.event_name == 'pull_request'
         run: |
           # Download baseline from main branch if it exists
-          if git show origin/main:.benchmark-baseline.json > baseline.json 2>/dev/null; then
+          if git show origin/main:.benchmark-baseline.json > .benchmark-baseline.json 2>/dev/null; then
             echo "Checking against baseline from main branch..."
             cat benchmark-results.json | bun run benchmarks/regression.ts check
           else
