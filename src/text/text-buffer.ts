@@ -164,6 +164,10 @@ export class TextBuffer {
   // Pending operations waiting for their causal dependencies
   private pendingOps: Operation[];
 
+  // Index of all fragment insertionIds for O(1) hasFragment lookups.
+  // Key: replicaId, Value: Set of counters seen for that replica.
+  private fragmentIndex: Map<ReplicaId, Set<number>>;
+
   /** Injectable time source for testing. */
   private _now: () => number;
 
@@ -186,6 +190,7 @@ export class TextBuffer {
     this.redoStack = [];
     this.appliedOps = new Set();
     this.pendingOps = [];
+    this.fragmentIndex = new Map();
     this._now = Date.now;
     this._liveSnapshots = 0;
   }
@@ -221,6 +226,7 @@ export class TextBuffer {
       // Use a simple locator between MIN and MAX
       const locator = locatorBetween(MIN_LOCATOR, MAX_LOCATOR);
       const fragment = createFragment(opId, 0, locator, normalized, true);
+      buffer.indexFragment(opId);
 
       // Build SumTree with single fragment
       buffer.fragments = SumTree.fromItems([fragment], fragmentSummaryOps);
@@ -644,14 +650,19 @@ export class TextBuffer {
     return true;
   }
 
-  /** Check if any fragment with the given insertionId exists. */
-  private hasFragment(insertionId: OperationId): boolean {
-    for (const frag of this.fragmentsArray()) {
-      if (operationIdsEqual(frag.insertionId, insertionId)) {
-        return true;
-      }
+  /** Register an insertionId in the fragment index. Call whenever a new fragment is created. */
+  private indexFragment(id: OperationId): void {
+    let counters = this.fragmentIndex.get(id.replicaId);
+    if (counters === undefined) {
+      counters = new Set();
+      this.fragmentIndex.set(id.replicaId, counters);
     }
-    return false;
+    counters.add(id.counter);
+  }
+
+  /** Check if any fragment with the given insertionId exists. O(1) via fragmentIndex. */
+  private hasFragment(insertionId: OperationId): boolean {
+    return this.fragmentIndex.get(insertionId.replicaId)?.has(insertionId.counter) ?? false;
   }
 
   /**
@@ -726,6 +737,7 @@ export class TextBuffer {
 
     // Create the new fragment
     const newFrag = createFragment(opId, 0, locator, text, true);
+    this.indexFragment(opId);
 
     // Insert at the correct sorted position (no sort needed since
     // insertFragmentByLocator uses consistent comparison logic)
@@ -1165,6 +1177,7 @@ export class TextBuffer {
     // for this insert might have arrived before the insert itself.
     const visible = !this.undoMap.isUndone(op.id);
     const newFrag = createFragment(op.id, 0, op.locator, op.text, visible);
+    this.indexFragment(op.id);
 
     // Insert the fragment at its locator-sorted position (no re-sort needed
     // since insertFragmentByLocator uses consistent comparison logic)
@@ -1541,13 +1554,13 @@ export class TextBuffer {
     // Restore version vector
     buffer._version = deserializeVersionVector(snapshot.versionVector);
 
-    // Restore fragments
+    // Restore fragments and populate the fragment index
     const fragments: Fragment[] = snapshot.fragments.map((sf) => {
       const insertionId = deserializeOperationId(sf.id);
       const locator = deserializeLocator(sf.loc);
       const baseLocator = deserializeLocator(sf.base);
       const deletions = sf.del.map(deserializeOperationId);
-
+      buffer.indexFragment(insertionId);
       return createFragment(insertionId, sf.io, locator, sf.t, sf.v, deletions, baseLocator);
     });
     buffer.fragments = SumTree.fromItems(fragments, fragmentSummaryOps);
