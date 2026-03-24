@@ -27,6 +27,21 @@ import {
   withVisibility,
 } from "./fragment.js";
 import { MAX_LOCATOR, MIN_LOCATOR, compareLocators, locatorBetween } from "./locator.js";
+import {
+  SERIALIZATION_VERSION,
+  type SerializedSnapshot,
+  decodeBinary,
+  decodeJSON,
+  deserializeLocator,
+  deserializeOperationId,
+  deserializeTransactionId,
+  deserializeVersionVector,
+  encodeBinary,
+  encodeJSON,
+  serializeFragment,
+  serializeOperationId,
+  serializeVersionVector,
+} from "./serialization.js";
 import { type SnapshotOptions, TextBufferSnapshot } from "./snapshot.js";
 import type {
   DeleteOperation,
@@ -46,6 +61,7 @@ import {
   MIN_OPERATION_ID,
   compareOperationIds,
   operationIdsEqual,
+  replicaId,
   transactionId,
 } from "./types.js";
 import { UndoMap } from "./undo-map.js";
@@ -1282,5 +1298,153 @@ export class TextBuffer {
   /** Get all fragments as an array. */
   private fragmentsArray(): Fragment[] {
     return this.fragments.toArray();
+  }
+
+  // ---------------------------------------------------------------------------
+  // Serialization
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Create a serializable snapshot of the complete CRDT state.
+   * This includes all data needed to fully reconstruct the buffer.
+   */
+  toSerializedSnapshot(): SerializedSnapshot {
+    // Serialize undo stack
+    const undoStack = this.undoStack.map((entry) => ({
+      txnId: entry.transactionId as number,
+      ops: entry.operationIds.map(serializeOperationId),
+      counts: entry.undoCounts.map((c) => ({
+        op: serializeOperationId(c.operationId),
+        old: c.oldCount,
+        new: c.newCount,
+      })),
+    }));
+
+    // Serialize redo stack
+    const redoStack = this.redoStack.map((entry) => ({
+      txnId: entry.transactionId as number,
+      ops: entry.operationIds.map(serializeOperationId),
+      counts: entry.undoCounts.map((c) => ({
+        op: serializeOperationId(c.operationId),
+        old: c.oldCount,
+        new: c.newCount,
+      })),
+    }));
+
+    // Serialize undo map
+    const undoMapEntries = this.undoMap.entries().map((e) => ({
+      op: serializeOperationId(e.operationId),
+      count: e.count,
+    }));
+
+    return {
+      version: SERIALIZATION_VERSION,
+      replicaId: this._replicaId as number,
+      clockCounter: this.clock.counter,
+      versionVector: serializeVersionVector(this._version),
+      fragments: this.fragmentsArray().map(serializeFragment),
+      undoMap: undoMapEntries,
+      undoStack,
+      redoStack,
+      appliedOps: [...this.appliedOps],
+      nextTransactionId: this.nextTransactionId,
+      groupDelay: this.groupDelay,
+    };
+  }
+
+  /**
+   * Serialize the buffer to a compact binary format.
+   * This is suitable for network transfer and persistent storage.
+   */
+  serialize(): Uint8Array {
+    return encodeBinary(this.toSerializedSnapshot());
+  }
+
+  /**
+   * Serialize the buffer to a JSON string.
+   * This is useful for debugging and human-readable storage.
+   */
+  serializeJSON(): string {
+    return encodeJSON(this.toSerializedSnapshot());
+  }
+
+  /**
+   * Restore a TextBuffer from a serialized binary snapshot.
+   */
+  static deserialize(data: Uint8Array): TextBuffer {
+    const snapshot = decodeBinary(data);
+    return TextBuffer.fromSerializedSnapshot(snapshot);
+  }
+
+  /**
+   * Restore a TextBuffer from a serialized JSON string.
+   */
+  static deserializeJSON(json: string): TextBuffer {
+    const snapshot = decodeJSON(json);
+    return TextBuffer.fromSerializedSnapshot(snapshot);
+  }
+
+  /**
+   * Restore a TextBuffer from a SerializedSnapshot.
+   */
+  static fromSerializedSnapshot(snapshot: SerializedSnapshot): TextBuffer {
+    const rid = replicaId(snapshot.replicaId);
+    const buffer = new TextBuffer(rid);
+
+    // Restore clock counter
+    buffer.clock.observe(snapshot.clockCounter - 1);
+
+    // Restore version vector
+    buffer._version = deserializeVersionVector(snapshot.versionVector);
+
+    // Restore fragments
+    const fragments: Fragment[] = snapshot.fragments.map((sf) => {
+      const insertionId = deserializeOperationId(sf.id);
+      const locator = deserializeLocator(sf.loc);
+      const baseLocator = deserializeLocator(sf.base);
+      const deletions = sf.del.map(deserializeOperationId);
+
+      return createFragment(insertionId, sf.io, locator, sf.t, sf.v, deletions, baseLocator);
+    });
+    buffer.fragments = SumTree.fromItems(fragments, fragmentSummaryOps);
+
+    // Restore undo map
+    buffer.undoMap.mergeFrom(
+      snapshot.undoMap.map((e) => ({
+        operationId: deserializeOperationId(e.op),
+        count: e.count,
+      })),
+    );
+
+    // Restore undo stack
+    buffer.undoStack = snapshot.undoStack.map((entry) => ({
+      transactionId: deserializeTransactionId(entry.txnId),
+      operationIds: entry.ops.map(deserializeOperationId),
+      undoCounts: entry.counts.map((c) => ({
+        operationId: deserializeOperationId(c.op),
+        oldCount: c.old,
+        newCount: c.new,
+      })),
+    }));
+
+    // Restore redo stack
+    buffer.redoStack = snapshot.redoStack.map((entry) => ({
+      transactionId: deserializeTransactionId(entry.txnId),
+      operationIds: entry.ops.map(deserializeOperationId),
+      undoCounts: entry.counts.map((c) => ({
+        operationId: deserializeOperationId(c.op),
+        oldCount: c.old,
+        newCount: c.new,
+      })),
+    }));
+
+    // Restore applied ops set
+    buffer.appliedOps = new Set(snapshot.appliedOps);
+
+    // Restore transaction state
+    buffer.nextTransactionId = snapshot.nextTransactionId;
+    buffer.groupDelay = snapshot.groupDelay;
+
+    return buffer;
   }
 }
