@@ -9,7 +9,8 @@
  * Multi-replica collaboration (applyRemote) is supported for basic convergence.
  */
 
-import { SumTree } from "../sum-tree/index.js";
+import type { Epoch } from "../arena/index.js";
+import { type NodeId, SumTree } from "../sum-tree/index.js";
 import {
   LamportClock,
   cloneVersionVector,
@@ -26,7 +27,7 @@ import {
   withVisibility,
 } from "./fragment.js";
 import { MAX_LOCATOR, MIN_LOCATOR, compareLocators, locatorBetween } from "./locator.js";
-import { TextBufferSnapshot } from "./snapshot.js";
+import { type SnapshotOptions, TextBufferSnapshot } from "./snapshot.js";
 import type {
   DeleteOperation,
   Fragment,
@@ -100,6 +101,9 @@ export class TextBuffer {
   /** Injectable time source for testing. */
   private _now: () => number;
 
+  // Snapshot tracking for epoch-based reclamation
+  private _liveSnapshots: number;
+
   private constructor(rid: ReplicaId) {
     this._replicaId = rid;
     this.clock = new LamportClock(rid);
@@ -117,6 +121,7 @@ export class TextBuffer {
     this.appliedOps = new Set();
     this.pendingOps = [];
     this._now = Date.now;
+    this._liveSnapshots = 0;
   }
 
   /**
@@ -412,10 +417,81 @@ export class TextBuffer {
   // ---------------------------------------------------------------------------
 
   /**
-   * Create an immutable snapshot of the current buffer state.
+   * Create an immutable O(1) snapshot of the current buffer state.
+   *
+   * The snapshot captures:
+   * - Root NodeId of the fragment SumTree (O(1))
+   * - Cloned VersionVector (O(replicas))
+   * - Epoch for reclamation tracking
+   *
+   * Call snapshot.release() when done to enable memory reclamation.
    */
-  snapshot(): TextBufferSnapshot {
-    return new TextBufferSnapshot(this.fragmentsArray(), cloneVersionVector(this._version));
+  snapshot(options?: SnapshotOptions): TextBufferSnapshot {
+    // Advance epoch and get the new one for this snapshot
+    const arena = this.fragments.getArena();
+    const snapshotEpoch = arena.advanceEpoch();
+
+    // Retain the epoch (increment ref count)
+    arena.retainEpoch(snapshotEpoch);
+    this._liveSnapshots++;
+
+    // Create a shallow clone of the tree (O(1))
+    const treeSnapshot = this.fragments.snapshotClone();
+
+    // Create the snapshot with release callback
+    return new TextBufferSnapshot(treeSnapshot, cloneVersionVector(this._version), snapshotEpoch, {
+      ...options,
+      onRelease: (epoch: Epoch, wasAutoRelease: boolean) => {
+        this.onSnapshotReleased(epoch, wasAutoRelease);
+        // Call user's onRelease if provided
+        if (options?.onRelease) {
+          options.onRelease(epoch, wasAutoRelease);
+        }
+      },
+    });
+  }
+
+  /**
+   * Called when a snapshot is released. Updates epoch tracking.
+   */
+  private onSnapshotReleased(epoch: Epoch, _wasAutoRelease: boolean): void {
+    const arena = this.fragments.getArena();
+    arena.releaseEpoch(epoch);
+    this._liveSnapshots = Math.max(0, this._liveSnapshots - 1);
+  }
+
+  /** Number of live (unreleased) snapshots. */
+  get liveSnapshots(): number {
+    return this._liveSnapshots;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Arena utilization and garbage collection
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Get utilization statistics for the underlying arena.
+   */
+  arenaUtilization(): import("../arena/index.js").ArenaUtilization {
+    return this.fragments.getArena().utilization();
+  }
+
+  /**
+   * Perform garbage collection on the arena.
+   * Frees nodes that are no longer reachable from any live snapshot or the current tree.
+   * Returns the number of nodes freed.
+   */
+  collectGarbage(): number {
+    const arena = this.fragments.getArena();
+    return arena.collectGarbage([this.fragments.root]);
+  }
+
+  /**
+   * Get the current root NodeId of the fragment tree.
+   * Useful for debugging and testing structural sharing.
+   */
+  get fragmentsRoot(): NodeId {
+    return this.fragments.root;
   }
 
   // ---------------------------------------------------------------------------
