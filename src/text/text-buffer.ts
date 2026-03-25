@@ -72,21 +72,6 @@ import { UndoMap } from "./undo-map.js";
 // ---------------------------------------------------------------------------
 
 /**
- * Compare locators for fragment sorting using full lexicographic comparison.
- *
- * When one locator is a prefix of another, the shorter one sorts FIRST.
- * This is correct because child locators (e.g., [L, X]) represent positions
- * INSIDE the parent's original span - they should come after the parent's
- * left portion and before concurrent siblings that sort later.
- *
- * Operation ID tie-breaking only applies when locators are EXACTLY equal,
- * which happens with concurrent inserts at the same position.
- */
-function compareLocatorsForSort(a: Locator, b: Locator): number {
-  return compareLocators(a, b);
-}
-
-/**
  * Sort fragments to ensure canonical order regardless of operation application
  * sequence.
  *
@@ -100,7 +85,7 @@ function compareLocatorsForSort(a: Locator, b: Locator): number {
 function sortFragments(frags: Fragment[]): void {
   frags.sort((a, b) => {
     // First, compare by locator prefix
-    const locCmp = compareLocatorsForSort(a.locator, b.locator);
+    const locCmp = compareLocators(a.locator, b.locator);
     if (locCmp !== 0) return locCmp;
 
     // Same prefix: tie-break by operation ID
@@ -624,17 +609,12 @@ export class TextBuffer {
 
   /** Check if an insert operation's after/before fragments exist. */
   private isInsertReady(op: InsertOperation): boolean {
-    if (!operationIdsEqual(op.after.insertionId, MIN_OPERATION_ID)) {
-      if (!this.hasFragment(op.after.insertionId)) {
-        return false;
-      }
-    }
-    if (!operationIdsEqual(op.before.insertionId, MAX_OPERATION_ID)) {
-      if (!this.hasFragment(op.before.insertionId)) {
-        return false;
-      }
-    }
-    return true;
+    return (
+      (operationIdsEqual(op.after.insertionId, MIN_OPERATION_ID) ||
+        this.hasFragment(op.after.insertionId)) &&
+      (operationIdsEqual(op.before.insertionId, MAX_OPERATION_ID) ||
+        this.hasFragment(op.before.insertionId))
+    );
   }
 
   /** Check if a delete operation's target fragments exist. */
@@ -827,9 +807,9 @@ export class TextBuffer {
 
         if (visibleOffset === offset) {
           // Insert right after this fragment
+          const nextFrag = frags[i + 1];
           const leftLocator = frag.locator;
-          const rightLocator =
-            i + 1 < frags.length ? (frags[i + 1]?.locator ?? MAX_LOCATOR) : MAX_LOCATOR;
+          const rightLocator = nextFrag?.locator ?? MAX_LOCATOR;
 
           return {
             leftLocator,
@@ -839,16 +819,10 @@ export class TextBuffer {
               insertionId: frag.insertionId,
               offset: frag.insertionOffset + frag.length,
             },
-            beforeRef: (() => {
-              const nextFrag = frags[i + 1];
-              if (nextFrag !== undefined) {
-                return {
-                  insertionId: nextFrag.insertionId,
-                  offset: nextFrag.insertionOffset,
-                };
-              }
-              return { insertionId: MAX_OPERATION_ID, offset: 0 };
-            })(),
+            beforeRef:
+              nextFrag !== undefined
+                ? { insertionId: nextFrag.insertionId, offset: nextFrag.insertionOffset }
+                : { insertionId: MAX_OPERATION_ID, offset: 0 },
           };
         }
       }
@@ -1213,7 +1187,7 @@ export class TextBuffer {
    */
   private compareFragmentsForSort(a: Fragment, b: Fragment): number {
     // First, compare by locator prefix (not lexicographic!)
-    const locCmp = compareLocatorsForSort(a.locator, b.locator);
+    const locCmp = compareLocators(a.locator, b.locator);
     if (locCmp !== 0) return locCmp;
 
     // Same prefix: tie-break by operation ID
@@ -1406,15 +1380,9 @@ export class TextBuffer {
       }
     }
 
-    // Sort by (locator, insertionId, insertionOffset) to maintain canonical order
-    // after splits. This matches the sorting in applyRemoteInsertDirect.
-    resultFrags.sort((a, b) => {
-      const locCmp = compareLocators(a.locator, b.locator);
-      if (locCmp !== 0) return locCmp;
-      const idCmp = compareOperationIds(a.insertionId, b.insertionId);
-      if (idCmp !== 0) return idCmp;
-      return a.insertionOffset - b.insertionOffset;
-    });
+    // Sort to maintain canonical order after splits.
+    // Matches the sorting in applyRemoteInsertDirect.
+    sortFragments(resultFrags);
 
     this.setFragments(resultFrags);
   }
