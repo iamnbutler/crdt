@@ -711,6 +711,16 @@ export class TextBuffer {
       this.recordImplicitOp(opId, "insert");
     }
 
+    // Fast path 1: append to end of document — O(log n)
+    if (offset === this.length) {
+      return this.insertAtEndOptimized(opId, text);
+    }
+
+    // Fast path 2: insert inside a visible fragment (split case) — O(log n)
+    const splitOp = this.tryInsertSplitOptimized(opId, text, offset);
+    if (splitOp !== null) return splitOp;
+
+    // Slow path: O(n) general case (boundary inserts between fragments)
     const frags = this.fragmentsArray();
 
     // Find the position to insert: seek to the visible offset
@@ -736,6 +746,110 @@ export class TextBuffer {
       before: beforeRef,
       version: cloneVersionVector(this._version),
       locator,
+    };
+  }
+
+  /**
+   * O(log n) fast path: append a new fragment at the end of the document.
+   * Called when offset === this.length. Avoids O(n) fragmentsArray + setFragments.
+   */
+  private insertAtEndOptimized(opId: OperationId, text: string): InsertOperation {
+    const itemCount = this.fragments.length();
+    const lastFrag = this.fragments.get(itemCount - 1);
+    const leftLocator = lastFrag?.locator ?? MIN_LOCATOR;
+    const locator = locatorBetween(leftLocator, MAX_LOCATOR);
+    const newFrag = createFragment(opId, 0, locator, text, true);
+    this.fragments = this.fragments.push(newFrag);
+    this.addToFragmentIndex(opId);
+
+    const afterRef: { insertionId: OperationId; offset: number } =
+      lastFrag !== undefined
+        ? { insertionId: lastFrag.insertionId, offset: lastFrag.insertionOffset + lastFrag.length }
+        : { insertionId: MIN_OPERATION_ID, offset: 0 };
+
+    return {
+      type: "insert",
+      id: opId,
+      text,
+      after: afterRef,
+      before: { insertionId: MAX_OPERATION_ID, offset: 0 },
+      version: cloneVersionVector(this._version),
+      locator,
+    };
+  }
+
+  /**
+   * O(log n) fast path: insert inside a visible fragment (split case).
+   * Uses editByDimension to split the fragment and insert the new one atomically.
+   * Returns null if the offset is not inside a visible fragment (boundary case).
+   */
+  private tryInsertSplitOptimized(
+    opId: OperationId,
+    text: string,
+    offset: number,
+  ): InsertOperation | null {
+    // Seek to the visible offset to check if we're inside a fragment
+    const seekResult = this.fragments.findByDimension(visibleLenDimension, offset, "right");
+    if (seekResult === undefined) return null;
+
+    const localOffset = seekResult.localOffset as number;
+    if (localOffset === 0) return null; // Boundary case — fall through to slow path
+
+    // Verify the found item is a visible fragment (invisible ones contribute 0 to visibleLen,
+    // so findByDimension always returns a visible fragment here, but we guard defensively)
+    const leafEntry = seekResult.path[seekResult.path.length - 1];
+    if (leafEntry === undefined) return null;
+    const leafData = this.fragments.getArena().getItem(leafEntry.nodeId);
+    const leafItems = (leafData as { items?: Fragment[] } | undefined)?.items;
+    if (leafItems === undefined) return null;
+    const foundFrag = leafItems[leafEntry.indexInNode];
+    if (foundFrag === undefined || !foundFrag.visible) return null;
+
+    // Split the fragment in-place using editByDimension — O(log n)
+    let capturedAfterRef: { insertionId: OperationId; offset: number } | undefined;
+    let capturedBeforeRef: { insertionId: OperationId; offset: number } | undefined;
+    let capturedLocator: Locator | undefined;
+
+    this.fragments = this.fragments.editByDimension(
+      visibleLenDimension,
+      offset,
+      (frag, fragLocalOffset) => {
+        const lo = fragLocalOffset as number;
+        const [left, right] = splitFragment(frag, lo);
+        const k = right.insertionOffset;
+        // Insert locator uses 2*k-1 scheme to avoid collisions with split locators (2*k)
+        capturedLocator = { levels: [...frag.baseLocator.levels, 2 * k - 1] };
+        const newFrag = createFragment(opId, 0, capturedLocator, text, true);
+        capturedAfterRef = {
+          insertionId: left.insertionId,
+          offset: left.insertionOffset + left.length,
+        };
+        capturedBeforeRef = { insertionId: right.insertionId, offset: right.insertionOffset };
+        return [left, newFrag, right];
+      },
+      "right",
+    );
+
+    if (
+      capturedLocator === undefined ||
+      capturedAfterRef === undefined ||
+      capturedBeforeRef === undefined
+    ) {
+      // Should not happen given the seek check above, but fall back to be safe
+      return null;
+    }
+
+    // Incrementally update the fragment index with the new fragment's insertionId
+    this.addToFragmentIndex(opId);
+
+    return {
+      type: "insert",
+      id: opId,
+      text,
+      after: capturedAfterRef,
+      before: capturedBeforeRef,
+      version: cloneVersionVector(this._version),
+      locator: capturedLocator,
     };
   }
 
@@ -1451,6 +1565,16 @@ export class TextBuffer {
     if (counters === undefined) {
       counters = new Set();
       this.appliedOps.set(id.replicaId, counters);
+    }
+    counters.add(id.counter);
+  }
+
+  /** Add a single insertionId to the fragment index without full rebuild. */
+  private addToFragmentIndex(id: OperationId): void {
+    let counters = this._fragmentIds.get(id.replicaId);
+    if (counters === undefined) {
+      counters = new Set();
+      this._fragmentIds.set(id.replicaId, counters);
     }
     counters.add(id.counter);
   }
