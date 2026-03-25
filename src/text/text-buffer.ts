@@ -1085,31 +1085,54 @@ export class TextBuffer {
     observeVersion(this._version, op.id.replicaId, op.id.counter);
     mergeVersionVectors(this._version, op.version);
 
-    const frags = this.fragmentsArray();
-
-    // findRefIndex calls may split fragments, which is necessary for causal
-    // correctness, but we don't use the returned indices for positioning.
-    if (!operationIdsEqual(op.after.insertionId, MIN_OPERATION_ID)) {
-      this.findRefIndex(frags, op.after, "after");
-    }
-    if (!operationIdsEqual(op.before.insertionId, MAX_OPERATION_ID)) {
-      this.findRefIndex(frags, op.before, "before");
-    }
-
-    // After splits, the array may not be in locator order. Re-sort it.
-    sortFragments(frags);
-
-    // Create the new fragment with its original locator.
-    // The sort function handles interleaving with children based on operation ID.
     // Check the undo map to determine initial visibility - an undo operation
     // for this insert might have arrived before the insert itself.
     const visible = !this.undoMap.isUndone(op.id);
     const newFrag = createFragment(op.id, 0, op.locator, op.text, visible);
 
-    // Insert the fragment at its locator-sorted position (no re-sort needed
-    // since insertFragmentByLocator uses consistent comparison logic)
-    this.insertFragmentByLocator(frags, newFrag);
-    this.setFragments(frags);
+    // Fast path: use O(log n) tree operations when no live snapshots and no splits needed
+    const needsAfterSplit = !operationIdsEqual(op.after.insertionId, MIN_OPERATION_ID);
+    const needsBeforeSplit = !operationIdsEqual(op.before.insertionId, MAX_OPERATION_ID);
+
+    if (this._liveSnapshots === 0 && !needsAfterSplit && !needsBeforeSplit) {
+      // No splits needed: use O(log² n) tree insertion directly
+      const insertIndex = this.findTreeInsertIndex(newFrag);
+      this.fragments.insertAtMut(insertIndex, newFrag);
+      this.addToFragmentIndex(op.id);
+    } else if (this._liveSnapshots === 0) {
+      // Splits needed: use array for splits, then direct tree insertion
+      const frags = this.fragmentsArray();
+
+      if (needsAfterSplit) {
+        this.findRefIndex(frags, op.after, "after");
+      }
+      if (needsBeforeSplit) {
+        this.findRefIndex(frags, op.before, "before");
+      }
+
+      // After splits, re-sort and rebuild tree, then use direct insertion
+      sortFragments(frags);
+      this.setFragments(frags);
+
+      // Now use O(log² n) insertion for the new fragment
+      const insertIndex = this.findTreeInsertIndex(newFrag);
+      this.fragments.insertAtMut(insertIndex, newFrag);
+      this.addToFragmentIndex(op.id);
+    } else {
+      // Snapshot safety fallback: use full array-based approach
+      const frags = this.fragmentsArray();
+
+      if (needsAfterSplit) {
+        this.findRefIndex(frags, op.after, "after");
+      }
+      if (needsBeforeSplit) {
+        this.findRefIndex(frags, op.before, "before");
+      }
+
+      sortFragments(frags);
+      this.insertFragmentByLocator(frags, newFrag);
+      this.setFragments(frags);
+    }
   }
 
   /**

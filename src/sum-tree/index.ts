@@ -770,6 +770,43 @@ export class SumTree<T extends Summarizable<S>, S> {
   }
 
   /**
+   * Remove item at the given index, mutating the tree in place.
+   * Use when you don't need to preserve the original tree.
+   */
+  removeAtMut(index: number): void {
+    if (index < 0 || index >= this.length()) {
+      throw new Error(`Index ${index} out of bounds`);
+    }
+
+    const path = this.findLeafForIndex(index);
+    if (path.length === 0) {
+      return;
+    }
+
+    // Remove directly from the existing leaf (no path cloning)
+    const leafEntry = path[path.length - 1];
+    if (leafEntry === undefined) {
+      return;
+    }
+
+    const leafData = this.arena.getItem(leafEntry.nodeId);
+    const items = leafData?.items ?? [];
+    items.splice(leafEntry.indexInNode, 1);
+
+    // Update leaf
+    this.arena.setItem(leafEntry.nodeId, { items });
+    this.arena.setCount(leafEntry.nodeId, items.length);
+
+    // Check for underflow and merge if needed
+    const minItems = Math.floor(this.branchingFactor / 2);
+    if (items.length < minItems && path.length > 1) {
+      this.mergeOrRedistribute(path);
+    } else {
+      this.updateSummariesUp(path);
+    }
+  }
+
+  /**
    * Get item at index.
    */
   get(index: number): T | undefined {
