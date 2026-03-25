@@ -499,6 +499,39 @@ export class Cursor<T extends Summarizable<S>, S, D> {
       }
     }
   }
+
+  /**
+   * Get the 0-based item index of the current cursor position.
+   * Returns the number of items before the current position.
+   */
+  itemIndex(): number {
+    if (this._atEnd) {
+      return this.tree.length();
+    }
+
+    let index = 0;
+    const arena = this.tree.getArena();
+
+    for (let i = 0; i < this.stack.length; i++) {
+      const entry = this.stack[i];
+      if (entry === undefined) continue;
+
+      // Count items in all siblings before current index
+      for (let j = 0; j < entry.childIndex; j++) {
+        if (arena.isLeaf(entry.nodeId)) {
+          // Each position before childIndex is one item
+          index++;
+        } else {
+          const childId = arena.getChild(entry.nodeId, j);
+          if (childId !== INVALID_NODE_ID) {
+            index += this.tree.countItems(childId);
+          }
+        }
+      }
+    }
+
+    return index;
+  }
 }
 
 /**
@@ -897,7 +930,11 @@ export class SumTree<T extends Summarizable<S>, S> {
     return id;
   }
 
-  private countItems(nodeId: NodeId): number {
+  /**
+   * Count items in a subtree.
+   * Public to allow Cursor.itemIndex() to use it.
+   */
+  countItems(nodeId: NodeId): number {
     if (this.arena.isLeaf(nodeId)) {
       return this.arena.getCount(nodeId);
     }
