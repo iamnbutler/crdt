@@ -322,7 +322,7 @@ export class TextBuffer {
       };
     }
 
-    return this.deleteInternalOptimized(clampedStart, clampedEnd);
+    return this.deleteInternal(clampedStart, clampedEnd);
   }
 
   // ---------------------------------------------------------------------------
@@ -711,10 +711,42 @@ export class TextBuffer {
       this.recordImplicitOp(opId, "insert");
     }
 
+    // Fast path: inserting at end of document with no splits needed
+    // Skip fast path when there are live snapshots (mutations would corrupt them)
+    const totalVisibleLen = this.fragments.summary().visibleLen;
+    if (offset === totalVisibleLen && !this.fragments.isEmpty() && this._liveSnapshots === 0) {
+      // Get the last fragment to compute locator
+      const lastIdx = this.fragments.length() - 1;
+      const lastFrag = this.fragments.get(lastIdx);
+
+      if (lastFrag) {
+        const locator = locatorBetween(lastFrag.locator, MAX_LOCATOR);
+        const newFrag = createFragment(opId, 0, locator, text, true);
+
+        // O(log n) in-place push (avoids O(n) shallowClone)
+        this.fragments.pushMut(newFrag);
+        this.addToFragmentIndex(opId);
+
+        return {
+          type: "insert",
+          id: opId,
+          text,
+          after: {
+            insertionId: lastFrag.insertionId,
+            offset: lastFrag.insertionOffset + lastFrag.length,
+          },
+          before: { insertionId: MAX_OPERATION_ID, offset: 0 },
+          version: cloneVersionVector(this._version),
+          locator,
+        };
+      }
+    }
+
+    // Standard path for other cases
     const frags = this.fragmentsArray();
 
     // Find the position to insert: seek to the visible offset
-    const { leftLocator, rightLocator, insertLocator, afterRef, beforeRef } =
+    const { leftLocator, rightLocator, insertLocator, afterRef, beforeRef, splitInfo } =
       this.findInsertPosition(frags, offset);
 
     // Use explicit insertLocator if provided (for split cases), otherwise compute via locatorBetween
@@ -723,10 +755,25 @@ export class TextBuffer {
     // Create the new fragment
     const newFrag = createFragment(opId, 0, locator, text, true);
 
-    // Insert at the correct sorted position (no sort needed since
-    // insertFragmentByLocator uses consistent comparison logic)
-    this.insertFragmentByLocator(frags, newFrag);
-    this.setFragments(frags);
+    // Apply changes using direct tree operations when possible
+    // Note: When there are live snapshots, we must use setFragments to create
+    // a new tree with a separate arena, since insertAt shares the arena and
+    // GC could incorrectly free nodes still referenced by snapshots.
+    if (splitInfo !== undefined || this._liveSnapshots > 0) {
+      // Split case or live snapshots: use array-based approach (O(n))
+      this.insertFragmentByLocator(frags, newFrag);
+      // Must sort after splits: split parts get new locators that may need to
+      // interleave with other fragments (e.g., [...,8] must come after [...,4,10])
+      if (splitInfo !== undefined) {
+        sortFragments(frags);
+      }
+      this.setFragments(frags);
+    } else {
+      // No split and no snapshots: use direct tree insertion (O(log n))
+      const insertIdx = this.findTreeInsertIndex(newFrag);
+      this.fragments = this.fragments.insertAt(insertIdx, newFrag);
+      this.addToFragmentIndex(opId);
+    }
 
     return {
       type: "insert",
@@ -737,6 +784,18 @@ export class TextBuffer {
       version: cloneVersionVector(this._version),
       locator,
     };
+  }
+
+  /**
+   * Add a fragment ID to the index for O(1) hasFragment checks.
+   */
+  private addToFragmentIndex(id: OperationId): void {
+    let counters = this._fragmentIds.get(id.replicaId);
+    if (counters === undefined) {
+      counters = new Set();
+      this._fragmentIds.set(id.replicaId, counters);
+    }
+    counters.add(id.counter);
   }
 
   private findInsertPosition(
@@ -750,6 +809,12 @@ export class TextBuffer {
     insertIndex: number;
     afterRef: { insertionId: OperationId; offset: number };
     beforeRef: { insertionId: OperationId; offset: number };
+    /** Split info for direct tree operations (undefined if no split needed) */
+    splitInfo?: {
+      originalIndex: number;
+      left: Fragment;
+      right: Fragment;
+    };
   } {
     if (frags.length === 0) {
       return {
@@ -821,6 +886,11 @@ export class TextBuffer {
               insertionId: right.insertionId,
               offset: right.insertionOffset,
             },
+            splitInfo: {
+              originalIndex: i,
+              left,
+              right,
+            },
           };
         }
         visibleOffset += frag.length;
@@ -872,144 +942,14 @@ export class TextBuffer {
   }
 
   // ---------------------------------------------------------------------------
-  // Internal: delete (optimized with O(log n) for single-fragment case)
+  // Internal: delete
   // ---------------------------------------------------------------------------
 
-  /**
-   * Optimized delete for single-fragment case using O(log n) tree operations.
-   * Falls back to full delete for multi-fragment deletes.
-   */
-  private deleteInternalOptimized(start: number, end: number): DeleteOperation {
-    const deleteLen = end - start;
-
-    // Find the fragment at the start position using O(log n) seeking
-    const startResult = this.fragments.findByDimension(visibleLenDimension, start, "right");
-    if (startResult === undefined) {
-      // Empty or past end - fall back to regular delete
-      return this.deleteInternalSlow(start, end);
-    }
-
-    // Check if entire delete range fits within this single fragment
-    const startPath = startResult.path;
-    const startLeaf = startPath[startPath.length - 1];
-    if (startLeaf === undefined) {
-      return this.deleteInternalSlow(start, end);
-    }
-
-    const leafData = this.fragments.getArena().getItem(startLeaf.nodeId);
-    const items = (leafData as { items?: Fragment[] } | undefined)?.items;
-    if (!items) {
-      return this.deleteInternalSlow(start, end);
-    }
-
-    const fragment = items[startLeaf.indexInNode];
-    if (fragment === undefined || !fragment.visible) {
-      return this.deleteInternalSlow(start, end);
-    }
-
-    const localOffset = startResult.localOffset as number;
-    const fragRemaining = fragment.length - localOffset;
-
-    // Check if delete fits entirely within this fragment
-    if (deleteLen <= fragRemaining) {
-      // Single-fragment delete - use optimized path
-      return this.deleteSingleFragmentOptimized(start, end, fragment, localOffset);
-    }
-
-    // Multi-fragment delete - use slow path
-    return this.deleteInternalSlow(start, end);
-  }
-
-  /**
-   * Optimized delete when the range is entirely within a single fragment.
-   * Uses O(log n) tree editing instead of O(n) rebuild.
-   */
-  private deleteSingleFragmentOptimized(
-    start: number,
-    end: number,
-    fragment: Fragment,
-    localOffset: number,
-  ): DeleteOperation {
+  private deleteInternal(start: number, end: number): DeleteOperation {
     const opId = this.clock.tick();
     observeVersion(this._version, this._replicaId, opId.counter);
 
-    // Record in transaction
-    if (this.activeTransaction !== null) {
-      this.activeTransaction.operationIds.push(opId);
-    } else {
-      this.recordImplicitOp(opId, "delete");
-    }
-
-    const deleteLen = end - start;
-    const ranges: Array<{ insertionId: OperationId; offset: number; length: number }> = [];
-
-    // Use editByDimension to transform the fragment in-place
-    this.fragments = this.fragments.editByDimension(
-      visibleLenDimension,
-      start,
-      (frag, fragLocalOffset) => {
-        const offset = fragLocalOffset as number;
-
-        if (offset === 0 && deleteLen >= frag.length) {
-          // Delete entire fragment
-          ranges.push({
-            insertionId: frag.insertionId,
-            offset: frag.insertionOffset,
-            length: frag.length,
-          });
-          return deleteFragment(frag, opId);
-        }
-
-        if (offset === 0) {
-          // Delete from start of fragment
-          const [toDelete, keep] = splitFragment(frag, deleteLen);
-          ranges.push({
-            insertionId: toDelete.insertionId,
-            offset: toDelete.insertionOffset,
-            length: toDelete.length,
-          });
-          return [deleteFragment(toDelete, opId), keep];
-        }
-
-        if (offset + deleteLen >= frag.length) {
-          // Delete to end of fragment
-          const [keep, toDelete] = splitFragment(frag, offset);
-          ranges.push({
-            insertionId: toDelete.insertionId,
-            offset: toDelete.insertionOffset,
-            length: toDelete.length,
-          });
-          return [keep, deleteFragment(toDelete, opId)];
-        }
-
-        // Delete in middle of fragment - split into 3 parts
-        const [left, rest] = splitFragment(frag, offset);
-        const [toDelete, right] = splitFragment(rest, deleteLen);
-        ranges.push({
-          insertionId: toDelete.insertionId,
-          offset: toDelete.insertionOffset,
-          length: toDelete.length,
-        });
-        return [left, deleteFragment(toDelete, opId), right];
-      },
-      "right",
-    );
-
-    return {
-      type: "delete",
-      id: opId,
-      ranges,
-      version: cloneVersionVector(this._version),
-    };
-  }
-
-  /**
-   * Original O(n) delete implementation, used as fallback for multi-fragment deletes.
-   */
-  private deleteInternalSlow(start: number, end: number): DeleteOperation {
-    const opId = this.clock.tick();
-    observeVersion(this._version, this._replicaId, opId.counter);
-
+    // Record in active (explicit) transaction or implicit (time-based) group
     if (this.activeTransaction !== null) {
       this.activeTransaction.operationIds.push(opId);
     } else {
@@ -1035,8 +975,10 @@ export class TextBuffer {
       const fragEnd = visibleOffset + frag.length;
 
       if (fragEnd <= start || fragStart >= end) {
+        // Fragment is entirely outside the delete range
         newFrags.push(frag);
       } else if (fragStart >= start && fragEnd <= end) {
+        // Fragment is entirely within the delete range
         newFrags.push(deleteFragment(frag, opId));
         ranges.push({
           insertionId: frag.insertionId,
@@ -1044,6 +986,7 @@ export class TextBuffer {
           length: frag.length,
         });
       } else if (fragStart < start && fragEnd > end) {
+        // Delete range is entirely within this fragment — split into 3 parts
         const deleteStart = start - fragStart;
         const deleteEnd = end - fragStart;
 
@@ -1060,6 +1003,7 @@ export class TextBuffer {
           length: deletedPart.length,
         });
       } else if (fragStart < start) {
+        // Delete range overlaps the end of this fragment
         const splitPoint = start - fragStart;
         const [keepPart, deletedPart] = splitFragment(frag, splitPoint);
 
@@ -1072,6 +1016,7 @@ export class TextBuffer {
           length: deletedPart.length,
         });
       } else {
+        // Delete range overlaps the start of this fragment (fragEnd > end)
         const splitPoint = end - fragStart;
         const [deletedPart, keepPart] = splitFragment(frag, splitPoint);
 
@@ -1088,6 +1033,9 @@ export class TextBuffer {
       visibleOffset = fragEnd;
     }
 
+    // Sort fragments after splits to maintain canonical order.
+    // Split fragments get child locators that must interleave correctly
+    // with fragments from other operations at the same parent locator.
     sortFragments(newFrags);
     this.setFragments(newFrags);
 
@@ -1141,31 +1089,54 @@ export class TextBuffer {
     observeVersion(this._version, op.id.replicaId, op.id.counter);
     mergeVersionVectors(this._version, op.version);
 
-    const frags = this.fragmentsArray();
-
-    // findRefIndex calls may split fragments, which is necessary for causal
-    // correctness, but we don't use the returned indices for positioning.
-    if (!operationIdsEqual(op.after.insertionId, MIN_OPERATION_ID)) {
-      this.findRefIndex(frags, op.after, "after");
-    }
-    if (!operationIdsEqual(op.before.insertionId, MAX_OPERATION_ID)) {
-      this.findRefIndex(frags, op.before, "before");
-    }
-
-    // After splits, the array may not be in locator order. Re-sort it.
-    sortFragments(frags);
-
-    // Create the new fragment with its original locator.
-    // The sort function handles interleaving with children based on operation ID.
     // Check the undo map to determine initial visibility - an undo operation
     // for this insert might have arrived before the insert itself.
     const visible = !this.undoMap.isUndone(op.id);
     const newFrag = createFragment(op.id, 0, op.locator, op.text, visible);
 
-    // Insert the fragment at its locator-sorted position (no re-sort needed
-    // since insertFragmentByLocator uses consistent comparison logic)
-    this.insertFragmentByLocator(frags, newFrag);
-    this.setFragments(frags);
+    // Fast path: use O(log n) tree operations when no live snapshots and no splits needed
+    const needsAfterSplit = !operationIdsEqual(op.after.insertionId, MIN_OPERATION_ID);
+    const needsBeforeSplit = !operationIdsEqual(op.before.insertionId, MAX_OPERATION_ID);
+
+    if (this._liveSnapshots === 0 && !needsAfterSplit && !needsBeforeSplit) {
+      // No splits needed: use O(log² n) tree insertion directly
+      const insertIndex = this.findTreeInsertIndex(newFrag);
+      this.fragments.insertAtMut(insertIndex, newFrag);
+      this.addToFragmentIndex(op.id);
+    } else if (this._liveSnapshots === 0) {
+      // Splits needed: use array for splits, then direct tree insertion
+      const frags = this.fragmentsArray();
+
+      if (needsAfterSplit) {
+        this.findRefIndex(frags, op.after, "after");
+      }
+      if (needsBeforeSplit) {
+        this.findRefIndex(frags, op.before, "before");
+      }
+
+      // After splits, re-sort and rebuild tree, then use direct insertion
+      sortFragments(frags);
+      this.setFragments(frags);
+
+      // Now use O(log² n) insertion for the new fragment
+      const insertIndex = this.findTreeInsertIndex(newFrag);
+      this.fragments.insertAtMut(insertIndex, newFrag);
+      this.addToFragmentIndex(op.id);
+    } else {
+      // Snapshot safety fallback: use full array-based approach
+      const frags = this.fragmentsArray();
+
+      if (needsAfterSplit) {
+        this.findRefIndex(frags, op.after, "after");
+      }
+      if (needsBeforeSplit) {
+        this.findRefIndex(frags, op.before, "before");
+      }
+
+      sortFragments(frags);
+      this.insertFragmentByLocator(frags, newFrag);
+      this.setFragments(frags);
+    }
   }
 
   /**
@@ -1226,6 +1197,39 @@ export class TextBuffer {
 
     // Finally, sort by locator length (children after parent)
     return a.locator.levels.length - b.locator.levels.length;
+  }
+
+  /**
+   * Find the correct tree index for inserting a fragment using full comparison.
+   * Uses binary search with O(log n) tree.get() per comparison = O(log² n) total.
+   * This ensures consistent ordering with sortFragments/insertFragmentByLocator.
+   */
+  private findTreeInsertIndex(newFrag: Fragment): number {
+    const n = this.fragments.length();
+    if (n === 0) {
+      return 0;
+    }
+
+    let low = 0;
+    let high = n;
+
+    while (low < high) {
+      const mid = (low + high) >>> 1;
+      const frag = this.fragments.get(mid);
+      if (frag === undefined) {
+        low = mid + 1;
+        continue;
+      }
+
+      const cmp = this.compareFragmentsForSort(newFrag, frag);
+      if (cmp <= 0) {
+        high = mid;
+      } else {
+        low = mid + 1;
+      }
+    }
+
+    return low;
   }
 
   /**
