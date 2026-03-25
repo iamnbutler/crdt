@@ -1331,14 +1331,20 @@ export class TextBuffer {
     observeVersion(this._version, op.id.replicaId, op.id.counter);
     mergeVersionVectors(this._version, op.version);
 
-    // Use a work list approach: when a fragment is split, the resulting parts
-    // may still overlap with other delete ranges and need re-processing.
-    const workList = [...this.fragmentsArray()];
+    // Process fragments using a pending-slot approach instead of shift()/unshift().
+    // shift() is O(n) per call; with n fragments that's O(n²) total. Instead we
+    // use an index into the original array plus a `pending` slot for re-queued
+    // split fragments — each step is O(1).
+    const frags = this.fragmentsArray();
     const resultFrags: Fragment[] = [];
+    let hasSplits = false;
 
-    while (workList.length > 0) {
-      const frag = workList.shift();
-      if (frag === undefined) break; // Should never happen, but satisfies lint
+    let i = 0;
+    let pending: Fragment | null = null;
+
+    while (pending !== null || i < frags.length) {
+      const frag: Fragment = pending ?? (frags[i++] as Fragment);
+      pending = null;
       let wasProcessed = false;
 
       for (const range of op.ranges) {
@@ -1375,7 +1381,8 @@ export class TextBuffer {
 
           resultFrags.push(beforePart);
           resultFrags.push(deleteFragment(deletedPart, op.id));
-          workList.unshift(afterPart); // Re-check against remaining ranges
+          pending = afterPart; // Re-check against remaining ranges (O(1) vs unshift O(n))
+          hasSplits = true;
           wasProcessed = true;
           break;
         }
@@ -1387,6 +1394,7 @@ export class TextBuffer {
 
           resultFrags.push(keepPart);
           resultFrags.push(deleteFragment(deletedPart, op.id));
+          hasSplits = true;
           wasProcessed = true;
           break;
         }
@@ -1397,7 +1405,8 @@ export class TextBuffer {
         const [deletedPart, keepPart] = splitFragment(frag, splitPoint);
 
         resultFrags.push(deleteFragment(deletedPart, op.id));
-        workList.unshift(keepPart); // Re-check against remaining ranges
+        pending = keepPart; // Re-check against remaining ranges (O(1) vs unshift O(n))
+        hasSplits = true;
         wasProcessed = true;
         break;
       }
@@ -1408,13 +1417,16 @@ export class TextBuffer {
 
     // Sort by (locator, insertionId, insertionOffset) to maintain canonical order
     // after splits. This matches the sorting in applyRemoteInsertDirect.
-    resultFrags.sort((a, b) => {
-      const locCmp = compareLocators(a.locator, b.locator);
-      if (locCmp !== 0) return locCmp;
-      const idCmp = compareOperationIds(a.insertionId, b.insertionId);
-      if (idCmp !== 0) return idCmp;
-      return a.insertionOffset - b.insertionOffset;
-    });
+    // Skip sort if no splits occurred — fragments were already in canonical order.
+    if (hasSplits) {
+      resultFrags.sort((a, b) => {
+        const locCmp = compareLocators(a.locator, b.locator);
+        if (locCmp !== 0) return locCmp;
+        const idCmp = compareOperationIds(a.insertionId, b.insertionId);
+        if (idCmp !== 0) return idCmp;
+        return a.insertionOffset - b.insertionOffset;
+      });
+    }
 
     this.setFragments(resultFrags);
   }
