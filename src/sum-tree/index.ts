@@ -20,6 +20,11 @@ export interface Summary<S> {
   identity(): S;
   /** Combine two summaries (must be associative) */
   combine(left: S, right: S): S;
+  /**
+   * Optional: extract item count from a summary for O(log n) itemIndex().
+   * If not provided, falls back to O(n) recursive counting.
+   */
+  getItemCount?(summary: S): number;
 }
 
 /**
@@ -51,11 +56,21 @@ export interface Summarizable<S> {
 export type SeekBias = "left" | "right";
 
 /**
- * Position in a cursor stack: (nodeId, childIndex, accumulatedPosition)
+ * Position in a cursor stack.
+ *
+ * For leaves: childIndex is the current item index.
+ * For internal nodes: childIndex is the navigation state (next child to scan),
+ *                     indexInParent is which child of the parent this node is.
+ *
+ * indexInParent is set when the entry is pushed and doesn't change, providing
+ * unambiguous position information regardless of how we navigated here.
  */
 interface StackEntry<D> {
   nodeId: NodeId;
+  /** For leaves: current item index. For internals: navigation state (next child to scan). */
   childIndex: number;
+  /** Which child index this node is within its parent (for position/index calculation). */
+  indexInParent: number;
   position: D;
 }
 
@@ -95,7 +110,8 @@ export class Cursor<T extends Summarizable<S>, S, D> {
     this._atEnd = this.tree.isEmpty();
 
     if (!this._atEnd) {
-      this.descendToLeftmost(this.tree.root);
+      // Root has no parent, so indexInParent is 0 (irrelevant but required)
+      this.descendToLeftmost(this.tree.root, 0);
     }
   }
 
@@ -165,7 +181,7 @@ export class Cursor<T extends Summarizable<S>, S, D> {
       if (arena.isInternal(top.nodeId)) {
         const childId = arena.getChild(top.nodeId, top.childIndex);
         if (childId !== INVALID_NODE_ID) {
-          this.descendToRightmost(childId);
+          this.descendToRightmost(childId, top.childIndex);
         }
       }
 
@@ -222,10 +238,8 @@ export class Cursor<T extends Summarizable<S>, S, D> {
     // Sum from current position to end.
     // Walk from the deepest stack entry (leaf) upward to root.
     // For leaf entries, sum items from childIndex onward.
-    // For internal entries, find the child that was descended into
-    // (identified by the next deeper entry's nodeId) and sum children
-    // strictly AFTER that child. This avoids double-counting the subtree
-    // already accounted for by the deeper stack entry.
+    // For internal entries, use indexInParent of the deeper entry to know
+    // which child we descended into, then sum children AFTER it.
     let result = summaryOps.identity();
     const arena = this.tree.getArena();
 
@@ -245,20 +259,10 @@ export class Cursor<T extends Summarizable<S>, S, D> {
           }
         }
       } else {
-        // Internal node: find which child the deeper entry descended into,
-        // then sum only the children AFTER it.
+        // Internal node: sum children AFTER the one we descended into.
+        // Use indexInParent from the deeper entry to know which child that was.
         const deeperEntry = this.stack[i + 1];
-        let startJ = entry.childIndex;
-
-        if (deeperEntry !== undefined) {
-          // Find the child index that matches the deeper entry's nodeId
-          for (let j = 0; j < count; j++) {
-            if (arena.getChild(entry.nodeId, j) === deeperEntry.nodeId) {
-              startJ = j + 1;
-              break;
-            }
-          }
-        }
+        const startJ = deeperEntry !== undefined ? deeperEntry.indexInParent + 1 : entry.childIndex;
 
         for (let j = startJ; j < count; j++) {
           const childId = arena.getChild(entry.nodeId, j);
@@ -356,10 +360,11 @@ export class Cursor<T extends Summarizable<S>, S, D> {
 
       if (cmp > 0 || (cmp === 0 && bias === "left")) {
         // Target is in this child
-        entry.childIndex = i + 1; // Mark we've processed up to here
+        entry.childIndex = i + 1; // Mark we've processed up to here (for navigation)
         this.stack.push({
           nodeId: childId,
           childIndex: 0,
+          indexInParent: i, // The actual child index we descended into (for position calculation)
           position: pos,
         });
         return true;
@@ -405,7 +410,7 @@ export class Cursor<T extends Summarizable<S>, S, D> {
       if (arena.isInternal(top.nodeId)) {
         const childId = arena.getChild(top.nodeId, top.childIndex);
         if (childId !== INVALID_NODE_ID) {
-          this.descendToLeftmost(childId);
+          this.descendToLeftmost(childId, top.childIndex);
         }
       }
       return true;
@@ -416,33 +421,48 @@ export class Cursor<T extends Summarizable<S>, S, D> {
     return this.advanceToNext();
   }
 
-  private descendToLeftmost(nodeId: NodeId): void {
+  /**
+   * Descend to the leftmost leaf starting from nodeId.
+   * @param nodeId - Node to start descending from
+   * @param indexInParent - The index of nodeId within its parent (for position calculation)
+   */
+  private descendToLeftmost(nodeId: NodeId, indexInParent: number): void {
     const arena = this.tree.getArena();
     let current = nodeId;
+    let currentIndexInParent = indexInParent;
     const pos = this._position;
 
     while (arena.isInternal(current)) {
       this.stack.push({
         nodeId: current,
         childIndex: 0,
+        indexInParent: currentIndexInParent,
         position: pos,
       });
       const firstChild = arena.getChild(current, 0);
       if (firstChild === INVALID_NODE_ID) break;
       current = firstChild;
+      currentIndexInParent = 0; // Subsequent nodes are always at index 0 (leftmost)
     }
 
     // Push the leaf
     this.stack.push({
       nodeId: current,
       childIndex: 0,
+      indexInParent: currentIndexInParent,
       position: pos,
     });
   }
 
-  private descendToRightmost(nodeId: NodeId): void {
+  /**
+   * Descend to the rightmost leaf starting from nodeId.
+   * @param nodeId - Node to start descending from
+   * @param indexInParent - The index of nodeId within its parent (for position calculation)
+   */
+  private descendToRightmost(nodeId: NodeId, indexInParent: number): void {
     const arena = this.tree.getArena();
     let current = nodeId;
+    let currentIndexInParent = indexInParent;
 
     while (arena.isInternal(current)) {
       const count = arena.getCount(current);
@@ -450,11 +470,13 @@ export class Cursor<T extends Summarizable<S>, S, D> {
       this.stack.push({
         nodeId: current,
         childIndex: lastIndex,
+        indexInParent: currentIndexInParent,
         position: this._position, // Will be recalculated
       });
       const lastChild = arena.getChild(current, lastIndex);
       if (lastChild === INVALID_NODE_ID) break;
       current = lastChild;
+      currentIndexInParent = lastIndex; // Subsequent nodes are at the rightmost index
     }
 
     // Push the leaf
@@ -462,12 +484,14 @@ export class Cursor<T extends Summarizable<S>, S, D> {
     this.stack.push({
       nodeId: current,
       childIndex: Math.max(0, leafCount - 1),
+      indexInParent: currentIndexInParent,
       position: this._position,
     });
   }
 
   private recalculatePosition(): void {
-    // Recalculate position by summing from root
+    // Recalculate position by summing from root.
+    // Uses indexInParent for internal nodes and childIndex for leaves.
     this._position = this.dimension.zero();
     const arena = this.tree.getArena();
 
@@ -476,28 +500,96 @@ export class Cursor<T extends Summarizable<S>, S, D> {
       if (entry === undefined) continue;
 
       entry.position = this._position;
+      const parentEntry = i > 0 ? this.stack[i - 1] : undefined;
 
-      // Sum all siblings before current index
-      for (let j = 0; j < entry.childIndex; j++) {
-        if (arena.isLeaf(entry.nodeId)) {
-          const leafItems = this.tree.getLeafItems(entry.nodeId);
+      if (arena.isLeaf(entry.nodeId)) {
+        // Leaf: sum items before childIndex within this leaf
+        const leafItems = this.tree.getLeafItems(entry.nodeId);
+        for (let j = 0; j < entry.childIndex; j++) {
           const item = leafItems[j];
           if (item !== undefined) {
             const itemMeasure = this.dimension.measure(item.summary());
             this._position = this.dimension.add(this._position, itemMeasure);
           }
-        } else {
-          const childId = arena.getChild(entry.nodeId, j);
-          if (childId !== INVALID_NODE_ID) {
-            const childSummary = this.tree.getSummary(childId);
-            if (childSummary !== undefined) {
-              const childMeasure = this.dimension.measure(childSummary);
-              this._position = this.dimension.add(this._position, childMeasure);
+        }
+      }
+
+      // For non-root entries, sum sibling subtrees before this entry
+      if (parentEntry !== undefined) {
+        // Sum children 0..(indexInParent - 1) of the parent
+        for (let j = 0; j < entry.indexInParent; j++) {
+          const siblingId = arena.getChild(parentEntry.nodeId, j);
+          if (siblingId !== INVALID_NODE_ID) {
+            const siblingSum = this.tree.getSummary(siblingId);
+            if (siblingSum !== undefined) {
+              const siblingMeasure = this.dimension.measure(siblingSum);
+              this._position = this.dimension.add(this._position, siblingMeasure);
             }
           }
         }
       }
     }
+  }
+
+  /**
+   * Get the 0-based item index of the current cursor position.
+   * Returns the number of items before the current position.
+   *
+   * Uses the explicit `indexInParent` field on each stack entry to determine
+   * which child of its parent each node is. This avoids the ambiguity of
+   * `childIndex` which serves as a navigation bookmark (and has different
+   * semantics after seek vs walk).
+   *
+   * O(log n) if the summary supports getItemCount, O(n) otherwise.
+   */
+  itemIndex(): number {
+    if (this._atEnd) {
+      return this.tree.length();
+    }
+
+    if (this.stack.length === 0) {
+      return 0;
+    }
+
+    let index = 0;
+    const arena = this.tree.getArena();
+    const summaryOps = this.tree.getSummaryOps();
+    const getItemCount = summaryOps.getItemCount;
+
+    // Walk from root to leaf.
+    // For each entry, count items in all siblings BEFORE indexInParent.
+    // For the leaf entry, also add childIndex (the item position within the leaf).
+    for (let i = 0; i < this.stack.length; i++) {
+      const entry = this.stack[i];
+      if (entry === undefined) continue;
+
+      const parentEntry = i > 0 ? this.stack[i - 1] : undefined;
+
+      if (arena.isLeaf(entry.nodeId)) {
+        // Leaf: add items before childIndex within this leaf
+        index += entry.childIndex;
+      }
+
+      // For non-root entries, count items in sibling subtrees before this entry
+      if (parentEntry !== undefined) {
+        // Count items in children 0..(indexInParent - 1) of the parent
+        for (let j = 0; j < entry.indexInParent; j++) {
+          const siblingId = arena.getChild(parentEntry.nodeId, j);
+          if (siblingId !== INVALID_NODE_ID) {
+            if (getItemCount !== undefined) {
+              const summary = this.tree.getSummary(siblingId);
+              if (summary !== undefined) {
+                index += getItemCount(summary);
+              }
+            } else {
+              index += this.tree.countItemsInSubtree(siblingId);
+            }
+          }
+        }
+      }
+    }
+
+    return index;
   }
 }
 
@@ -696,6 +788,14 @@ export class SumTree<T extends Summarizable<S>, S> {
    */
   length(): number {
     return this.countItems(this._root);
+  }
+
+  /**
+   * Count items in a subtree rooted at the given node.
+   * Used by Cursor.itemIndex() for O(log n) index computation.
+   */
+  countItemsInSubtree(nodeId: NodeId): number {
+    return this.countItems(nodeId);
   }
 
   /**
@@ -1443,6 +1543,9 @@ export const countSummaryOps: Summary<CountSummary> = {
   },
   combine(left: CountSummary, right: CountSummary): CountSummary {
     return { count: left.count + right.count };
+  },
+  getItemCount(summary: CountSummary): number {
+    return summary.count;
   },
 };
 
