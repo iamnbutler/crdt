@@ -1142,6 +1142,7 @@ export class TextBuffer {
     mergeVersionVectors(this._version, op.version);
 
     const frags = this.fragmentsArray();
+    const lenBefore = frags.length;
 
     // findRefIndex calls may split fragments, which is necessary for causal
     // correctness, but we don't use the returned indices for positioning.
@@ -1152,8 +1153,11 @@ export class TextBuffer {
       this.findRefIndex(frags, op.before, "before");
     }
 
-    // After splits, the array may not be in locator order. Re-sort it.
-    sortFragments(frags);
+    // Only re-sort if splits occurred. Each split adds one fragment to the array.
+    // Without splits the array is already in locator order (tree traversal order).
+    if (frags.length > lenBefore) {
+      sortFragments(frags);
+    }
 
     // Create the new fragment with its original locator.
     // The sort function handles interleaving with children based on operation ID.
@@ -1335,6 +1339,7 @@ export class TextBuffer {
     // may still overlap with other delete ranges and need re-processing.
     const workList = [...this.fragmentsArray()];
     const resultFrags: Fragment[] = [];
+    let splitOccurred = false;
 
     while (workList.length > 0) {
       const frag = workList.shift();
@@ -1376,6 +1381,7 @@ export class TextBuffer {
           resultFrags.push(beforePart);
           resultFrags.push(deleteFragment(deletedPart, op.id));
           workList.unshift(afterPart); // Re-check against remaining ranges
+          splitOccurred = true;
           wasProcessed = true;
           break;
         }
@@ -1387,6 +1393,7 @@ export class TextBuffer {
 
           resultFrags.push(keepPart);
           resultFrags.push(deleteFragment(deletedPart, op.id));
+          splitOccurred = true;
           wasProcessed = true;
           break;
         }
@@ -1398,6 +1405,7 @@ export class TextBuffer {
 
         resultFrags.push(deleteFragment(deletedPart, op.id));
         workList.unshift(keepPart); // Re-check against remaining ranges
+        splitOccurred = true;
         wasProcessed = true;
         break;
       }
@@ -1406,15 +1414,18 @@ export class TextBuffer {
       }
     }
 
-    // Sort by (locator, insertionId, insertionOffset) to maintain canonical order
-    // after splits. This matches the sorting in applyRemoteInsertDirect.
-    resultFrags.sort((a, b) => {
-      const locCmp = compareLocators(a.locator, b.locator);
-      if (locCmp !== 0) return locCmp;
-      const idCmp = compareOperationIds(a.insertionId, b.insertionId);
-      if (idCmp !== 0) return idCmp;
-      return a.insertionOffset - b.insertionOffset;
-    });
+    // Only re-sort if splits occurred. Splits can create fragments out of locator
+    // order (e.g., when a range boundary falls inside a fragment). Without splits,
+    // the worklist traversal preserves the original sorted order.
+    if (splitOccurred) {
+      resultFrags.sort((a, b) => {
+        const locCmp = compareLocators(a.locator, b.locator);
+        if (locCmp !== 0) return locCmp;
+        const idCmp = compareOperationIds(a.insertionId, b.insertionId);
+        if (idCmp !== 0) return idCmp;
+        return a.insertionOffset - b.insertionOffset;
+      });
+    }
 
     this.setFragments(resultFrags);
   }
