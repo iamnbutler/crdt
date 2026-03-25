@@ -729,6 +729,7 @@ export class SumTree<T extends Summarizable<S>, S> {
       // Internal node - find the child containing the target
       const children = this.arena.getChildren(current);
       let found = false;
+      let prevAccumulatedPos = accumulatedPos;
 
       for (let i = 0; i < children.length; i++) {
         const childId = children[i];
@@ -749,13 +750,17 @@ export class SumTree<T extends Summarizable<S>, S> {
           break;
         }
 
+        prevAccumulatedPos = accumulatedPos;
         accumulatedPos = nextPos;
       }
 
       if (!found) {
-        // Target is past all children
+        // Target is past all children - navigate into the last child.
+        // Restore accumulatedPos to the START of the last child's range
+        // (prevAccumulatedPos), not the end (accumulatedPos includes last child).
         const lastChild = children[children.length - 1];
         if (lastChild !== undefined) {
+          accumulatedPos = prevAccumulatedPos;
           path.push({ nodeId: current, indexInNode: children.length - 1 });
           current = lastChild;
         } else {

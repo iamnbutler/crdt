@@ -711,22 +711,135 @@ export class TextBuffer {
       this.recordImplicitOp(opId, "insert");
     }
 
-    const frags = this.fragmentsArray();
+    // Use O(log n) tree operations instead of O(n) array extraction + rebuild.
+    return this.insertInternalOptimized(opId, offset, text);
+  }
 
-    // Find the position to insert: seek to the visible offset
-    const { leftLocator, rightLocator, insertLocator, afterRef, beforeRef } =
-      this.findInsertPosition(frags, offset);
+  /**
+   * O(log n) insert using dimension-based tree operations.
+   *
+   * Strategy:
+   * - Boundary insert (offset falls exactly at a fragment boundary): use
+   *   insertByDimension to splice the new fragment before the found item.
+   * - Mid-fragment insert (offset falls inside a fragment): use editByDimension
+   *   to atomically split the fragment and weave the new fragment between the halves.
+   *
+   * Both cases avoid the O(n) fragmentsArray()+setFragments() round-trip and
+   * update _fragmentIds incrementally in O(1).
+   */
+  private insertInternalOptimized(
+    opId: OperationId,
+    offset: number,
+    text: string,
+  ): InsertOperation {
+    // Find the visible-offset position in the tree.  Returns the fragment that
+    // *contains* the target offset and the local offset within that fragment.
+    const result = this.fragments.findByDimension(visibleLenDimension, offset, "right");
 
-    // Use explicit insertLocator if provided (for split cases), otherwise compute via locatorBetween
-    const locator = insertLocator ?? locatorBetween(leftLocator, rightLocator);
+    let afterRef: { insertionId: OperationId; offset: number };
+    let beforeRef: { insertionId: OperationId; offset: number };
+    let locator: Locator;
 
-    // Create the new fragment
-    const newFrag = createFragment(opId, 0, locator, text, true);
+    if (result === undefined) {
+      // Empty document: insert as the only fragment.
+      locator = locatorBetween(MIN_LOCATOR, MAX_LOCATOR);
+      const newFrag = createFragment(opId, 0, locator, text, true);
+      this.fragments = this.fragments.push(newFrag);
+      this.addFragmentToIndex(opId);
+      return {
+        type: "insert",
+        id: opId,
+        text,
+        after: { insertionId: MIN_OPERATION_ID, offset: 0 },
+        before: { insertionId: MAX_OPERATION_ID, offset: 0 },
+        version: cloneVersionVector(this._version),
+        locator,
+      };
+    }
 
-    // Insert at the correct sorted position (no sort needed since
-    // insertFragmentByLocator uses consistent comparison logic)
-    this.insertFragmentByLocator(frags, newFrag);
-    this.setFragments(frags);
+    const { path, localOffset: rawLocalOffset } = result;
+    const localOffset = rawLocalOffset as number;
+
+    // Retrieve the fragment at the found tree position.
+    const leafEntry = path[path.length - 1];
+    if (leafEntry === undefined) {
+      return this.insertInternalSlow(opId, offset, text);
+    }
+    const leafItems = this.fragments.getLeafItems(leafEntry.nodeId);
+    const currentFrag: Fragment | undefined = leafItems[leafEntry.indexInNode];
+
+    if (localOffset === 0) {
+      // ── Boundary insert ──────────────────────────────────────────────────
+      // Inserting exactly at the start of `currentFrag` (or past the last item
+      // when currentFrag is undefined).
+      //
+      // The new fragment's locator must lie between the immediately preceding
+      // fragment in TREE ORDER (which may be a deleted fragment) and currentFrag.
+      const prevFrag = this.getPrevFragmentFromPath(path);
+      const leftLocator = prevFrag?.locator ?? MIN_LOCATOR;
+      const rightLocator = currentFrag?.locator ?? MAX_LOCATOR;
+
+      afterRef = prevFrag
+        ? { insertionId: prevFrag.insertionId, offset: prevFrag.insertionOffset + prevFrag.length }
+        : { insertionId: MIN_OPERATION_ID, offset: 0 };
+      beforeRef = currentFrag
+        ? { insertionId: currentFrag.insertionId, offset: currentFrag.insertionOffset }
+        : { insertionId: MAX_OPERATION_ID, offset: 0 };
+
+      locator = locatorBetween(leftLocator, rightLocator);
+      const newFrag = createFragment(opId, 0, locator, text, true);
+
+      // insertByDimension inserts BEFORE the item found at the target offset.
+      this.fragments = this.fragments.insertByDimension(
+        visibleLenDimension,
+        offset,
+        newFrag,
+        "right",
+      );
+      this.addFragmentToIndex(opId);
+    } else {
+      // ── Mid-fragment insert (split case) ─────────────────────────────────
+      // The insertion point is strictly inside `currentFrag`.  We atomically
+      // split it and weave the new fragment between the two halves.
+      if (currentFrag === undefined) {
+        return this.insertInternalSlow(opId, offset, text);
+      }
+
+      let capturedAfterRef: { insertionId: OperationId; offset: number } | undefined;
+      let capturedBeforeRef: { insertionId: OperationId; offset: number } | undefined;
+      let capturedLocator: Locator | undefined;
+
+      this.fragments = this.fragments.editByDimension(
+        visibleLenDimension,
+        offset,
+        (frag: Fragment, fragLocalOffset: number) => {
+          const [left, right] = splitFragment(frag, fragLocalOffset);
+          const k = right.insertionOffset;
+          // Odd-numbered child locator to interleave between even split parts.
+          const insertLoc: Locator = {
+            levels: [...frag.baseLocator.levels, 2 * k - 1],
+          };
+          const newFrag = createFragment(opId, 0, insertLoc, text, true);
+          capturedAfterRef = {
+            insertionId: left.insertionId,
+            offset: left.insertionOffset + left.length,
+          };
+          capturedBeforeRef = { insertionId: right.insertionId, offset: right.insertionOffset };
+          capturedLocator = insertLoc;
+          return [left, newFrag, right];
+        },
+        "right",
+      );
+
+      if (capturedAfterRef === undefined || capturedBeforeRef === undefined || capturedLocator === undefined) {
+        return this.insertInternalSlow(opId, offset, text);
+      }
+
+      afterRef = capturedAfterRef;
+      beforeRef = capturedBeforeRef;
+      locator = capturedLocator;
+      this.addFragmentToIndex(opId);
+    }
 
     return {
       type: "insert",
@@ -737,6 +850,83 @@ export class TextBuffer {
       version: cloneVersionVector(this._version),
       locator,
     };
+  }
+
+  /**
+   * Fallback O(n) insert, kept for edge cases and as a correctness reference.
+   * Only called when the optimized path encounters an unexpected state.
+   */
+  private insertInternalSlow(opId: OperationId, offset: number, text: string): InsertOperation {
+    // Undo the clock tick already done by the caller; re-tick inside the slow path.
+    // Actually we need to reuse the same opId — just use the pre-computed opId directly.
+    const frags = this.fragmentsArray();
+    const { leftLocator, rightLocator, insertLocator, afterRef, beforeRef } =
+      this.findInsertPosition(frags, offset);
+    const locator = insertLocator ?? locatorBetween(leftLocator, rightLocator);
+    const newFrag = createFragment(opId, 0, locator, text, true);
+    this.insertFragmentByLocator(frags, newFrag);
+    this.setFragments(frags);
+    return {
+      type: "insert",
+      id: opId,
+      text,
+      after: afterRef,
+      before: beforeRef,
+      version: cloneVersionVector(this._version),
+      locator,
+    };
+  }
+
+  /**
+   * Get the fragment immediately preceding the given path position in tree order.
+   * Includes deleted fragments (locator adjacency, not visible adjacency).
+   * Returns undefined if at the very start of the tree.
+   * O(B * log n) = O(log n).
+   */
+  private getPrevFragmentFromPath(
+    path: Array<{ nodeId: NodeId; indexInNode: number }>,
+  ): Fragment | undefined {
+    const leafEntry = path[path.length - 1];
+    if (leafEntry === undefined) return undefined;
+
+    // Fast path: previous item in the same leaf.
+    if (leafEntry.indexInNode > 0) {
+      return this.fragments.getLeafItems(leafEntry.nodeId)[leafEntry.indexInNode - 1];
+    }
+
+    // Slow path: ascend until we find a parent with a left sibling, then descend
+    // to that sibling's rightmost leaf.
+    const arena = this.fragments.getArena();
+    for (let i = path.length - 2; i >= 0; i--) {
+      const entry = path[i];
+      if (entry === undefined) continue;
+      if (entry.indexInNode > 0) {
+        const prevChildId = arena.getChild(entry.nodeId, entry.indexInNode - 1);
+        // Descend to rightmost leaf of the previous subtree.
+        let current = prevChildId;
+        while (!arena.isLeaf(current)) {
+          const childCount = arena.getCount(current);
+          current = arena.getChild(current, childCount - 1);
+        }
+        const items = this.fragments.getLeafItems(current);
+        return items[items.length - 1];
+      }
+    }
+    return undefined; // At the very start of the tree.
+  }
+
+  /**
+   * Add a new fragment's insertionId to the _fragmentIds index.  O(1) amortized.
+   * Called after an optimized insert to keep the index in sync without a full rebuild.
+   */
+  private addFragmentToIndex(id: OperationId): void {
+    const rid = id.replicaId;
+    let counters = this._fragmentIds.get(rid);
+    if (counters === undefined) {
+      counters = new Set();
+      this._fragmentIds.set(rid, counters);
+    }
+    counters.add(id.counter);
   }
 
   private findInsertPosition(
