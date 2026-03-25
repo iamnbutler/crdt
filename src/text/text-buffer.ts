@@ -1145,6 +1145,10 @@ export class TextBuffer {
 
     // findRefIndex calls may split fragments, which is necessary for causal
     // correctness, but we don't use the returned indices for positioning.
+    // Track fragment count: splits create new child-locator fragments that may
+    // interleave with existing siblings, requiring a re-sort. If no splits
+    // occur (common case for sequential editing), the array is already sorted.
+    const fragsBeforeRefs = frags.length;
     if (!operationIdsEqual(op.after.insertionId, MIN_OPERATION_ID)) {
       this.findRefIndex(frags, op.after, "after");
     }
@@ -1152,8 +1156,10 @@ export class TextBuffer {
       this.findRefIndex(frags, op.before, "before");
     }
 
-    // After splits, the array may not be in locator order. Re-sort it.
-    sortFragments(frags);
+    // Only re-sort if splits occurred (changed fragment count).
+    if (frags.length !== fragsBeforeRefs) {
+      sortFragments(frags);
+    }
 
     // Create the new fragment with its original locator.
     // The sort function handles interleaving with children based on operation ID.
