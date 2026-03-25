@@ -679,6 +679,51 @@ export class SumTree<T extends Summarizable<S>, S> {
   }
 
   /**
+   * Push an item to the end of the tree, mutating in place.
+   * O(log n) - finds rightmost leaf and inserts directly.
+   */
+  pushMut(item: T): void {
+    this.insertAtMut(this.length(), item);
+  }
+
+  /**
+   * Insert an item at the given index, mutating in place.
+   * O(log n) - finds the leaf and inserts directly without path copying.
+   */
+  insertAtMut(index: number, item: T): void {
+    // Find the leaf and position for insertion
+    const path = this.findLeafForIndex(index);
+    if (path.length === 0) {
+      // Empty tree, create root leaf
+      const items = [item];
+      this._root = this.createLeaf(items);
+      return;
+    }
+
+    // Insert into the leaf (no cloning needed for mutation)
+    const leafEntry = path[path.length - 1];
+    if (leafEntry === undefined) {
+      return;
+    }
+
+    const leafData = this.arena.getItem(leafEntry.nodeId);
+    const items = leafData?.items ?? [];
+    items.splice(leafEntry.indexInNode, 0, item);
+
+    // Update leaf
+    this.arena.setItem(leafEntry.nodeId, { items });
+    this.arena.setCount(leafEntry.nodeId, items.length);
+
+    // Check for overflow and split if needed
+    if (items.length > this.branchingFactor) {
+      this.splitAndPropagate(path);
+    } else {
+      // Just update summaries up the path
+      this.updateSummariesUp(path);
+    }
+  }
+
+  /**
    * Insert an item at the given index.
    * Returns a new tree (path copying), leaving the original unchanged.
    */
@@ -972,6 +1017,103 @@ export class SumTree<T extends Summarizable<S>, S> {
     }
 
     return newTree;
+  }
+
+  /**
+   * Delete an item at a position determined by dimension value.
+   * Returns a new tree (path copying), leaving the original unchanged.
+   *
+   * @param dimension The dimension to use for seeking
+   * @param target The target position in the dimension
+   * @param bias Where to find item relative to target
+   */
+  deleteByDimension<D>(
+    dimension: Dimension<S, D>,
+    target: D,
+    bias: SeekBias = "right",
+  ): SumTree<T, S> {
+    const result = this.findByDimension(dimension, target, bias);
+    if (result === undefined) {
+      return this; // Empty tree or not found
+    }
+
+    const leafEntry = result.path[result.path.length - 1];
+    if (leafEntry === undefined) {
+      return this;
+    }
+
+    // Check if we're past the end (indexInNode === items.length means past-end position)
+    const leafData = this.arena.getItem(leafEntry.nodeId);
+    const items = leafData?.items ?? [];
+    if (leafEntry.indexInNode >= items.length) {
+      return this; // Nothing to delete at past-end position
+    }
+
+    const newTree = this.shallowClone();
+    const clonedPath = newTree.clonePath(result.path);
+
+    const clonedLeafEntry = clonedPath[clonedPath.length - 1];
+    if (clonedLeafEntry === undefined) {
+      return newTree;
+    }
+
+    const clonedLeafData = newTree.arena.getItem(clonedLeafEntry.nodeId);
+    const clonedItems = clonedLeafData?.items ?? [];
+    clonedItems.splice(clonedLeafEntry.indexInNode, 1);
+
+    newTree.arena.setItem(clonedLeafEntry.nodeId, { items: clonedItems });
+    newTree.arena.setCount(clonedLeafEntry.nodeId, clonedItems.length);
+
+    // Check for underflow and merge if needed
+    const minItems = Math.floor(newTree.branchingFactor / 2);
+    if (clonedItems.length < minItems && clonedPath.length > 1) {
+      newTree.mergeOrRedistribute(clonedPath);
+    } else {
+      newTree.updateSummariesUp(clonedPath);
+    }
+
+    return newTree;
+  }
+
+  /**
+   * Edit an item at the given index in place, mutating the tree.
+   * The editor function receives the current item and should return the new item.
+   * Summaries are updated in O(log n) along the path.
+   *
+   * @param index The 0-based index of the item to edit
+   * @param editor Function that transforms the item
+   */
+  editAtIndex(index: number, editor: (item: T) => T): void {
+    if (index < 0 || index >= this.length()) {
+      throw new Error(`Index ${index} out of bounds`);
+    }
+
+    const path = this.findLeafForIndex(index);
+    if (path.length === 0) {
+      return;
+    }
+
+    const leafEntry = path[path.length - 1];
+    if (leafEntry === undefined) {
+      return;
+    }
+
+    const leafData = this.arena.getItem(leafEntry.nodeId);
+    const items = leafData?.items ?? [];
+    const oldItem = items[leafEntry.indexInNode];
+    if (oldItem === undefined) {
+      return;
+    }
+
+    // Apply the edit
+    const newItem = editor(oldItem);
+    items[leafEntry.indexInNode] = newItem;
+
+    // Update the leaf data
+    this.arena.setItem(leafEntry.nodeId, { items });
+
+    // Update summaries up the path
+    this.updateSummariesUp(path);
   }
 
   /**

@@ -10,6 +10,7 @@
  */
 
 import type { Dimension, Summary } from "../sum-tree/index.js";
+import { MIN_LOCATOR, compareLocators } from "./locator.js";
 import { MIN_OPERATION_ID, compareOperationIds } from "./types.js";
 import type { Fragment, FragmentSummary, Locator, OperationId } from "./types.js";
 
@@ -29,6 +30,8 @@ export const fragmentSummaryOps: Summary<FragmentSummary> = {
       deletedLen: 0,
       deletedLines: 0,
       maxInsertionId: MIN_OPERATION_ID,
+      maxLocator: MIN_LOCATOR,
+      itemCount: 0,
     };
   },
 
@@ -42,7 +45,16 @@ export const fragmentSummaryOps: Summary<FragmentSummary> = {
         compareOperationIds(left.maxInsertionId, right.maxInsertionId) >= 0
           ? left.maxInsertionId
           : right.maxInsertionId,
+      maxLocator:
+        compareLocators(left.maxLocator, right.maxLocator) >= 0
+          ? left.maxLocator
+          : right.maxLocator,
+      itemCount: left.itemCount + right.itemCount,
     };
+  },
+
+  getItemCount(summary: FragmentSummary): number {
+    return summary.itemCount;
   },
 };
 
@@ -82,6 +94,26 @@ export const visibleLinesDimension: Dimension<FragmentSummary, number> = {
   },
 };
 
+/**
+ * Dimension for seeking by Locator.
+ * Enables O(log n) position finding by Locator in the fragment tree.
+ */
+export const locatorDimension: Dimension<FragmentSummary, Locator> = {
+  measure(summary: FragmentSummary): Locator {
+    return summary.maxLocator;
+  },
+  compare(a: Locator, b: Locator): number {
+    return compareLocators(a, b);
+  },
+  add(a: Locator, b: Locator): Locator {
+    // For max-based dimensions, "add" returns the max
+    return compareLocators(a, b) >= 0 ? a : b;
+  },
+  zero(): Locator {
+    return MIN_LOCATOR;
+  },
+};
+
 // ---------------------------------------------------------------------------
 // Fragment construction
 // ---------------------------------------------------------------------------
@@ -118,6 +150,8 @@ export function createFragment(
         deletedLen: 0,
         deletedLines: 0,
         maxInsertionId: insertionId,
+        maxLocator: locator,
+        itemCount: 1,
       }
     : {
         visibleLen: 0,
@@ -125,6 +159,8 @@ export function createFragment(
         deletedLen: len,
         deletedLines: lines,
         maxInsertionId: insertionId,
+        maxLocator: locator,
+        itemCount: 1,
       };
 
   return {
