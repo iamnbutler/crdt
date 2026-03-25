@@ -1021,6 +1021,7 @@ export class TextBuffer {
     const ranges: Array<{ insertionId: OperationId; offset: number; length: number }> = [];
 
     let visibleOffset = 0;
+    let hasSplits = false;
 
     for (let i = 0; i < frags.length; i++) {
       const frag = frags[i];
@@ -1059,6 +1060,7 @@ export class TextBuffer {
           offset: deletedPart.insertionOffset,
           length: deletedPart.length,
         });
+        hasSplits = true;
       } else if (fragStart < start) {
         const splitPoint = start - fragStart;
         const [keepPart, deletedPart] = splitFragment(frag, splitPoint);
@@ -1071,6 +1073,7 @@ export class TextBuffer {
           offset: deletedPart.insertionOffset,
           length: deletedPart.length,
         });
+        hasSplits = true;
       } else {
         const splitPoint = end - fragStart;
         const [deletedPart, keepPart] = splitFragment(frag, splitPoint);
@@ -1083,12 +1086,17 @@ export class TextBuffer {
           offset: deletedPart.insertionOffset,
           length: deletedPart.length,
         });
+        hasSplits = true;
       }
 
       visibleOffset = fragEnd;
     }
 
-    sortFragments(newFrags);
+    // Only sort when splits occurred — most multi-fragment deletes don't split
+    // any fragment at its boundary, so we can skip the O(n log n) sort.
+    if (hasSplits) {
+      sortFragments(newFrags);
+    }
     this.setFragments(newFrags);
 
     return {
@@ -1333,12 +1341,15 @@ export class TextBuffer {
 
     // Use a work list approach: when a fragment is split, the resulting parts
     // may still overlap with other delete ranges and need re-processing.
+    // Use an index pointer instead of shift()/unshift() to avoid O(n) array mutations.
     const workList = [...this.fragmentsArray()];
     const resultFrags: Fragment[] = [];
+    let workIdx = 0;
+    let hasSplits = false;
 
-    while (workList.length > 0) {
-      const frag = workList.shift();
-      if (frag === undefined) break; // Should never happen, but satisfies lint
+    while (workIdx < workList.length) {
+      const frag = workList[workIdx++];
+      if (frag === undefined) continue;
       let wasProcessed = false;
 
       for (const range of op.ranges) {
@@ -1375,7 +1386,9 @@ export class TextBuffer {
 
           resultFrags.push(beforePart);
           resultFrags.push(deleteFragment(deletedPart, op.id));
-          workList.unshift(afterPart); // Re-check against remaining ranges
+          // Insert afterPart at workIdx (before incrementing) to re-check against remaining ranges
+          workList.splice(workIdx, 0, afterPart);
+          hasSplits = true;
           wasProcessed = true;
           break;
         }
@@ -1387,6 +1400,7 @@ export class TextBuffer {
 
           resultFrags.push(keepPart);
           resultFrags.push(deleteFragment(deletedPart, op.id));
+          hasSplits = true;
           wasProcessed = true;
           break;
         }
@@ -1397,7 +1411,9 @@ export class TextBuffer {
         const [deletedPart, keepPart] = splitFragment(frag, splitPoint);
 
         resultFrags.push(deleteFragment(deletedPart, op.id));
-        workList.unshift(keepPart); // Re-check against remaining ranges
+        // Insert keepPart at workIdx (before incrementing) to re-check against remaining ranges
+        workList.splice(workIdx, 0, keepPart);
+        hasSplits = true;
         wasProcessed = true;
         break;
       }
@@ -1406,15 +1422,17 @@ export class TextBuffer {
       }
     }
 
-    // Sort by (locator, insertionId, insertionOffset) to maintain canonical order
-    // after splits. This matches the sorting in applyRemoteInsertDirect.
-    resultFrags.sort((a, b) => {
-      const locCmp = compareLocators(a.locator, b.locator);
-      if (locCmp !== 0) return locCmp;
-      const idCmp = compareOperationIds(a.insertionId, b.insertionId);
-      if (idCmp !== 0) return idCmp;
-      return a.insertionOffset - b.insertionOffset;
-    });
+    // Only sort when splits occurred — splits introduce child locators that need
+    // canonical reordering. No splits means the original order is preserved.
+    if (hasSplits) {
+      resultFrags.sort((a, b) => {
+        const locCmp = compareLocators(a.locator, b.locator);
+        if (locCmp !== 0) return locCmp;
+        const idCmp = compareOperationIds(a.insertionId, b.insertionId);
+        if (idCmp !== 0) return idCmp;
+        return a.insertionOffset - b.insertionOffset;
+      });
+    }
 
     this.setFragments(resultFrags);
   }
