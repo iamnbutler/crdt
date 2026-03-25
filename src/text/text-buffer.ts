@@ -713,8 +713,9 @@ export class TextBuffer {
     }
 
     // Fast path: inserting at end of document with no splits needed
+    // Skip fast path when there are live snapshots (mutations would corrupt them)
     const totalVisibleLen = this.fragments.summary().visibleLen;
-    if (offset === totalVisibleLen && !this.fragments.isEmpty()) {
+    if (offset === totalVisibleLen && !this.fragments.isEmpty() && this._liveSnapshots === 0) {
       // Get the last fragment to compute locator
       const lastIdx = this.fragments.length() - 1;
       const lastFrag = this.fragments.get(lastIdx);
@@ -723,8 +724,8 @@ export class TextBuffer {
         const locator = locatorBetween(lastFrag.locator, MAX_LOCATOR);
         const newFrag = createFragment(opId, 0, locator, text, true);
 
-        // O(log n) push instead of O(n) rebuild
-        this.fragments = this.fragments.push(newFrag);
+        // O(log n) in-place push (avoids O(n) shallowClone)
+        this.fragments.pushMut(newFrag);
         this.addToFragmentIndex(opId);
 
         return {
@@ -746,7 +747,7 @@ export class TextBuffer {
     const frags = this.fragmentsArray();
 
     // Find the position to insert: seek to the visible offset
-    const { leftLocator, rightLocator, insertLocator, afterRef, beforeRef } =
+    const { leftLocator, rightLocator, insertLocator, afterRef, beforeRef, splitInfo } =
       this.findInsertPosition(frags, offset);
 
     // Use explicit insertLocator if provided (for split cases), otherwise compute via locatorBetween
@@ -755,10 +756,20 @@ export class TextBuffer {
     // Create the new fragment
     const newFrag = createFragment(opId, 0, locator, text, true);
 
-    // Insert at the correct sorted position (no sort needed since
-    // insertFragmentByLocator uses consistent comparison logic)
-    this.insertFragmentByLocator(frags, newFrag);
-    this.setFragments(frags);
+    // Apply changes using direct tree operations when possible
+    // Note: When there are live snapshots, we must use setFragments to create
+    // a new tree with a separate arena, since insertAt shares the arena and
+    // GC could incorrectly free nodes still referenced by snapshots.
+    if (splitInfo !== undefined || this._liveSnapshots > 0) {
+      // Split case or live snapshots: use array-based approach (O(n))
+      this.insertFragmentByLocator(frags, newFrag);
+      this.setFragments(frags);
+    } else {
+      // No split and no snapshots: use direct tree insertion (O(log n))
+      const insertIdx = this.findTreeInsertIndex(newFrag);
+      this.fragments = this.fragments.insertAt(insertIdx, newFrag);
+      this.addToFragmentIndex(opId);
+    }
 
     return {
       type: "insert",
@@ -794,6 +805,12 @@ export class TextBuffer {
     insertIndex: number;
     afterRef: { insertionId: OperationId; offset: number };
     beforeRef: { insertionId: OperationId; offset: number };
+    /** Split info for direct tree operations (undefined if no split needed) */
+    splitInfo?: {
+      originalIndex: number;
+      left: Fragment;
+      right: Fragment;
+    };
   } {
     if (frags.length === 0) {
       return {
@@ -864,6 +881,11 @@ export class TextBuffer {
             beforeRef: {
               insertionId: right.insertionId,
               offset: right.insertionOffset,
+            },
+            splitInfo: {
+              originalIndex: i,
+              left,
+              right,
             },
           };
         }
@@ -1167,6 +1189,39 @@ export class TextBuffer {
     }
 
     return cursor.itemIndex();
+  }
+
+  /**
+   * Find the correct tree index for inserting a fragment using full comparison.
+   * Uses binary search with O(log n) tree.get() per comparison = O(log² n) total.
+   * This ensures consistent ordering with sortFragments/insertFragmentByLocator.
+   */
+  private findTreeInsertIndex(newFrag: Fragment): number {
+    const n = this.fragments.length();
+    if (n === 0) {
+      return 0;
+    }
+
+    let low = 0;
+    let high = n;
+
+    while (low < high) {
+      const mid = (low + high) >>> 1;
+      const frag = this.fragments.get(mid);
+      if (frag === undefined) {
+        low = mid + 1;
+        continue;
+      }
+
+      const cmp = this.compareFragmentsForSort(newFrag, frag);
+      if (cmp <= 0) {
+        high = mid;
+      } else {
+        low = mid + 1;
+      }
+    }
+
+    return low;
   }
 
   /**
