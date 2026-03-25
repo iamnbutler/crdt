@@ -975,6 +975,62 @@ export class SumTree<T extends Summarizable<S>, S> {
   }
 
   /**
+   * Delete an item at a position determined by dimension value.
+   * Returns a new tree (path copying), leaving the original unchanged.
+   *
+   * @param dimension The dimension to use for seeking
+   * @param target The target position in the dimension
+   * @param bias Where to find item relative to target
+   */
+  deleteByDimension<D>(
+    dimension: Dimension<S, D>,
+    target: D,
+    bias: SeekBias = "right",
+  ): SumTree<T, S> {
+    const result = this.findByDimension(dimension, target, bias);
+    if (result === undefined) {
+      return this; // Empty tree or not found
+    }
+
+    const leafEntry = result.path[result.path.length - 1];
+    if (leafEntry === undefined) {
+      return this;
+    }
+
+    // Check if we're past the end (indexInNode === items.length means past-end position)
+    const leafData = this.arena.getItem(leafEntry.nodeId);
+    const items = leafData?.items ?? [];
+    if (leafEntry.indexInNode >= items.length) {
+      return this; // Nothing to delete at past-end position
+    }
+
+    const newTree = this.shallowClone();
+    const clonedPath = newTree.clonePath(result.path);
+
+    const clonedLeafEntry = clonedPath[clonedPath.length - 1];
+    if (clonedLeafEntry === undefined) {
+      return newTree;
+    }
+
+    const clonedLeafData = newTree.arena.getItem(clonedLeafEntry.nodeId);
+    const clonedItems = clonedLeafData?.items ?? [];
+    clonedItems.splice(clonedLeafEntry.indexInNode, 1);
+
+    newTree.arena.setItem(clonedLeafEntry.nodeId, { items: clonedItems });
+    newTree.arena.setCount(clonedLeafEntry.nodeId, clonedItems.length);
+
+    // Check for underflow and merge if needed
+    const minItems = Math.floor(newTree.branchingFactor / 2);
+    if (clonedItems.length < minItems && clonedPath.length > 1) {
+      newTree.mergeOrRedistribute(clonedPath);
+    } else {
+      newTree.updateSummariesUp(clonedPath);
+    }
+
+    return newTree;
+  }
+
+  /**
    * Get item at index.
    */
   get(index: number): T | undefined {
