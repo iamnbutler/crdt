@@ -1076,6 +1076,47 @@ export class SumTree<T extends Summarizable<S>, S> {
   }
 
   /**
+   * Edit an item at the given index in place, mutating the tree.
+   * The editor function receives the current item and should return the new item.
+   * Summaries are updated in O(log n) along the path.
+   *
+   * @param index The 0-based index of the item to edit
+   * @param editor Function that transforms the item
+   */
+  editAtIndex(index: number, editor: (item: T) => T): void {
+    if (index < 0 || index >= this.length()) {
+      throw new Error(`Index ${index} out of bounds`);
+    }
+
+    const path = this.findLeafForIndex(index);
+    if (path.length === 0) {
+      return;
+    }
+
+    const leafEntry = path[path.length - 1];
+    if (leafEntry === undefined) {
+      return;
+    }
+
+    const leafData = this.arena.getItem(leafEntry.nodeId);
+    const items = leafData?.items ?? [];
+    const oldItem = items[leafEntry.indexInNode];
+    if (oldItem === undefined) {
+      return;
+    }
+
+    // Apply the edit
+    const newItem = editor(oldItem);
+    items[leafEntry.indexInNode] = newItem;
+
+    // Update the leaf data
+    this.arena.setItem(leafEntry.nodeId, { items });
+
+    // Update summaries up the path
+    this.updateSummariesUp(path);
+  }
+
+  /**
    * Get item at index.
    */
   get(index: number): T | undefined {

@@ -1073,6 +1073,104 @@ export class TextBuffer {
       this.recordImplicitOp(opId, "delete");
     }
 
+    // Try fast O(log n) path when delete boundaries align with fragment boundaries
+    const fastResult = this.tryDeleteFast(start, end, opId);
+    if (fastResult !== null) {
+      return {
+        type: "delete",
+        id: opId,
+        ranges: fastResult.ranges,
+        version: cloneVersionVector(this._version),
+      };
+    }
+
+    // Fall back to O(n) path when splits are required
+    return this.deleteInternalSlow(start, end, opId);
+  }
+
+  /**
+   * Attempt fast O(log n) delete when boundaries align with fragments.
+   * Returns null if splits are required (must use slow path).
+   */
+  private tryDeleteFast(
+    start: number,
+    end: number,
+    opId: OperationId,
+  ): { ranges: Array<{ insertionId: OperationId; offset: number; length: number }> } | null {
+    const ranges: Array<{ insertionId: OperationId; offset: number; length: number }> = [];
+
+    // Use cursor to seek to the start position
+    const cursor = this.fragments.cursor(visibleLenDimension);
+    cursor.reset();
+    cursor.seekForward(start, "right");
+
+    if (cursor.atEnd) {
+      // Start is past end of document - nothing to delete
+      return { ranges };
+    }
+
+    // Check if start aligns with a fragment boundary
+    const startFrag = cursor.item();
+    if (startFrag === undefined) {
+      return { ranges };
+    }
+
+    // position is the cumulative visible length BEFORE the current item
+    const startFragVisibleStart = cursor.position;
+
+    // If start doesn't align with the fragment's visible start, we need a split
+    if (start !== startFragVisibleStart) {
+      return null; // Need split, use slow path
+    }
+
+    // Collect fragments to delete, checking for alignment at each step
+    const indicesToDelete: number[] = [];
+    let currentVisibleOffset = start;
+
+    while (!cursor.atEnd && currentVisibleOffset < end) {
+      const frag = cursor.item();
+      if (frag === undefined) break;
+
+      if (!frag.visible) {
+        // Skip invisible fragments - they don't contribute to visible offset
+        cursor.next();
+        continue;
+      }
+
+      const fragVisibleEnd = currentVisibleOffset + frag.length;
+
+      if (fragVisibleEnd <= end) {
+        // Fragment is entirely within delete range
+        indicesToDelete.push(cursor.itemIndex());
+        ranges.push({
+          insertionId: frag.insertionId,
+          offset: frag.insertionOffset,
+          length: frag.length,
+        });
+        currentVisibleOffset = fragVisibleEnd;
+        cursor.next();
+      } else {
+        // Fragment extends past end - would need split
+        return null; // Use slow path
+      }
+    }
+
+    // All boundaries align! Apply the edits in-place
+    for (const index of indicesToDelete) {
+      this.fragments.editAtIndex(index, (frag) => deleteFragment(frag, opId));
+    }
+
+    return { ranges };
+  }
+
+  /**
+   * Slow O(n) delete path for cases requiring splits.
+   */
+  private deleteInternalSlow(
+    start: number,
+    end: number,
+    opId: OperationId,
+  ): DeleteOperation {
     const frags = this.fragmentsArray();
     const newFrags: Fragment[] = [];
     const ranges: Array<{ insertionId: OperationId; offset: number; length: number }> = [];
