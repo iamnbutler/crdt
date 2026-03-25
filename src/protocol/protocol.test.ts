@@ -405,8 +405,22 @@ describe("OperationQueue", () => {
       locator: MIN_LOCATOR,
     };
 
-    queue.enqueue(op1, () => false, () => { /* no-op */ }, localVersion);
-    queue.enqueue(op2, () => false, () => { /* no-op */ }, localVersion);
+    queue.enqueue(
+      op1,
+      () => false,
+      () => {
+        /* no-op */
+      },
+      localVersion,
+    );
+    queue.enqueue(
+      op2,
+      () => false,
+      () => {
+        /* no-op */
+      },
+      localVersion,
+    );
 
     expect(queue.deferredReplicas.size).toBe(2);
     expect(queue.deferredReplicas.has(replicaId(1))).toBe(true);
@@ -466,7 +480,14 @@ describe("OperationQueue", () => {
         version: new Map([[replicaId(1), i + 1]]),
         locator: MIN_LOCATOR,
       };
-      queue.enqueue(op, () => false, () => { /* no-op */ }, localVersion);
+      queue.enqueue(
+        op,
+        () => false,
+        () => {
+          /* no-op */
+        },
+        localVersion,
+      );
     }
 
     expect(queue.pendingCount).toBe(5);
@@ -483,7 +504,14 @@ describe("OperationQueue", () => {
       locator: MIN_LOCATOR,
     };
 
-    const result = queue.enqueue(overflowOp, () => false, () => { /* no-op */ }, localVersion);
+    const result = queue.enqueue(
+      overflowOp,
+      () => false,
+      () => {
+        /* no-op */
+      },
+      localVersion,
+    );
     expect(result.overflow).toBe(true);
     expect(queue.overflowed).toBe(true);
   });

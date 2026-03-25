@@ -173,6 +173,9 @@ export class TextBuffer {
   // Snapshot tracking for epoch-based reclamation
   private _liveSnapshots: number;
 
+  // Cached getText() result; null means dirty (needs recompute)
+  private _cachedText: string | null;
+
   private constructor(rid: ReplicaId) {
     this._replicaId = rid;
     this.clock = new LamportClock(rid);
@@ -192,6 +195,7 @@ export class TextBuffer {
     this.pendingOps = [];
     this._now = Date.now;
     this._liveSnapshots = 0;
+    this._cachedText = null;
   }
 
   /**
@@ -265,15 +269,19 @@ export class TextBuffer {
     return this.fragments.summary().visibleLen;
   }
 
-  /** Get the visible text content. */
+  /** Get the visible text content. Result is cached until the next mutation. */
   getText(): string {
+    if (this._cachedText !== null) {
+      return this._cachedText;
+    }
     const parts: string[] = [];
     for (const frag of this.fragmentsArray()) {
       if (frag.visible) {
         parts.push(frag.text);
       }
     }
-    return parts.join("");
+    this._cachedText = parts.join("");
+    return this._cachedText;
   }
 
   // ---------------------------------------------------------------------------
@@ -944,6 +952,7 @@ export class TextBuffer {
     const ranges: Array<{ insertionId: OperationId; offset: number; length: number }> = [];
 
     // Use editByDimension to transform the fragment in-place
+    this._cachedText = null;
     this.fragments = this.fragments.editByDimension(
       visibleLenDimension,
       start,
@@ -1460,6 +1469,7 @@ export class TextBuffer {
    * Rebuilds both the SumTree and the insertionId index for O(1) hasFragment checks.
    */
   private setFragments(frags: Fragment[]): void {
+    this._cachedText = null;
     this.fragments = SumTree.fromItems(frags, fragmentSummaryOps);
     const index = new Map<ReplicaId, Set<number>>();
     for (const frag of frags) {
