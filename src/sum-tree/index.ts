@@ -56,11 +56,21 @@ export interface Summarizable<S> {
 export type SeekBias = "left" | "right";
 
 /**
- * Position in a cursor stack: (nodeId, childIndex, accumulatedPosition)
+ * Position in a cursor stack.
+ *
+ * For leaves: childIndex is the current item index.
+ * For internal nodes: childIndex is the navigation state (next child to scan),
+ *                     indexInParent is which child of the parent this node is.
+ *
+ * indexInParent is set when the entry is pushed and doesn't change, providing
+ * unambiguous position information regardless of how we navigated here.
  */
 interface StackEntry<D> {
   nodeId: NodeId;
+  /** For leaves: current item index. For internals: navigation state (next child to scan). */
   childIndex: number;
+  /** Which child index this node is within its parent (for position/index calculation). */
+  indexInParent: number;
   position: D;
 }
 
@@ -100,7 +110,8 @@ export class Cursor<T extends Summarizable<S>, S, D> {
     this._atEnd = this.tree.isEmpty();
 
     if (!this._atEnd) {
-      this.descendToLeftmost(this.tree.root);
+      // Root has no parent, so indexInParent is 0 (irrelevant but required)
+      this.descendToLeftmost(this.tree.root, 0);
     }
   }
 
@@ -170,7 +181,7 @@ export class Cursor<T extends Summarizable<S>, S, D> {
       if (arena.isInternal(top.nodeId)) {
         const childId = arena.getChild(top.nodeId, top.childIndex);
         if (childId !== INVALID_NODE_ID) {
-          this.descendToRightmost(childId);
+          this.descendToRightmost(childId, top.childIndex);
         }
       }
 
@@ -227,10 +238,8 @@ export class Cursor<T extends Summarizable<S>, S, D> {
     // Sum from current position to end.
     // Walk from the deepest stack entry (leaf) upward to root.
     // For leaf entries, sum items from childIndex onward.
-    // For internal entries, find the child that was descended into
-    // (identified by the next deeper entry's nodeId) and sum children
-    // strictly AFTER that child. This avoids double-counting the subtree
-    // already accounted for by the deeper stack entry.
+    // For internal entries, use indexInParent of the deeper entry to know
+    // which child we descended into, then sum children AFTER it.
     let result = summaryOps.identity();
     const arena = this.tree.getArena();
 
@@ -250,20 +259,10 @@ export class Cursor<T extends Summarizable<S>, S, D> {
           }
         }
       } else {
-        // Internal node: find which child the deeper entry descended into,
-        // then sum only the children AFTER it.
+        // Internal node: sum children AFTER the one we descended into.
+        // Use indexInParent from the deeper entry to know which child that was.
         const deeperEntry = this.stack[i + 1];
-        let startJ = entry.childIndex;
-
-        if (deeperEntry !== undefined) {
-          // Find the child index that matches the deeper entry's nodeId
-          for (let j = 0; j < count; j++) {
-            if (arena.getChild(entry.nodeId, j) === deeperEntry.nodeId) {
-              startJ = j + 1;
-              break;
-            }
-          }
-        }
+        const startJ = deeperEntry !== undefined ? deeperEntry.indexInParent + 1 : entry.childIndex;
 
         for (let j = startJ; j < count; j++) {
           const childId = arena.getChild(entry.nodeId, j);
@@ -361,10 +360,11 @@ export class Cursor<T extends Summarizable<S>, S, D> {
 
       if (cmp > 0 || (cmp === 0 && bias === "left")) {
         // Target is in this child
-        entry.childIndex = i + 1; // Mark we've processed up to here
+        entry.childIndex = i + 1; // Mark we've processed up to here (for navigation)
         this.stack.push({
           nodeId: childId,
           childIndex: 0,
+          indexInParent: i, // The actual child index we descended into (for position calculation)
           position: pos,
         });
         return true;
@@ -410,7 +410,7 @@ export class Cursor<T extends Summarizable<S>, S, D> {
       if (arena.isInternal(top.nodeId)) {
         const childId = arena.getChild(top.nodeId, top.childIndex);
         if (childId !== INVALID_NODE_ID) {
-          this.descendToLeftmost(childId);
+          this.descendToLeftmost(childId, top.childIndex);
         }
       }
       return true;
@@ -421,33 +421,48 @@ export class Cursor<T extends Summarizable<S>, S, D> {
     return this.advanceToNext();
   }
 
-  private descendToLeftmost(nodeId: NodeId): void {
+  /**
+   * Descend to the leftmost leaf starting from nodeId.
+   * @param nodeId - Node to start descending from
+   * @param indexInParent - The index of nodeId within its parent (for position calculation)
+   */
+  private descendToLeftmost(nodeId: NodeId, indexInParent: number): void {
     const arena = this.tree.getArena();
     let current = nodeId;
+    let currentIndexInParent = indexInParent;
     const pos = this._position;
 
     while (arena.isInternal(current)) {
       this.stack.push({
         nodeId: current,
         childIndex: 0,
+        indexInParent: currentIndexInParent,
         position: pos,
       });
       const firstChild = arena.getChild(current, 0);
       if (firstChild === INVALID_NODE_ID) break;
       current = firstChild;
+      currentIndexInParent = 0; // Subsequent nodes are always at index 0 (leftmost)
     }
 
     // Push the leaf
     this.stack.push({
       nodeId: current,
       childIndex: 0,
+      indexInParent: currentIndexInParent,
       position: pos,
     });
   }
 
-  private descendToRightmost(nodeId: NodeId): void {
+  /**
+   * Descend to the rightmost leaf starting from nodeId.
+   * @param nodeId - Node to start descending from
+   * @param indexInParent - The index of nodeId within its parent (for position calculation)
+   */
+  private descendToRightmost(nodeId: NodeId, indexInParent: number): void {
     const arena = this.tree.getArena();
     let current = nodeId;
+    let currentIndexInParent = indexInParent;
 
     while (arena.isInternal(current)) {
       const count = arena.getCount(current);
@@ -455,11 +470,13 @@ export class Cursor<T extends Summarizable<S>, S, D> {
       this.stack.push({
         nodeId: current,
         childIndex: lastIndex,
+        indexInParent: currentIndexInParent,
         position: this._position, // Will be recalculated
       });
       const lastChild = arena.getChild(current, lastIndex);
       if (lastChild === INVALID_NODE_ID) break;
       current = lastChild;
+      currentIndexInParent = lastIndex; // Subsequent nodes are at the rightmost index
     }
 
     // Push the leaf
@@ -467,12 +484,14 @@ export class Cursor<T extends Summarizable<S>, S, D> {
     this.stack.push({
       nodeId: current,
       childIndex: Math.max(0, leafCount - 1),
+      indexInParent: currentIndexInParent,
       position: this._position,
     });
   }
 
   private recalculatePosition(): void {
-    // Recalculate position by summing from root
+    // Recalculate position by summing from root.
+    // Uses indexInParent for internal nodes and childIndex for leaves.
     this._position = this.dimension.zero();
     const arena = this.tree.getArena();
 
@@ -481,23 +500,30 @@ export class Cursor<T extends Summarizable<S>, S, D> {
       if (entry === undefined) continue;
 
       entry.position = this._position;
+      const parentEntry = i > 0 ? this.stack[i - 1] : undefined;
 
-      // Sum all siblings before current index
-      for (let j = 0; j < entry.childIndex; j++) {
-        if (arena.isLeaf(entry.nodeId)) {
-          const leafItems = this.tree.getLeafItems(entry.nodeId);
+      if (arena.isLeaf(entry.nodeId)) {
+        // Leaf: sum items before childIndex within this leaf
+        const leafItems = this.tree.getLeafItems(entry.nodeId);
+        for (let j = 0; j < entry.childIndex; j++) {
           const item = leafItems[j];
           if (item !== undefined) {
             const itemMeasure = this.dimension.measure(item.summary());
             this._position = this.dimension.add(this._position, itemMeasure);
           }
-        } else {
-          const childId = arena.getChild(entry.nodeId, j);
-          if (childId !== INVALID_NODE_ID) {
-            const childSummary = this.tree.getSummary(childId);
-            if (childSummary !== undefined) {
-              const childMeasure = this.dimension.measure(childSummary);
-              this._position = this.dimension.add(this._position, childMeasure);
+        }
+      }
+
+      // For non-root entries, sum sibling subtrees before this entry
+      if (parentEntry !== undefined) {
+        // Sum children 0..(indexInParent - 1) of the parent
+        for (let j = 0; j < entry.indexInParent; j++) {
+          const siblingId = arena.getChild(parentEntry.nodeId, j);
+          if (siblingId !== INVALID_NODE_ID) {
+            const siblingSum = this.tree.getSummary(siblingId);
+            if (siblingSum !== undefined) {
+              const siblingMeasure = this.dimension.measure(siblingSum);
+              this._position = this.dimension.add(this._position, siblingMeasure);
             }
           }
         }
@@ -508,6 +534,12 @@ export class Cursor<T extends Summarizable<S>, S, D> {
   /**
    * Get the 0-based item index of the current cursor position.
    * Returns the number of items before the current position.
+   *
+   * Uses the explicit `indexInParent` field on each stack entry to determine
+   * which child of its parent each node is. This avoids the ambiguity of
+   * `childIndex` which serves as a navigation bookmark (and has different
+   * semantics after seek vs walk).
+   *
    * O(log n) if the summary supports getItemCount, O(n) otherwise.
    */
   itemIndex(): number {
@@ -515,31 +547,42 @@ export class Cursor<T extends Summarizable<S>, S, D> {
       return this.tree.length();
     }
 
+    if (this.stack.length === 0) {
+      return 0;
+    }
+
     let index = 0;
     const arena = this.tree.getArena();
     const summaryOps = this.tree.getSummaryOps();
+    const getItemCount = summaryOps.getItemCount;
 
+    // Walk from root to leaf.
+    // For each entry, count items in all siblings BEFORE indexInParent.
+    // For the leaf entry, also add childIndex (the item position within the leaf).
     for (let i = 0; i < this.stack.length; i++) {
       const entry = this.stack[i];
       if (entry === undefined) continue;
 
-      // Count items in all siblings before current index
-      for (let j = 0; j < entry.childIndex; j++) {
-        if (arena.isLeaf(entry.nodeId)) {
-          // Each position before childIndex is one item
-          index++;
-        } else {
-          const childId = arena.getChild(entry.nodeId, j);
-          if (childId !== INVALID_NODE_ID) {
-            // Use O(1) summary lookup if available, otherwise O(subtree) traversal
-            const getItemCount = summaryOps.getItemCount;
+      const parentEntry = i > 0 ? this.stack[i - 1] : undefined;
+
+      if (arena.isLeaf(entry.nodeId)) {
+        // Leaf: add items before childIndex within this leaf
+        index += entry.childIndex;
+      }
+
+      // For non-root entries, count items in sibling subtrees before this entry
+      if (parentEntry !== undefined) {
+        // Count items in children 0..(indexInParent - 1) of the parent
+        for (let j = 0; j < entry.indexInParent; j++) {
+          const siblingId = arena.getChild(parentEntry.nodeId, j);
+          if (siblingId !== INVALID_NODE_ID) {
             if (getItemCount !== undefined) {
-              const summary = this.tree.getSummary(childId);
+              const summary = this.tree.getSummary(siblingId);
               if (summary !== undefined) {
                 index += getItemCount(summary);
               }
             } else {
-              index += this.tree.countItems(childId);
+              index += this.tree.countItemsInSubtree(siblingId);
             }
           }
         }
@@ -636,53 +679,6 @@ export class SumTree<T extends Summarizable<S>, S> {
   }
 
   /**
-   * Push an item to the end of the tree, mutating in place.
-   * This is O(log n) as it avoids the O(n) shallowClone and path copying.
-   * Use when you don't need to preserve the original tree.
-   */
-  pushMut(item: T): void {
-    this.insertAtMut(this.length(), item);
-  }
-
-  /**
-   * Insert an item at the given index, mutating in place.
-   * This is O(log n) as it avoids the O(n) shallowClone and path copying.
-   * Use when you don't need to preserve the original tree.
-   */
-  insertAtMut(index: number, item: T): void {
-    // Find the leaf and position for insertion
-    const path = this.findLeafForIndex(index);
-    if (path.length === 0) {
-      // Empty tree, insert into root
-      const items = [item];
-      this._root = this.createLeaf(items);
-      return;
-    }
-
-    // Insert directly into the existing leaf (no path cloning)
-    const leafEntry = path[path.length - 1];
-    if (leafEntry === undefined) {
-      return;
-    }
-
-    const leafData = this.arena.getItem(leafEntry.nodeId);
-    const items = leafData?.items ?? [];
-    items.splice(leafEntry.indexInNode, 0, item);
-
-    // Update leaf
-    this.arena.setItem(leafEntry.nodeId, { items });
-    this.arena.setCount(leafEntry.nodeId, items.length);
-
-    // Check for overflow and split if needed
-    if (items.length > this.branchingFactor) {
-      this.splitAndPropagate(path);
-    } else {
-      // Just update summaries up the path
-      this.updateSummariesUp(path);
-    }
-  }
-
-  /**
    * Insert an item at the given index.
    * Returns a new tree (path copying), leaving the original unchanged.
    */
@@ -769,41 +765,269 @@ export class SumTree<T extends Summarizable<S>, S> {
     return newTree;
   }
 
+  // ---------------------------------------------------------------------------
+  // Dimension-based operations (O(log n) using summary seeking)
+  // ---------------------------------------------------------------------------
+
   /**
-   * Remove item at the given index, mutating the tree in place.
-   * Use when you don't need to preserve the original tree.
+   * Find leaf position by dimension value.
+   * Returns path and the local offset within the leaf item.
+   * This enables O(log n) operations based on summary dimensions.
    */
-  removeAtMut(index: number): void {
-    if (index < 0 || index >= this.length()) {
-      throw new Error(`Index ${index} out of bounds`);
+  findByDimension<D>(
+    dimension: Dimension<S, D>,
+    target: D,
+    bias: SeekBias = "right",
+  ): { path: Array<{ nodeId: NodeId; indexInNode: number }>; localOffset: D } | undefined {
+    if (this.isEmpty()) {
+      return undefined;
     }
 
-    const path = this.findLeafForIndex(index);
-    if (path.length === 0) {
-      return;
+    const path: Array<{ nodeId: NodeId; indexInNode: number }> = [];
+    let current = this._root;
+    let accumulatedPos = dimension.zero();
+
+    while (true) {
+      if (this.arena.isLeaf(current)) {
+        const data = this.arena.getItem(current);
+        const items = data?.items ?? [];
+
+        for (let i = 0; i < items.length; i++) {
+          const item = items[i];
+          if (item === undefined) continue;
+
+          const itemSummary = item.summary();
+          const itemMeasure = dimension.measure(itemSummary);
+          const nextPos = dimension.add(accumulatedPos, itemMeasure);
+
+          const cmp = dimension.compare(nextPos, target);
+          if (cmp > 0 || (cmp === 0 && bias === "left")) {
+            // Found it - target is within this item
+            path.push({ nodeId: current, indexInNode: i });
+            // localOffset is how far into this item the target is
+            // We compute: target - accumulatedPos (but dimensions may not support subtraction)
+            // For numeric dimensions, this is: target - accumulatedPos
+            return { path, localOffset: this.subtractDimension(dimension, target, accumulatedPos) };
+          }
+
+          accumulatedPos = nextPos;
+        }
+
+        // Target is past all items in this leaf - return last position
+        path.push({ nodeId: current, indexInNode: items.length });
+        return { path, localOffset: dimension.zero() };
+      }
+
+      // Internal node - find the child containing the target
+      const children = this.arena.getChildren(current);
+      let found = false;
+
+      for (let i = 0; i < children.length; i++) {
+        const childId = children[i];
+        if (childId === undefined) continue;
+
+        const childSummary = this.summaries.get(childId);
+        if (childSummary === undefined) continue;
+
+        const childMeasure = dimension.measure(childSummary);
+        const nextPos = dimension.add(accumulatedPos, childMeasure);
+
+        const cmp = dimension.compare(nextPos, target);
+        if (cmp > 0 || (cmp === 0 && bias === "left")) {
+          // Target is in this child
+          path.push({ nodeId: current, indexInNode: i });
+          current = childId;
+          found = true;
+          break;
+        }
+
+        accumulatedPos = nextPos;
+      }
+
+      if (!found) {
+        // Target is past all children
+        const lastChild = children[children.length - 1];
+        if (lastChild !== undefined) {
+          path.push({ nodeId: current, indexInNode: children.length - 1 });
+          current = lastChild;
+        } else {
+          break;
+        }
+      }
     }
 
-    // Remove directly from the existing leaf (no path cloning)
-    const leafEntry = path[path.length - 1];
+    return undefined;
+  }
+
+  /**
+   * Subtract two dimension values. For numeric dimensions this is simple subtraction.
+   * This helper exists because Dimension doesn't have a subtract operation.
+   */
+  private subtractDimension<D>(dimension: Dimension<S, D>, a: D, b: D): D {
+    // For numeric dimensions, we can compute a - b
+    // This is a simplification - for complex dimensions we'd need explicit subtract
+    if (typeof a === "number" && typeof b === "number") {
+      return (a - b) as D;
+    }
+    // For non-numeric, return the target (approximate - caller must handle)
+    return a;
+  }
+
+  /**
+   * Insert an item at a position determined by dimension value.
+   * Returns a new tree (path copying), leaving the original unchanged.
+   *
+   * @param dimension The dimension to use for seeking
+   * @param target The target position in the dimension
+   * @param item The item to insert
+   * @param bias Where to insert relative to target ("left" = before, "right" = after)
+   */
+  insertByDimension<D>(
+    dimension: Dimension<S, D>,
+    target: D,
+    item: T,
+    bias: SeekBias = "right",
+  ): SumTree<T, S> {
+    const result = this.findByDimension(dimension, target, bias);
+    if (result === undefined) {
+      // Empty tree - insert as first item
+      return this.push(item);
+    }
+
+    const newTree = this.shallowClone();
+    const clonedPath = newTree.clonePath(result.path);
+
+    const leafEntry = clonedPath[clonedPath.length - 1];
     if (leafEntry === undefined) {
-      return;
+      return newTree;
     }
 
+    const leafData = newTree.arena.getItem(leafEntry.nodeId);
+    const items = leafData?.items ?? [];
+    items.splice(leafEntry.indexInNode, 0, item);
+
+    newTree.arena.setItem(leafEntry.nodeId, { items });
+    newTree.arena.setCount(leafEntry.nodeId, items.length);
+
+    if (items.length > newTree.branchingFactor) {
+      newTree.splitAndPropagate(clonedPath);
+    } else {
+      newTree.updateSummariesUp(clonedPath);
+    }
+
+    return newTree;
+  }
+
+  /**
+   * Edit an item at a position determined by dimension value.
+   * Returns a new tree with the item transformed by the edit function.
+   *
+   * @param dimension The dimension to use for seeking
+   * @param target The target position in the dimension
+   * @param edit Function that receives (item, localOffset) and returns the replacement item(s)
+   * @param bias Where to find item relative to target
+   */
+  editByDimension<D>(
+    dimension: Dimension<S, D>,
+    target: D,
+    edit: (item: T, localOffset: D) => T | T[],
+    bias: SeekBias = "right",
+  ): SumTree<T, S> {
+    const result = this.findByDimension(dimension, target, bias);
+    if (result === undefined) {
+      return this; // Empty tree, nothing to edit
+    }
+
+    const newTree = this.shallowClone();
+    const clonedPath = newTree.clonePath(result.path);
+
+    const leafEntry = clonedPath[clonedPath.length - 1];
+    if (leafEntry === undefined) {
+      return newTree;
+    }
+
+    const leafData = newTree.arena.getItem(leafEntry.nodeId);
+    const items = leafData?.items ?? [];
+    const oldItem = items[leafEntry.indexInNode];
+
+    if (oldItem === undefined) {
+      return newTree;
+    }
+
+    // Apply edit function
+    const edited = edit(oldItem, result.localOffset);
+    const newItems = Array.isArray(edited) ? edited : [edited];
+
+    // Replace the item with edited result
+    items.splice(leafEntry.indexInNode, 1, ...newItems);
+
+    newTree.arena.setItem(leafEntry.nodeId, { items });
+    newTree.arena.setCount(leafEntry.nodeId, items.length);
+
+    // Handle overflow if edit expanded to multiple items
+    if (items.length > newTree.branchingFactor) {
+      newTree.splitAndPropagate(clonedPath);
+    } else {
+      newTree.updateSummariesUp(clonedPath);
+    }
+
+    return newTree;
+  }
+
+  /**
+   * Delete an item at a position determined by dimension value.
+   * Returns a new tree (path copying), leaving the original unchanged.
+   *
+   * @param dimension The dimension to use for seeking
+   * @param target The target position in the dimension
+   * @param bias Where to find item relative to target
+   */
+  deleteByDimension<D>(
+    dimension: Dimension<S, D>,
+    target: D,
+    bias: SeekBias = "right",
+  ): SumTree<T, S> {
+    const result = this.findByDimension(dimension, target, bias);
+    if (result === undefined) {
+      return this; // Empty tree or not found
+    }
+
+    const leafEntry = result.path[result.path.length - 1];
+    if (leafEntry === undefined) {
+      return this;
+    }
+
+    // Check if we're past the end (indexInNode === items.length means past-end position)
     const leafData = this.arena.getItem(leafEntry.nodeId);
     const items = leafData?.items ?? [];
-    items.splice(leafEntry.indexInNode, 1);
+    if (leafEntry.indexInNode >= items.length) {
+      return this; // Nothing to delete at past-end position
+    }
 
-    // Update leaf
-    this.arena.setItem(leafEntry.nodeId, { items });
-    this.arena.setCount(leafEntry.nodeId, items.length);
+    const newTree = this.shallowClone();
+    const clonedPath = newTree.clonePath(result.path);
+
+    const clonedLeafEntry = clonedPath[clonedPath.length - 1];
+    if (clonedLeafEntry === undefined) {
+      return newTree;
+    }
+
+    const clonedLeafData = newTree.arena.getItem(clonedLeafEntry.nodeId);
+    const clonedItems = clonedLeafData?.items ?? [];
+    clonedItems.splice(clonedLeafEntry.indexInNode, 1);
+
+    newTree.arena.setItem(clonedLeafEntry.nodeId, { items: clonedItems });
+    newTree.arena.setCount(clonedLeafEntry.nodeId, clonedItems.length);
 
     // Check for underflow and merge if needed
-    const minItems = Math.floor(this.branchingFactor / 2);
-    if (items.length < minItems && path.length > 1) {
-      this.mergeOrRedistribute(path);
+    const minItems = Math.floor(newTree.branchingFactor / 2);
+    if (clonedItems.length < minItems && clonedPath.length > 1) {
+      newTree.mergeOrRedistribute(clonedPath);
     } else {
-      this.updateSummariesUp(path);
+      newTree.updateSummariesUp(clonedPath);
     }
+
+    return newTree;
   }
 
   /**
@@ -826,16 +1050,17 @@ export class SumTree<T extends Summarizable<S>, S> {
 
   /**
    * Get the number of items in the tree.
-   * O(1) if the summary supports getItemCount, O(n) otherwise.
    */
   length(): number {
-    if (this.summaryOps.getItemCount !== undefined) {
-      const summary = this.summaries.get(this._root);
-      if (summary !== undefined) {
-        return this.summaryOps.getItemCount(summary);
-      }
-    }
     return this.countItems(this._root);
+  }
+
+  /**
+   * Count items in a subtree rooted at the given node.
+   * Used by Cursor.itemIndex() for O(log n) index computation.
+   */
+  countItemsInSubtree(nodeId: NodeId): number {
+    return this.countItems(nodeId);
   }
 
   /**
@@ -1037,11 +1262,7 @@ export class SumTree<T extends Summarizable<S>, S> {
     return id;
   }
 
-  /**
-   * Count items in a subtree.
-   * Public to allow Cursor.itemIndex() to use it.
-   */
-  countItems(nodeId: NodeId): number {
+  private countItems(nodeId: NodeId): number {
     if (this.arena.isLeaf(nodeId)) {
       return this.arena.getCount(nodeId);
     }
@@ -1110,15 +1331,7 @@ export class SumTree<T extends Summarizable<S>, S> {
         const childId = children[i];
         if (childId === undefined) continue;
 
-        // Use O(1) summary lookup if available, otherwise O(subtree) traversal
-        let childCount: number;
-        const getItemCount = this.summaryOps.getItemCount;
-        if (getItemCount !== undefined) {
-          const summary = this.summaries.get(childId);
-          childCount = summary !== undefined ? getItemCount(summary) : this.countItems(childId);
-        } else {
-          childCount = this.countItems(childId);
-        }
+        const childCount = this.countItems(childId);
 
         if (remaining < childCount || i === children.length - 1) {
           path.push({ nodeId: current, indexInNode: i });
@@ -1595,6 +1808,9 @@ export const countSummaryOps: Summary<CountSummary> = {
   },
   combine(left: CountSummary, right: CountSummary): CountSummary {
     return { count: left.count + right.count };
+  },
+  getItemCount(summary: CountSummary): number {
+    return summary.count;
   },
 };
 
