@@ -157,8 +157,11 @@ export class TextBuffer {
   private undoStack: UndoEntry[];
   private redoStack: UndoEntry[];
 
-  // Track applied remote operation IDs for idempotency
-  private appliedOps: Set<string>;
+  // Track applied remote operation IDs for idempotency (replicaId -> Set<counter>)
+  private appliedOps: Map<ReplicaId, Set<number>>;
+
+  // Index of all insertionIds in the fragment tree for O(1) hasFragment checks
+  private _fragmentIds: Map<ReplicaId, Set<number>>;
 
   // Pending operations waiting for their causal dependencies
   private pendingOps: Operation[];
@@ -183,7 +186,8 @@ export class TextBuffer {
     this.lastEditType = null;
     this.undoStack = [];
     this.redoStack = [];
-    this.appliedOps = new Set();
+    this.appliedOps = new Map();
+    this._fragmentIds = new Map();
     this.pendingOps = [];
     this._now = Date.now;
     this._liveSnapshots = 0;
@@ -221,8 +225,8 @@ export class TextBuffer {
       const locator = locatorBetween(MIN_LOCATOR, MAX_LOCATOR);
       const fragment = createFragment(opId, 0, locator, normalized, true);
 
-      // Build SumTree with single fragment
-      buffer.fragments = SumTree.fromItems([fragment], fragmentSummaryOps);
+      // Build SumTree with single fragment and initialize the insertionId index
+      buffer.setFragments([fragment]);
     }
     return buffer;
   }
@@ -585,8 +589,7 @@ export class TextBuffer {
    */
   applyRemote(operation: Operation): void {
     // Idempotency check: skip operations that have already been applied.
-    const opKey = `${operation.id.replicaId}:${operation.id.counter}`;
-    if (this.appliedOps.has(opKey)) {
+    if (this.hasAppliedOp(operation.id)) {
       return; // Already applied
     }
 
@@ -643,22 +646,16 @@ export class TextBuffer {
     return true;
   }
 
-  /** Check if any fragment with the given insertionId exists. */
+  /** Check if any fragment with the given insertionId exists. O(1) via index. */
   private hasFragment(insertionId: OperationId): boolean {
-    for (const frag of this.fragmentsArray()) {
-      if (operationIdsEqual(frag.insertionId, insertionId)) {
-        return true;
-      }
-    }
-    return false;
+    return this._fragmentIds.get(insertionId.replicaId)?.has(insertionId.counter) ?? false;
   }
 
   /**
    * Apply a remote operation that has been confirmed as causally ready.
    */
   private applyRemoteInternal(operation: Operation): void {
-    const opKey = `${operation.id.replicaId}:${operation.id.counter}`;
-    this.appliedOps.add(opKey);
+    this.markAppliedOp(operation.id);
 
     switch (operation.type) {
       case "insert":
@@ -683,8 +680,7 @@ export class TextBuffer {
       const stillPending: Operation[] = [];
 
       for (const pendingOp of this.pendingOps) {
-        const opKey = `${pendingOp.id.replicaId}:${pendingOp.id.counter}`;
-        if (this.appliedOps.has(opKey)) {
+        if (this.hasAppliedOp(pendingOp.id)) {
           continue; // Already applied (idempotency)
         }
         if (this.isCausallyReady(pendingOp)) {
@@ -729,7 +725,7 @@ export class TextBuffer {
     // Insert at the correct sorted position (no sort needed since
     // insertFragmentByLocator uses consistent comparison logic)
     this.insertFragmentByLocator(frags, newFrag);
-    this.fragments = SumTree.fromItems(frags, fragmentSummaryOps);
+    this.setFragments(frags);
 
     return {
       type: "insert",
@@ -970,7 +966,7 @@ export class TextBuffer {
     // Split fragments get child locators that must interleave correctly
     // with fragments from other operations at the same parent locator.
     sortFragments(newFrags);
-    this.fragments = SumTree.fromItems(newFrags, fragmentSummaryOps);
+    this.setFragments(newFrags);
 
     return {
       type: "delete",
@@ -1000,7 +996,7 @@ export class TextBuffer {
     }
 
     if (changed) {
-      this.fragments = SumTree.fromItems(newFrags, fragmentSummaryOps);
+      this.setFragments(newFrags);
     }
   }
 
@@ -1046,7 +1042,7 @@ export class TextBuffer {
     // Insert the fragment at its locator-sorted position (no re-sort needed
     // since insertFragmentByLocator uses consistent comparison logic)
     this.insertFragmentByLocator(frags, newFrag);
-    this.fragments = SumTree.fromItems(frags, fragmentSummaryOps);
+    this.setFragments(frags);
   }
 
   /**
@@ -1297,7 +1293,7 @@ export class TextBuffer {
       return a.insertionOffset - b.insertionOffset;
     });
 
-    this.fragments = SumTree.fromItems(resultFrags, fragmentSummaryOps);
+    this.setFragments(resultFrags);
   }
 
   private applyRemoteUndo(op: UndoOperation): void {
@@ -1319,6 +1315,40 @@ export class TextBuffer {
   /** Get all fragments as an array. */
   private fragmentsArray(): Fragment[] {
     return this.fragments.toArray();
+  }
+
+  /** Check if an operation has already been applied. O(1) numeric lookup. */
+  private hasAppliedOp(id: OperationId): boolean {
+    return this.appliedOps.get(id.replicaId)?.has(id.counter) ?? false;
+  }
+
+  /** Mark an operation as applied. */
+  private markAppliedOp(id: OperationId): void {
+    let counters = this.appliedOps.get(id.replicaId);
+    if (counters === undefined) {
+      counters = new Set();
+      this.appliedOps.set(id.replicaId, counters);
+    }
+    counters.add(id.counter);
+  }
+
+  /**
+   * Replace the fragment tree with a new set of fragments.
+   * Rebuilds both the SumTree and the insertionId index for O(1) hasFragment checks.
+   */
+  private setFragments(frags: Fragment[]): void {
+    this.fragments = SumTree.fromItems(frags, fragmentSummaryOps);
+    const index = new Map<ReplicaId, Set<number>>();
+    for (const frag of frags) {
+      const rid = frag.insertionId.replicaId;
+      let counters = index.get(rid);
+      if (counters === undefined) {
+        counters = new Set();
+        index.set(rid, counters);
+      }
+      counters.add(frag.insertionId.counter);
+    }
+    this._fragmentIds = index;
   }
 
   // ---------------------------------------------------------------------------
@@ -1367,7 +1397,9 @@ export class TextBuffer {
       undoMap: undoMapEntries,
       undoStack,
       redoStack,
-      appliedOps: [...this.appliedOps],
+      appliedOps: [...this.appliedOps.entries()].flatMap(([rid, counters]) =>
+        [...counters].map((c) => `${rid}:${c}`),
+      ),
       nextTransactionId: this.nextTransactionId,
       groupDelay: this.groupDelay,
     };
@@ -1427,7 +1459,7 @@ export class TextBuffer {
 
       return createFragment(insertionId, sf.io, locator, sf.t, sf.v, deletions, baseLocator);
     });
-    buffer.fragments = SumTree.fromItems(fragments, fragmentSummaryOps);
+    buffer.setFragments(fragments);
 
     // Restore undo map
     buffer.undoMap.mergeFrom(
@@ -1459,8 +1491,20 @@ export class TextBuffer {
       })),
     }));
 
-    // Restore applied ops set
-    buffer.appliedOps = new Set(snapshot.appliedOps);
+    // Restore applied ops set (stored as "replicaId:counter" strings)
+    for (const key of snapshot.appliedOps) {
+      const colonIdx = key.indexOf(":");
+      if (colonIdx !== -1) {
+        const rid = replicaId(Number(key.slice(0, colonIdx)));
+        const counter = Number(key.slice(colonIdx + 1));
+        let counters = buffer.appliedOps.get(rid);
+        if (counters === undefined) {
+          counters = new Set();
+          buffer.appliedOps.set(rid, counters);
+        }
+        counters.add(counter);
+      }
+    }
 
     // Restore transaction state
     buffer.nextTransactionId = snapshot.nextTransactionId;
