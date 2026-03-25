@@ -25,6 +25,7 @@ import {
   fragmentSummaryOps,
   locatorDimension,
   splitFragment,
+  visibleLenDimension,
   withVisibility,
 } from "./fragment.js";
 import { MAX_LOCATOR, MIN_LOCATOR, compareLocators, locatorBetween } from "./locator.js";
@@ -711,6 +712,37 @@ export class TextBuffer {
       this.recordImplicitOp(opId, "insert");
     }
 
+    // Fast path: inserting at end of document with no splits needed
+    const totalVisibleLen = this.fragments.summary().visibleLen;
+    if (offset === totalVisibleLen && !this.fragments.isEmpty()) {
+      // Get the last fragment to compute locator
+      const lastIdx = this.fragments.length() - 1;
+      const lastFrag = this.fragments.get(lastIdx);
+
+      if (lastFrag) {
+        const locator = locatorBetween(lastFrag.locator, MAX_LOCATOR);
+        const newFrag = createFragment(opId, 0, locator, text, true);
+
+        // O(log n) push instead of O(n) rebuild
+        this.fragments = this.fragments.push(newFrag);
+        this.addToFragmentIndex(opId);
+
+        return {
+          type: "insert",
+          id: opId,
+          text,
+          after: {
+            insertionId: lastFrag.insertionId,
+            offset: lastFrag.insertionOffset + lastFrag.length,
+          },
+          before: { insertionId: MAX_OPERATION_ID, offset: 0 },
+          version: cloneVersionVector(this._version),
+          locator,
+        };
+      }
+    }
+
+    // Standard path for other cases
     const frags = this.fragmentsArray();
 
     // Find the position to insert: seek to the visible offset
@@ -737,6 +769,18 @@ export class TextBuffer {
       version: cloneVersionVector(this._version),
       locator,
     };
+  }
+
+  /**
+   * Add a fragment ID to the index for O(1) hasFragment checks.
+   */
+  private addToFragmentIndex(id: OperationId): void {
+    let counters = this._fragmentIds.get(id.replicaId);
+    if (counters === undefined) {
+      counters = new Set();
+      this._fragmentIds.set(id.replicaId, counters);
+    }
+    counters.add(id.counter);
   }
 
   private findInsertPosition(
