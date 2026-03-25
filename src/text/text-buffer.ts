@@ -1145,15 +1145,20 @@ export class TextBuffer {
 
     // findRefIndex calls may split fragments, which is necessary for causal
     // correctness, but we don't use the returned indices for positioning.
+    // We track whether any splits occurred to avoid a redundant O(n log n) sort.
+    let didSplit = false;
     if (!operationIdsEqual(op.after.insertionId, MIN_OPERATION_ID)) {
-      this.findRefIndex(frags, op.after, "after");
+      didSplit = this.findRefIndex(frags, op.after, "after").didSplit || didSplit;
     }
     if (!operationIdsEqual(op.before.insertionId, MAX_OPERATION_ID)) {
-      this.findRefIndex(frags, op.before, "before");
+      didSplit = this.findRefIndex(frags, op.before, "before").didSplit || didSplit;
     }
 
-    // After splits, the array may not be in locator order. Re-sort it.
-    sortFragments(frags);
+    // Only re-sort if splits created child locators that may be out of order.
+    // The fragments array from fragmentsArray() is already in sorted order.
+    if (didSplit) {
+      sortFragments(frags);
+    }
 
     // Create the new fragment with its original locator.
     // The sort function handles interleaving with children based on operation ID.
@@ -1231,7 +1236,7 @@ export class TextBuffer {
   /**
    * Find the index of a fragment referenced by an after/before ref.
    * Splits the fragment if the reference point falls inside it.
-   * Returns the index, or null if the referenced fragment doesn't exist.
+   * Returns the index and whether a split occurred.
    *
    * For "after": returns the index of the fragment AFTER which to insert.
    * For "before": returns the index of the fragment BEFORE which to insert.
@@ -1240,7 +1245,7 @@ export class TextBuffer {
     frags: Fragment[],
     ref: { insertionId: OperationId; offset: number },
     type: "after" | "before",
-  ): number | null {
+  ): { index: number | null; didSplit: boolean } {
     // Collect indices of all fragments with the matching insertionId
     const matchingIndices: number[] = [];
     for (let i = 0; i < frags.length; i++) {
@@ -1252,7 +1257,7 @@ export class TextBuffer {
     }
 
     if (matchingIndices.length === 0) {
-      return null; // Insertion not found — dependency not yet applied
+      return { index: null, didSplit: false }; // Insertion not found — dependency not yet applied
     }
 
     // Check for exact matches and splits
@@ -1266,13 +1271,13 @@ export class TextBuffer {
         const splitPoint = ref.offset - frag.insertionOffset;
         const [leftPart, rightPart] = splitFragment(frag, splitPoint);
         frags.splice(i, 1, leftPart, rightPart);
-        return type === "after" ? i : i + 1;
+        return { index: type === "after" ? i : i + 1, didSplit: true };
       }
 
       if (type === "after") {
         // Case 2: Fragment ends exactly at the reference offset
         if (fragEnd === ref.offset) {
-          return i;
+          return { index: i, didSplit: false };
         }
       }
 
@@ -1281,7 +1286,7 @@ export class TextBuffer {
         // Prefer non-zero-length fragments to avoid matching zero-length splits
         // that are meant for "after" references.
         if (frag.insertionOffset === ref.offset && frag.length > 0) {
-          return i;
+          return { index: i, didSplit: false };
         }
       }
     }
@@ -1292,7 +1297,7 @@ export class TextBuffer {
       // "after offset X" where X equals the insertionOffset of the first
       // matching fragment. This means the sender had a zero-length left split.
       const firstIdx = matchingIndices[0];
-      if (firstIdx === undefined) return null;
+      if (firstIdx === undefined) return { index: null, didSplit: false };
       const firstFrag = frags[firstIdx];
       if (
         firstFrag !== undefined &&
@@ -1302,7 +1307,7 @@ export class TextBuffer {
         // Create zero-length left split to match sender state
         const [leftPart, rightPart] = splitFragment(firstFrag, 0);
         frags.splice(firstIdx, 1, leftPart, rightPart);
-        return firstIdx; // Return the zero-length fragment's index
+        return { index: firstIdx, didSplit: true }; // Return the zero-length fragment's index
       }
     }
 
@@ -1310,7 +1315,7 @@ export class TextBuffer {
       // "before offset X" where X equals the end of the last matching fragment.
       // This means the sender had a zero-length right split.
       const lastIdx = matchingIndices[matchingIndices.length - 1];
-      if (lastIdx === undefined) return null;
+      if (lastIdx === undefined) return { index: null, didSplit: false };
       const lastFrag = frags[lastIdx];
       if (lastFrag !== undefined) {
         const lastEnd = lastFrag.insertionOffset + lastFrag.length;
@@ -1318,12 +1323,12 @@ export class TextBuffer {
           // Create zero-length right split to match sender state
           const [leftPart, rightPart] = splitFragment(lastFrag, lastFrag.length);
           frags.splice(lastIdx, 1, leftPart, rightPart);
-          return lastIdx + 1; // Return the zero-length fragment's index
+          return { index: lastIdx + 1, didSplit: true }; // Return the zero-length fragment's index
         }
       }
     }
 
-    return null; // Reference not found
+    return { index: null, didSplit: false }; // Reference not found
   }
 
   private applyRemoteDelete(op: DeleteOperation): void {
@@ -1331,14 +1336,19 @@ export class TextBuffer {
     observeVersion(this._version, op.id.replicaId, op.id.counter);
     mergeVersionVectors(this._version, op.version);
 
-    // Use a work list approach: when a fragment is split, the resulting parts
-    // may still overlap with other delete ranges and need re-processing.
-    const workList = [...this.fragmentsArray()];
+    // Cursor-based iteration: avoids O(n) array.shift() per element.
+    // When a fragment is split mid-range, the remainder is held in `pending`
+    // and re-processed next iteration. At most one pending fragment exists.
+    const inputFrags = this.fragmentsArray();
     const resultFrags: Fragment[] = [];
+    let fragIdx = 0;
+    let pending: Fragment | undefined = undefined;
+    let didSplit = false;
 
-    while (workList.length > 0) {
-      const frag = workList.shift();
-      if (frag === undefined) break; // Should never happen, but satisfies lint
+    while (fragIdx < inputFrags.length || pending !== undefined) {
+      const frag: Fragment | undefined = pending ?? inputFrags[fragIdx++];
+      if (frag === undefined) break;
+      pending = undefined;
       let wasProcessed = false;
 
       for (const range of op.ranges) {
@@ -1375,7 +1385,8 @@ export class TextBuffer {
 
           resultFrags.push(beforePart);
           resultFrags.push(deleteFragment(deletedPart, op.id));
-          workList.unshift(afterPart); // Re-check against remaining ranges
+          pending = afterPart; // Re-check against remaining ranges (O(1) vs unshift O(n))
+          didSplit = true;
           wasProcessed = true;
           break;
         }
@@ -1387,6 +1398,7 @@ export class TextBuffer {
 
           resultFrags.push(keepPart);
           resultFrags.push(deleteFragment(deletedPart, op.id));
+          didSplit = true;
           wasProcessed = true;
           break;
         }
@@ -1397,7 +1409,8 @@ export class TextBuffer {
         const [deletedPart, keepPart] = splitFragment(frag, splitPoint);
 
         resultFrags.push(deleteFragment(deletedPart, op.id));
-        workList.unshift(keepPart); // Re-check against remaining ranges
+        pending = keepPart; // Re-check against remaining ranges (O(1) vs unshift O(n))
+        didSplit = true;
         wasProcessed = true;
         break;
       }
@@ -1406,15 +1419,17 @@ export class TextBuffer {
       }
     }
 
-    // Sort by (locator, insertionId, insertionOffset) to maintain canonical order
-    // after splits. This matches the sorting in applyRemoteInsertDirect.
-    resultFrags.sort((a, b) => {
-      const locCmp = compareLocators(a.locator, b.locator);
-      if (locCmp !== 0) return locCmp;
-      const idCmp = compareOperationIds(a.insertionId, b.insertionId);
-      if (idCmp !== 0) return idCmp;
-      return a.insertionOffset - b.insertionOffset;
-    });
+    // Only sort when splits created child locators that may be out of order.
+    // Skipping sort when no splits occur avoids O(n log n) in the common case.
+    if (didSplit) {
+      resultFrags.sort((a, b) => {
+        const locCmp = compareLocators(a.locator, b.locator);
+        if (locCmp !== 0) return locCmp;
+        const idCmp = compareOperationIds(a.insertionId, b.insertionId);
+        if (idCmp !== 0) return idCmp;
+        return a.insertionOffset - b.insertionOffset;
+      });
+    }
 
     this.setFragments(resultFrags);
   }
