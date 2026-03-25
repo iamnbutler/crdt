@@ -31,6 +31,7 @@ export const fragmentSummaryOps: Summary<FragmentSummary> = {
       deletedLines: 0,
       maxInsertionId: MIN_OPERATION_ID,
       maxLocator: MIN_LOCATOR,
+      itemCount: 0,
     };
   },
 
@@ -48,7 +49,12 @@ export const fragmentSummaryOps: Summary<FragmentSummary> = {
         compareLocators(left.maxLocator, right.maxLocator) >= 0
           ? left.maxLocator
           : right.maxLocator,
+      itemCount: left.itemCount + right.itemCount,
     };
+  },
+
+  getItemCount(summary: FragmentSummary): number {
+    return summary.itemCount;
   },
 };
 
@@ -145,6 +151,7 @@ export function createFragment(
         deletedLines: 0,
         maxInsertionId: insertionId,
         maxLocator: locator,
+        itemCount: 1,
       }
     : {
         visibleLen: 0,
@@ -153,6 +160,7 @@ export function createFragment(
         deletedLines: lines,
         maxInsertionId: insertionId,
         maxLocator: locator,
+        itemCount: 1,
       };
 
   return {

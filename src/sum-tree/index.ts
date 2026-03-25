@@ -20,6 +20,11 @@ export interface Summary<S> {
   identity(): S;
   /** Combine two summaries (must be associative) */
   combine(left: S, right: S): S;
+  /**
+   * Optional: extract item count from a summary for O(log n) itemIndex().
+   * If not provided, falls back to O(n) recursive counting.
+   */
+  getItemCount?(summary: S): number;
 }
 
 /**
@@ -503,6 +508,7 @@ export class Cursor<T extends Summarizable<S>, S, D> {
   /**
    * Get the 0-based item index of the current cursor position.
    * Returns the number of items before the current position.
+   * O(log n) if the summary supports getItemCount, O(n) otherwise.
    */
   itemIndex(): number {
     if (this._atEnd) {
@@ -511,6 +517,7 @@ export class Cursor<T extends Summarizable<S>, S, D> {
 
     let index = 0;
     const arena = this.tree.getArena();
+    const summaryOps = this.tree.getSummaryOps();
 
     for (let i = 0; i < this.stack.length; i++) {
       const entry = this.stack[i];
@@ -524,7 +531,16 @@ export class Cursor<T extends Summarizable<S>, S, D> {
         } else {
           const childId = arena.getChild(entry.nodeId, j);
           if (childId !== INVALID_NODE_ID) {
-            index += this.tree.countItems(childId);
+            // Use O(1) summary lookup if available, otherwise O(subtree) traversal
+            const getItemCount = summaryOps.getItemCount;
+            if (getItemCount !== undefined) {
+              const summary = this.tree.getSummary(childId);
+              if (summary !== undefined) {
+                index += getItemCount(summary);
+              }
+            } else {
+              index += this.tree.countItems(childId);
+            }
           }
         }
       }
@@ -726,8 +742,15 @@ export class SumTree<T extends Summarizable<S>, S> {
 
   /**
    * Get the number of items in the tree.
+   * O(1) if the summary supports getItemCount, O(n) otherwise.
    */
   length(): number {
+    if (this.summaryOps.getItemCount !== undefined) {
+      const summary = this.summaries.get(this._root);
+      if (summary !== undefined) {
+        return this.summaryOps.getItemCount(summary);
+      }
+    }
     return this.countItems(this._root);
   }
 
@@ -1003,7 +1026,15 @@ export class SumTree<T extends Summarizable<S>, S> {
         const childId = children[i];
         if (childId === undefined) continue;
 
-        const childCount = this.countItems(childId);
+        // Use O(1) summary lookup if available, otherwise O(subtree) traversal
+        let childCount: number;
+        const getItemCount = this.summaryOps.getItemCount;
+        if (getItemCount !== undefined) {
+          const summary = this.summaries.get(childId);
+          childCount = summary !== undefined ? getItemCount(summary) : this.countItems(childId);
+        } else {
+          childCount = this.countItems(childId);
+        }
 
         if (remaining < childCount || i === children.length - 1) {
           path.push({ nodeId: current, indexInNode: i });

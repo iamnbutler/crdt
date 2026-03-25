@@ -130,6 +130,8 @@ export interface FragmentSummary {
   readonly deletedLines: number;
   readonly maxInsertionId: OperationId;
   readonly maxLocator: Locator;
+  /** Number of items (fragments) in this subtree. Enables O(log n) itemIndex(). */
+  readonly itemCount: number;
 }
 
 // ---------------------------------------------------------------------------
