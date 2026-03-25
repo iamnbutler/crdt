@@ -1145,15 +1145,25 @@ export class TextBuffer {
 
     // findRefIndex calls may split fragments, which is necessary for causal
     // correctness, but we don't use the returned indices for positioning.
+    // Track whether any splits actually occurred — sort is only needed if they did.
+    let splitOccurred = false;
+    const lenBefore = frags.length;
+
     if (!operationIdsEqual(op.after.insertionId, MIN_OPERATION_ID)) {
       this.findRefIndex(frags, op.after, "after");
+      if (frags.length !== lenBefore) splitOccurred = true;
     }
     if (!operationIdsEqual(op.before.insertionId, MAX_OPERATION_ID)) {
+      const lenBeforeBefore = frags.length;
       this.findRefIndex(frags, op.before, "before");
+      if (frags.length !== lenBeforeBefore) splitOccurred = true;
     }
 
-    // After splits, the array may not be in locator order. Re-sort it.
-    sortFragments(frags);
+    // Only re-sort if splits happened — most remote inserts land at boundaries
+    // and don't require splitting, so we skip the O(n log n) sort in that case.
+    if (splitOccurred) {
+      sortFragments(frags);
+    }
 
     // Create the new fragment with its original locator.
     // The sort function handles interleaving with children based on operation ID.
@@ -1331,14 +1341,20 @@ export class TextBuffer {
     observeVersion(this._version, op.id.replicaId, op.id.counter);
     mergeVersionVectors(this._version, op.version);
 
-    // Use a work list approach: when a fragment is split, the resulting parts
-    // may still overlap with other delete ranges and need re-processing.
-    const workList = [...this.fragmentsArray()];
+    // Use an index pointer + pending variable instead of shift()/unshift().
+    // shift() is O(n) per call making the original loop O(n²) total;
+    // this approach is O(1) per iteration → O(n) total.
+    const frags = this.fragmentsArray();
     const resultFrags: Fragment[] = [];
+    let i = 0;
+    // Holds a split remainder to re-check against remaining ranges before
+    // advancing to the next original fragment.
+    let pending: Fragment | undefined;
 
-    while (workList.length > 0) {
-      const frag = workList.shift();
-      if (frag === undefined) break; // Should never happen, but satisfies lint
+    while (pending !== undefined || i < frags.length) {
+      const frag: Fragment | undefined = pending !== undefined ? pending : frags[i++];
+      pending = undefined;
+      if (frag === undefined) continue;
       let wasProcessed = false;
 
       for (const range of op.ranges) {
@@ -1375,7 +1391,7 @@ export class TextBuffer {
 
           resultFrags.push(beforePart);
           resultFrags.push(deleteFragment(deletedPart, op.id));
-          workList.unshift(afterPart); // Re-check against remaining ranges
+          pending = afterPart; // Re-check against remaining ranges next iteration
           wasProcessed = true;
           break;
         }
@@ -1397,7 +1413,7 @@ export class TextBuffer {
         const [deletedPart, keepPart] = splitFragment(frag, splitPoint);
 
         resultFrags.push(deleteFragment(deletedPart, op.id));
-        workList.unshift(keepPart); // Re-check against remaining ranges
+        pending = keepPart; // Re-check against remaining ranges next iteration
         wasProcessed = true;
         break;
       }
