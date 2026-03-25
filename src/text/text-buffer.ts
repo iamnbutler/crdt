@@ -959,6 +959,7 @@ export class TextBuffer {
     const frags = this.fragmentsArray();
     const newFrags: Fragment[] = [];
     const ranges: Array<{ insertionId: OperationId; offset: number; length: number }> = [];
+    let hadSplits = false;
 
     let visibleOffset = 0;
 
@@ -987,6 +988,7 @@ export class TextBuffer {
         });
       } else if (fragStart < start && fragEnd > end) {
         // Delete range is entirely within this fragment — split into 3 parts
+        hadSplits = true;
         const deleteStart = start - fragStart;
         const deleteEnd = end - fragStart;
 
@@ -1004,6 +1006,7 @@ export class TextBuffer {
         });
       } else if (fragStart < start) {
         // Delete range overlaps the end of this fragment
+        hadSplits = true;
         const splitPoint = start - fragStart;
         const [keepPart, deletedPart] = splitFragment(frag, splitPoint);
 
@@ -1017,6 +1020,7 @@ export class TextBuffer {
         });
       } else {
         // Delete range overlaps the start of this fragment (fragEnd > end)
+        hadSplits = true;
         const splitPoint = end - fragStart;
         const [deletedPart, keepPart] = splitFragment(frag, splitPoint);
 
@@ -1033,10 +1037,11 @@ export class TextBuffer {
       visibleOffset = fragEnd;
     }
 
-    // Sort fragments after splits to maintain canonical order.
-    // Split fragments get child locators that must interleave correctly
-    // with fragments from other operations at the same parent locator.
-    sortFragments(newFrags);
+    // Only sort when splits occurred - split fragments get child locators
+    // that must interleave correctly with other fragments.
+    if (hadSplits) {
+      sortFragments(newFrags);
+    }
     this.setFragments(newFrags);
 
     return {
@@ -1339,6 +1344,7 @@ export class TextBuffer {
     // may still overlap with other delete ranges and need re-processing.
     const workList = [...this.fragmentsArray()];
     const resultFrags: Fragment[] = [];
+    let hadSplits = false;
 
     while (workList.length > 0) {
       const frag = workList.shift();
@@ -1371,6 +1377,7 @@ export class TextBuffer {
         if (fragStart < rangeStart && fragEnd > rangeEnd) {
           // Delete range is entirely within this fragment — split into 3 parts
           // The "after" part might still overlap with other ranges, so re-check it.
+          hadSplits = true;
           const deleteLocalStart = rangeStart - fragStart;
           const deleteLocalEnd = rangeEnd - fragStart;
 
@@ -1386,6 +1393,7 @@ export class TextBuffer {
 
         if (fragStart < rangeStart) {
           // Delete range overlaps the end of this fragment
+          hadSplits = true;
           const splitPoint = rangeStart - fragStart;
           const [keepPart, deletedPart] = splitFragment(frag, splitPoint);
 
@@ -1397,6 +1405,7 @@ export class TextBuffer {
 
         // Delete range overlaps the start of this fragment (fragEnd > rangeEnd)
         // The "keep" part might still overlap with other ranges, so re-check it.
+        hadSplits = true;
         const splitPoint = rangeEnd - fragStart;
         const [deletedPart, keepPart] = splitFragment(frag, splitPoint);
 
@@ -1410,15 +1419,17 @@ export class TextBuffer {
       }
     }
 
-    // Sort by (locator, insertionId, insertionOffset) to maintain canonical order
-    // after splits. This matches the sorting in applyRemoteInsertDirect.
-    resultFrags.sort((a, b) => {
-      const locCmp = compareLocators(a.locator, b.locator);
-      if (locCmp !== 0) return locCmp;
-      const idCmp = compareOperationIds(a.insertionId, b.insertionId);
-      if (idCmp !== 0) return idCmp;
-      return a.insertionOffset - b.insertionOffset;
-    });
+    // Only sort when splits occurred - split fragments get child locators
+    // that must interleave correctly with other fragments.
+    if (hadSplits) {
+      resultFrags.sort((a, b) => {
+        const locCmp = compareLocators(a.locator, b.locator);
+        if (locCmp !== 0) return locCmp;
+        const idCmp = compareOperationIds(a.insertionId, b.insertionId);
+        if (idCmp !== 0) return idCmp;
+        return a.insertionOffset - b.insertionOffset;
+      });
+    }
 
     this.setFragments(resultFrags);
   }
