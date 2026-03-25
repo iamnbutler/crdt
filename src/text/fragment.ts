@@ -88,6 +88,26 @@ export const visibleLinesDimension: Dimension<FragmentSummary, number> = {
   },
 };
 
+/**
+ * Dimension for seeking by Locator.
+ * Enables O(log n) position finding by Locator in the fragment tree.
+ */
+export const locatorDimension: Dimension<FragmentSummary, Locator> = {
+  measure(summary: FragmentSummary): Locator {
+    return summary.maxLocator;
+  },
+  compare(a: Locator, b: Locator): number {
+    return compareLocators(a, b);
+  },
+  add(a: Locator, b: Locator): Locator {
+    // For max-based dimensions, "add" returns the max
+    return compareLocators(a, b) >= 0 ? a : b;
+  },
+  zero(): Locator {
+    return MIN_LOCATOR;
+  },
+};
+
 // ---------------------------------------------------------------------------
 // Fragment construction
 // ---------------------------------------------------------------------------
