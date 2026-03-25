@@ -51,6 +51,8 @@
     "bench:ci": "bun run benchmarks/index.ts --ci",
     "bench:compare": "bun run benchmarks/comparison.ts",
     "bench:compare:ci": "bun run benchmarks/comparison.ts --ci",
+    "bench:wat": "bun run benchmarks/wat-compare-locators.ts",
+    "bench:wat:ci": "bun run benchmarks/wat-compare-locators.ts --ci",
     "fixtures:download": "bun run scripts/download-fixtures.ts"
   },
   "devDependencies": {
@@ -60,6 +62,7 @@
     "loro-crdt": "^1.10.8",
     "mitata": "1.0.34",
     "typescript": "5.7.2",
+    "wabt": "^1.0.39",
     "yjs": "^13.6.30"
   }
 }
