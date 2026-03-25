@@ -762,6 +762,11 @@ export class TextBuffer {
     if (splitInfo !== undefined || this._liveSnapshots > 0) {
       // Split case or live snapshots: use array-based approach (O(n))
       this.insertFragmentByLocator(frags, newFrag);
+      // Must sort after splits: split parts get new locators that may need to
+      // interleave with other fragments (e.g., [...,8] must come after [...,4,10])
+      if (splitInfo !== undefined) {
+        sortFragments(frags);
+      }
       this.setFragments(frags);
     } else {
       // No split and no snapshots: use direct tree insertion (O(log n))
