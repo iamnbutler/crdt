@@ -876,74 +876,63 @@ export class TextBuffer {
   // ---------------------------------------------------------------------------
 
   /**
-   * Optimized delete for single-fragment case using O(log n) tree operations.
-   * Falls back to full delete for multi-fragment deletes.
+   * Delete implementation with two optimized paths:
+   * - Single-fragment: O(log n) via editByDimension (no sort needed)
+   * - Multi-fragment: O(n) array scan, but only sorts when fragment splits occur.
+   *   Pure whole-fragment deletions skip the O(n log n) sort entirely.
    */
   private deleteInternalOptimized(start: number, end: number): DeleteOperation {
     const deleteLen = end - start;
 
-    // Find the fragment at the start position using O(log n) seeking
+    // Peek at the fragment containing `start` to choose the right path.
     const startResult = this.fragments.findByDimension(visibleLenDimension, start, "right");
     if (startResult === undefined) {
-      // Empty or past end - fall back to regular delete
-      return this.deleteInternalSlow(start, end);
+      // Empty document or out of range.
+      return this.deleteInternalMultiFrag(start, end);
     }
 
-    // Check if entire delete range fits within this single fragment
-    const startPath = startResult.path;
-    const startLeaf = startPath[startPath.length - 1];
+    const startLeaf = startResult.path[startResult.path.length - 1];
     if (startLeaf === undefined) {
-      return this.deleteInternalSlow(start, end);
+      return this.deleteInternalMultiFrag(start, end);
     }
-
     const leafData = this.fragments.getArena().getItem(startLeaf.nodeId);
     const items = (leafData as { items?: Fragment[] } | undefined)?.items;
     if (!items) {
-      return this.deleteInternalSlow(start, end);
+      return this.deleteInternalMultiFrag(start, end);
     }
-
     const fragment = items[startLeaf.indexInNode];
     if (fragment === undefined || !fragment.visible) {
-      return this.deleteInternalSlow(start, end);
+      return this.deleteInternalMultiFrag(start, end);
     }
 
     const localOffset = startResult.localOffset as number;
     const fragRemaining = fragment.length - localOffset;
 
-    // Check if delete fits entirely within this fragment
     if (deleteLen <= fragRemaining) {
-      // Single-fragment delete - use optimized path
-      return this.deleteSingleFragmentOptimized(start, end, fragment, localOffset);
+      // Single-fragment: O(log n) edit, no sort.
+      return this.deleteSingleFrag(start, deleteLen);
     }
 
-    // Multi-fragment delete - use slow path
-    return this.deleteInternalSlow(start, end);
+    // Multi-fragment: array-based scan with conditional sort.
+    return this.deleteInternalMultiFrag(start, end);
   }
 
   /**
-   * Optimized delete when the range is entirely within a single fragment.
-   * Uses O(log n) tree editing instead of O(n) rebuild.
+   * Single-fragment delete via O(log n) editByDimension. No sort is performed
+   * since splits within one fragment always produce correctly-ordered sub-fragments.
    */
-  private deleteSingleFragmentOptimized(
-    start: number,
-    end: number,
-    fragment: Fragment,
-    localOffset: number,
-  ): DeleteOperation {
+  private deleteSingleFrag(start: number, deleteLen: number): DeleteOperation {
     const opId = this.clock.tick();
     observeVersion(this._version, this._replicaId, opId.counter);
 
-    // Record in transaction
     if (this.activeTransaction !== null) {
       this.activeTransaction.operationIds.push(opId);
     } else {
       this.recordImplicitOp(opId, "delete");
     }
 
-    const deleteLen = end - start;
     const ranges: Array<{ insertionId: OperationId; offset: number; length: number }> = [];
 
-    // Use editByDimension to transform the fragment in-place
     this.fragments = this.fragments.editByDimension(
       visibleLenDimension,
       start,
@@ -951,7 +940,6 @@ export class TextBuffer {
         const offset = fragLocalOffset as number;
 
         if (offset === 0 && deleteLen >= frag.length) {
-          // Delete entire fragment
           ranges.push({
             insertionId: frag.insertionId,
             offset: frag.insertionOffset,
@@ -961,7 +949,6 @@ export class TextBuffer {
         }
 
         if (offset === 0) {
-          // Delete from start of fragment
           const [toDelete, keep] = splitFragment(frag, deleteLen);
           ranges.push({
             insertionId: toDelete.insertionId,
@@ -972,7 +959,6 @@ export class TextBuffer {
         }
 
         if (offset + deleteLen >= frag.length) {
-          // Delete to end of fragment
           const [keep, toDelete] = splitFragment(frag, offset);
           ranges.push({
             insertionId: toDelete.insertionId,
@@ -982,7 +968,6 @@ export class TextBuffer {
           return [keep, deleteFragment(toDelete, opId)];
         }
 
-        // Delete in middle of fragment - split into 3 parts
         const [left, rest] = splitFragment(frag, offset);
         const [toDelete, right] = splitFragment(rest, deleteLen);
         ranges.push({
@@ -1004,9 +989,12 @@ export class TextBuffer {
   }
 
   /**
-   * Original O(n) delete implementation, used as fallback for multi-fragment deletes.
+   * Multi-fragment delete using O(n) array scan.
+   * Skips the O(n log n) sort when no fragment splits occur — pure whole-fragment
+   * deletions are common (e.g., selecting and deleting entire inserted words) and
+   * never require resorting since no locators change.
    */
-  private deleteInternalSlow(start: number, end: number): DeleteOperation {
+  private deleteInternalMultiFrag(start: number, end: number): DeleteOperation {
     const opId = this.clock.tick();
     observeVersion(this._version, this._replicaId, opId.counter);
 
@@ -1019,8 +1007,10 @@ export class TextBuffer {
     const frags = this.fragmentsArray();
     const newFrags: Fragment[] = [];
     const ranges: Array<{ insertionId: OperationId; offset: number; length: number }> = [];
-
     let visibleOffset = 0;
+    // Track splits: splits assign new locators that may be out of canonical order,
+    // requiring a re-sort. Pure whole-fragment deletions don't change locators.
+    let splitsOccurred = false;
 
     for (let i = 0; i < frags.length; i++) {
       const frag = frags[i];
@@ -1037,6 +1027,7 @@ export class TextBuffer {
       if (fragEnd <= start || fragStart >= end) {
         newFrags.push(frag);
       } else if (fragStart >= start && fragEnd <= end) {
+        // Whole-fragment delete — no split, locator unchanged.
         newFrags.push(deleteFragment(frag, opId));
         ranges.push({
           insertionId: frag.insertionId,
@@ -1044,40 +1035,35 @@ export class TextBuffer {
           length: frag.length,
         });
       } else if (fragStart < start && fragEnd > end) {
+        // Delete is entirely within this fragment (split into 3).
+        splitsOccurred = true;
         const deleteStart = start - fragStart;
         const deleteEnd = end - fragStart;
-
         const [beforePart, rest] = splitFragment(frag, deleteStart);
         const [deletedPart, afterPart] = splitFragment(rest, deleteEnd - deleteStart);
-
-        newFrags.push(beforePart);
-        newFrags.push(deleteFragment(deletedPart, opId));
-        newFrags.push(afterPart);
-
+        newFrags.push(beforePart, deleteFragment(deletedPart, opId), afterPart);
         ranges.push({
           insertionId: deletedPart.insertionId,
           offset: deletedPart.insertionOffset,
           length: deletedPart.length,
         });
       } else if (fragStart < start) {
+        // Frag starts before delete range — keep prefix, delete suffix.
+        splitsOccurred = true;
         const splitPoint = start - fragStart;
         const [keepPart, deletedPart] = splitFragment(frag, splitPoint);
-
-        newFrags.push(keepPart);
-        newFrags.push(deleteFragment(deletedPart, opId));
-
+        newFrags.push(keepPart, deleteFragment(deletedPart, opId));
         ranges.push({
           insertionId: deletedPart.insertionId,
           offset: deletedPart.insertionOffset,
           length: deletedPart.length,
         });
       } else {
+        // Frag ends after delete range — delete prefix, keep suffix.
+        splitsOccurred = true;
         const splitPoint = end - fragStart;
         const [deletedPart, keepPart] = splitFragment(frag, splitPoint);
-
-        newFrags.push(deleteFragment(deletedPart, opId));
-        newFrags.push(keepPart);
-
+        newFrags.push(deleteFragment(deletedPart, opId), keepPart);
         ranges.push({
           insertionId: deletedPart.insertionId,
           offset: deletedPart.insertionOffset,
@@ -1088,7 +1074,9 @@ export class TextBuffer {
       visibleOffset = fragEnd;
     }
 
-    sortFragments(newFrags);
+    if (splitsOccurred) {
+      sortFragments(newFrags);
+    }
     this.setFragments(newFrags);
 
     return {
