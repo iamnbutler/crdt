@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import { SumTree } from "../sum-tree/index.js";
 import { createFragment, fragmentSummaryOps, locatorDimension } from "./fragment.js";
 import { compareLocators } from "./locator.js";
-import { TextBuffer } from "./text-buffer.js";
 import type { Locator, OperationId } from "./types.js";
 import { replicaId } from "./types.js";
 
@@ -42,46 +41,8 @@ describe("locatorDimension", () => {
   });
 });
 
-// Helper type for accessing private methods in tests
-type TextBufferPrivate = {
-  findInsertIndexByLocator(loc: Locator): number;
-  fragments: { length(): number };
-};
-
-describe("findInsertIndexByLocator", () => {
-  test("finds correct index for locator at end", () => {
-    const buf = TextBuffer.create();
-    buf.insert(0, "abc");
-
-    const testLocator = makeLocator(Number.MAX_SAFE_INTEGER);
-    // Access private method via type assertion for testing
-    const bufPrivate = buf as unknown as TextBufferPrivate;
-    const index = bufPrivate.findInsertIndexByLocator(testLocator);
-    // Access private fragments field via type assertion for testing
-    const fragCount = bufPrivate.fragments.length();
-    expect(index).toBe(fragCount);
-  });
-
-  test("finds correct index for locator at start", () => {
-    const buf = TextBuffer.create();
-    buf.insert(0, "abc");
-
-    const testLocator = makeLocator(0);
-    const bufPrivate = buf as unknown as TextBufferPrivate;
-    const index = bufPrivate.findInsertIndexByLocator(testLocator);
-    expect(index).toBe(0);
-  });
-
-  test("returns 0 for empty buffer", () => {
-    const buf = TextBuffer.create();
-
-    const testLocator = makeLocator(100);
-    const bufPrivate = buf as unknown as TextBufferPrivate;
-    const index = bufPrivate.findInsertIndexByLocator(testLocator);
-    expect(index).toBe(0);
-  });
-
-  test("cursor itemIndex works correctly", () => {
+describe("cursor itemIndex works correctly", () => {
+  test("cursor seeks to correct positions", () => {
     // Create fragments with locators [10], [20], [30]
     const frags = [
       createFragment(makeOpId(1), 0, makeLocator(10), "a", true),

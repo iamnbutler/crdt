@@ -23,7 +23,6 @@ import {
   createFragment,
   deleteFragment,
   fragmentSummaryOps,
-  locatorDimension,
   splitFragment,
   visibleLenDimension,
   withVisibility,
@@ -1193,25 +1192,6 @@ export class TextBuffer {
 
     // Finally, sort by locator length (children after parent)
     return a.locator.levels.length - b.locator.levels.length;
-  }
-
-  /**
-   * Find the index where a fragment with the given locator should be inserted.
-   * Uses O(log n) tree traversal via locatorDimension.
-   */
-  private findInsertIndexByLocator(locator: Locator): number {
-    if (this.fragments.isEmpty()) {
-      return 0;
-    }
-
-    const cursor = this.fragments.cursor(locatorDimension);
-    cursor.seekForward(locator, "right");
-
-    if (cursor.atEnd) {
-      return this.fragments.length();
-    }
-
-    return cursor.itemIndex();
   }
 
   /**
