@@ -300,6 +300,13 @@ export class TextBuffer {
     }
 
     const normalized = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+
+    // Fast path: insert at or past the end of the document.
+    // Uses SumTree.push() (O(n)) instead of O(n log n) full rebuild.
+    if (offset >= this.length) {
+      return this.insertAtEndFast(normalized);
+    }
+
     return this.insertInternal(offset, normalized);
   }
 
@@ -1432,6 +1439,78 @@ export class TextBuffer {
   }
 
   // ---------------------------------------------------------------------------
+  // Internal: insert at end (append fast path)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Insert text at the end of the document.
+   * Avoids the O(n log n) full tree rebuild used by insertInternal by using
+   * SumTree.push() which is O(n) (vs O(n log n) for fromItems-based rebuild).
+   *
+   * Correctness: uses the last item in the tree (visible or not) as the left
+   * locator boundary, ensuring the new fragment sorts after ALL existing fragments.
+   */
+  private insertAtEndFast(text: string): InsertOperation {
+    const opId = this.clock.tick();
+    observeVersion(this._version, this._replicaId, opId.counter);
+
+    if (this.activeTransaction !== null) {
+      this.activeTransaction.operationIds.push(opId);
+    } else {
+      this.recordImplicitOp(opId, "insert");
+    }
+
+    // Get the last fragment in tree order (O(log n) traversal to rightmost leaf).
+    // This may be an invisible fragment — we need the highest locator in the tree
+    // so the new fragment sorts after everything, including deleted content.
+    const lastFrag = this.getLastTreeFragment();
+
+    const leftLocator = lastFrag?.locator ?? MIN_LOCATOR;
+    const locator = locatorBetween(leftLocator, MAX_LOCATOR);
+    const newFrag = createFragment(opId, 0, locator, text, true);
+
+    // Append to tree — avoids O(n log n) full rebuild.
+    this.fragments = this.fragments.push(newFrag);
+
+    // Update the fragment ID index in O(1) instead of rebuilding it from scratch.
+    this.addFragmentId(opId);
+
+    const afterRef = lastFrag
+      ? { insertionId: lastFrag.insertionId, offset: lastFrag.insertionOffset + lastFrag.length }
+      : { insertionId: MIN_OPERATION_ID, offset: 0 };
+
+    return {
+      type: "insert",
+      id: opId,
+      text,
+      after: afterRef,
+      before: { insertionId: MAX_OPERATION_ID, offset: 0 },
+      version: cloneVersionVector(this._version),
+      locator,
+    };
+  }
+
+  /**
+   * Traverse the tree to its rightmost leaf and return the last item.
+   * Avoids extracting all fragments as an array.
+   */
+  private getLastTreeFragment(): Fragment | undefined {
+    if (this.fragments.isEmpty()) return undefined;
+    const arena = this.fragments.getArena();
+    let current = this.fragments.root;
+    while (!arena.isLeaf(current)) {
+      const children = arena.getChildren(current);
+      const lastChild = children[children.length - 1];
+      if (lastChild === undefined) return undefined;
+      current = lastChild;
+    }
+    const data = arena.getItem(current) as { items?: Fragment[] } | undefined;
+    const items = data?.items;
+    if (!items || items.length === 0) return undefined;
+    return items[items.length - 1];
+  }
+
+  // ---------------------------------------------------------------------------
   // Helpers
   // ---------------------------------------------------------------------------
 
@@ -1451,6 +1530,16 @@ export class TextBuffer {
     if (counters === undefined) {
       counters = new Set();
       this.appliedOps.set(id.replicaId, counters);
+    }
+    counters.add(id.counter);
+  }
+
+  /** Add a single fragment's insertionId to the _fragmentIds index in O(1). */
+  private addFragmentId(id: OperationId): void {
+    let counters = this._fragmentIds.get(id.replicaId);
+    if (counters === undefined) {
+      counters = new Set();
+      this._fragmentIds.set(id.replicaId, counters);
     }
     counters.add(id.counter);
   }
