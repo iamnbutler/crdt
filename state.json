@@ -1,1 +1,1 @@
-{"done":["binary-search-insert","skip-sort-conditional","o1-hasFragment-appliedOps","delete-o1-worklist","gettext-cache","worklist-o1-shift"],"next":["remote-insert-logn","deleteInternalSlow-logn"],"pr":"73 open. 66 open. 72,69,65 merged","m":"3896/13 dev. PRs target dev."}
+{"done":["binary-search-insert","skip-sort-conditional","o1-hasFragment-appliedOps","delete-worklist-o1","remote-insert-sort-skip"],"next":["remote-insert-logn","local-delete-sort-skip"],"pr":"66 open","m":"3896/13 dev. PRs target dev."}
