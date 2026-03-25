@@ -31,7 +31,7 @@ describe("serialization", () => {
       const serialized = serializeOperationId(opId);
       const deserialized = deserializeOperationId(serialized);
 
-      expect(deserialized.replicaId).toBe(123);
+      expect(deserialized.replicaId).toBe(replicaId(123));
       expect(deserialized.counter).toBe(456);
     });
 
@@ -67,7 +67,7 @@ describe("serialization", () => {
       const restored = TextBuffer.deserialize(serialized);
 
       expect(restored.getText()).toBe("");
-      expect(restored.replicaId).toBe(42);
+      expect(restored.replicaId).toBe(replicaId(42));
     });
 
     it("serializes and deserializes buffer with text", () => {
@@ -76,7 +76,7 @@ describe("serialization", () => {
       const restored = TextBuffer.deserialize(serialized);
 
       expect(restored.getText()).toBe("Hello, world!");
-      expect(restored.replicaId).toBe(100);
+      expect(restored.replicaId).toBe(replicaId(100));
     });
 
     it("preserves text after insertions", () => {
@@ -196,7 +196,7 @@ describe("serialization", () => {
       const restored = TextBuffer.deserializeJSON(json);
 
       expect(restored.getText()).toBe("Hello, JSON!");
-      expect(restored.replicaId).toBe(200);
+      expect(restored.replicaId).toBe(replicaId(200));
     });
 
     it("produces valid JSON", () => {
@@ -397,7 +397,7 @@ describe("serialization", () => {
 
       const op = restored.insert(4, "!");
       expect(op.type).toBe("insert");
-      expect(op.id.replicaId).toBe(1);
+      expect(op.id.replicaId).toBe(replicaId(1));
       // Counter should continue from where we left off
       expect(op.id.counter).toBeGreaterThan(0);
     });
