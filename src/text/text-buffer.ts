@@ -711,38 +711,33 @@ export class TextBuffer {
       this.recordImplicitOp(opId, "insert");
     }
 
-    // Fast path: inserting at end of document with no splits needed
+    // Fast path: use cursor-based seeking for boundary inserts (no splits)
     // Skip fast path when there are live snapshots (mutations would corrupt them)
-    const totalVisibleLen = this.fragments.summary().visibleLen;
-    if (offset === totalVisibleLen && !this.fragments.isEmpty() && this._liveSnapshots === 0) {
-      // Get the last fragment to compute locator
-      const lastIdx = this.fragments.length() - 1;
-      const lastFrag = this.fragments.get(lastIdx);
-
-      if (lastFrag) {
-        const locator = locatorBetween(lastFrag.locator, MAX_LOCATOR);
+    if (this._liveSnapshots === 0 && !this.fragments.isEmpty()) {
+      const fastResult = this.tryFindInsertPositionFast(offset);
+      if (fastResult !== null) {
+        // Boundary insert: no split needed, use O(log n) operations
+        const locator = locatorBetween(fastResult.leftLocator, fastResult.rightLocator);
         const newFrag = createFragment(opId, 0, locator, text, true);
 
-        // O(log n) in-place push (avoids O(n) shallowClone)
-        this.fragments.pushMut(newFrag);
+        // O(log² n) to find index + O(log n) to insert
+        const insertIdx = this.findTreeInsertIndex(newFrag);
+        this.fragments = this.fragments.insertAt(insertIdx, newFrag);
         this.addToFragmentIndex(opId);
 
         return {
           type: "insert",
           id: opId,
           text,
-          after: {
-            insertionId: lastFrag.insertionId,
-            offset: lastFrag.insertionOffset + lastFrag.length,
-          },
-          before: { insertionId: MAX_OPERATION_ID, offset: 0 },
+          after: fastResult.afterRef,
+          before: fastResult.beforeRef,
           version: cloneVersionVector(this._version),
           locator,
         };
       }
     }
 
-    // Standard path for other cases
+    // Standard path: split cases or when fast path unavailable
     const frags = this.fragmentsArray();
 
     // Find the position to insert: seek to the visible offset
@@ -939,6 +934,128 @@ export class TextBuffer {
           : { insertionId: MIN_OPERATION_ID, offset: 0 },
       beforeRef: { insertionId: MAX_OPERATION_ID, offset: 0 },
     };
+  }
+
+  /**
+   * Try to find insert position using cursor-based seeking (O(log n)).
+   * Returns null if a split would be required (must use O(n) array path).
+   * Only handles boundary inserts (at fragment start or end).
+   */
+  private tryFindInsertPositionFast(
+    offset: number,
+  ): {
+    leftLocator: Locator;
+    rightLocator: Locator;
+    afterRef: { insertionId: OperationId; offset: number };
+    beforeRef: { insertionId: OperationId; offset: number };
+  } | null {
+    const totalVisibleLen = this.fragments.summary().visibleLen;
+
+    // Insert at end of document
+    if (offset >= totalVisibleLen) {
+      const lastIdx = this.fragments.length() - 1;
+      const lastFrag = this.fragments.get(lastIdx);
+      if (lastFrag) {
+        return {
+          leftLocator: lastFrag.locator,
+          rightLocator: MAX_LOCATOR,
+          afterRef: {
+            insertionId: lastFrag.insertionId,
+            offset: lastFrag.insertionOffset + lastFrag.length,
+          },
+          beforeRef: { insertionId: MAX_OPERATION_ID, offset: 0 },
+        };
+      }
+      return null;
+    }
+
+    // Insert at start of document
+    if (offset === 0) {
+      const firstFrag = this.fragments.get(0);
+      if (firstFrag) {
+        return {
+          leftLocator: MIN_LOCATOR,
+          rightLocator: firstFrag.locator,
+          afterRef: { insertionId: MIN_OPERATION_ID, offset: 0 },
+          beforeRef: {
+            insertionId: firstFrag.insertionId,
+            offset: firstFrag.insertionOffset,
+          },
+        };
+      }
+      return null;
+    }
+
+    // Use cursor to seek to the position
+    const cursor = this.fragments.cursor(visibleLenDimension);
+    cursor.reset();
+    cursor.seekForward(offset, "right");
+
+    if (cursor.atEnd) {
+      return null;
+    }
+
+    const currentFrag = cursor.item();
+    if (currentFrag === undefined) {
+      return null;
+    }
+
+    // Calculate local offset within this fragment
+    const positionBefore = cursor.position;
+    const localOffset = offset - positionBefore;
+
+    // Check if this is a boundary insert (at fragment start)
+    if (localOffset === 0) {
+      // Insert before this fragment - need the previous fragment's locator
+      cursor.prev();
+      const prevFrag = cursor.item();
+
+      const leftLocator = prevFrag?.locator ?? MIN_LOCATOR;
+      const afterRef = prevFrag
+        ? {
+            insertionId: prevFrag.insertionId,
+            offset: prevFrag.insertionOffset + prevFrag.length,
+          }
+        : { insertionId: MIN_OPERATION_ID, offset: 0 };
+
+      return {
+        leftLocator,
+        rightLocator: currentFrag.locator,
+        afterRef,
+        beforeRef: {
+          insertionId: currentFrag.insertionId,
+          offset: currentFrag.insertionOffset,
+        },
+      };
+    }
+
+    // Check if this is a boundary insert (at fragment end)
+    if (localOffset === currentFrag.length) {
+      // Insert after this fragment - need the next fragment's locator
+      cursor.next();
+      const nextFrag = cursor.item();
+
+      const rightLocator = nextFrag?.locator ?? MAX_LOCATOR;
+      const beforeRef = nextFrag
+        ? {
+            insertionId: nextFrag.insertionId,
+            offset: nextFrag.insertionOffset,
+          }
+        : { insertionId: MAX_OPERATION_ID, offset: 0 };
+
+      return {
+        leftLocator: currentFrag.locator,
+        rightLocator,
+        afterRef: {
+          insertionId: currentFrag.insertionId,
+          offset: currentFrag.insertionOffset + currentFrag.length,
+        },
+        beforeRef,
+      };
+    }
+
+    // Split case: offset is inside the fragment, must use O(n) path
+    return null;
   }
 
   // ---------------------------------------------------------------------------

@@ -679,6 +679,51 @@ export class SumTree<T extends Summarizable<S>, S> {
   }
 
   /**
+   * Push an item to the end of the tree, mutating in place.
+   * O(log n) - finds rightmost leaf and inserts directly.
+   */
+  pushMut(item: T): void {
+    this.insertAtMut(this.length(), item);
+  }
+
+  /**
+   * Insert an item at the given index, mutating in place.
+   * O(log n) - finds the leaf and inserts directly without path copying.
+   */
+  insertAtMut(index: number, item: T): void {
+    // Find the leaf and position for insertion
+    const path = this.findLeafForIndex(index);
+    if (path.length === 0) {
+      // Empty tree, create root leaf
+      const items = [item];
+      this._root = this.createLeaf(items);
+      return;
+    }
+
+    // Insert into the leaf (no cloning needed for mutation)
+    const leafEntry = path[path.length - 1];
+    if (leafEntry === undefined) {
+      return;
+    }
+
+    const leafData = this.arena.getItem(leafEntry.nodeId);
+    const items = leafData?.items ?? [];
+    items.splice(leafEntry.indexInNode, 0, item);
+
+    // Update leaf
+    this.arena.setItem(leafEntry.nodeId, { items });
+    this.arena.setCount(leafEntry.nodeId, items.length);
+
+    // Check for overflow and split if needed
+    if (items.length > this.branchingFactor) {
+      this.splitAndPropagate(path);
+    } else {
+      // Just update summaries up the path
+      this.updateSummariesUp(path);
+    }
+  }
+
+  /**
    * Insert an item at the given index.
    * Returns a new tree (path copying), leaving the original unchanged.
    */
