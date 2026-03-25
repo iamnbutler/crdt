@@ -1,0 +1,499 @@
+{
+  "cli_version": "v0.60.0",
+  "run_id": 23490833303,
+  "processed_at": "2026-03-24T15:42:29.222752-04:00",
+  "run": {
+    "databaseId": 23490833303,
+    "number": 4,
+    "url": "https://github.com/iamnbutler/crdt/actions/runs/23490833303",
+    "status": "completed",
+    "conclusion": "failure",
+    "workflowName": "Daily Perf Improver",
+    "workflowPath": ".github/workflows/daily-perf-improver.lock.yml",
+    "createdAt": "2026-03-24T13:03:12Z",
+    "startedAt": "2026-03-24T13:03:12Z",
+    "updatedAt": "2026-03-24T13:30:52Z",
+    "event": "workflow_dispatch",
+    "headBranch": "dev",
+    "headSha": "29542ddf1009db8baa90c2e1f80c820244ea3dd8",
+    "displayTitle": "Daily Perf Improver",
+    "Duration": 1660000000000,
+    "TokenUsage": 9846461,
+    "EstimatedCost": 3.8151199500000006,
+    "Turns": 93,
+    "ErrorCount": 1,
+    "WarningCount": 0,
+    "MissingToolCount": 0,
+    "MissingDataCount": 0,
+    "NoopCount": 0,
+    "SafeItemsCount": 0,
+    "LogsPath": "/Users/natebutler/code/crdt/.github/aw/logs/run-23490833303"
+  },
+  "metrics": {
+    "TokenUsage": 9846461,
+    "EstimatedCost": 3.8151199500000006,
+    "Turns": 93,
+    "ToolCalls": [
+      {
+        "Name": "Edit",
+        "CallCount": 17,
+        "MaxInputSize": 261,
+        "MaxOutputSize": 728,
+        "MaxDuration": 1491049000000
+      },
+      {
+        "Name": "Glob",
+        "CallCount": 1,
+        "MaxInputSize": 12,
+        "MaxOutputSize": 15400,
+        "MaxDuration": 1491049000000
+      },
+      {
+        "Name": "Read",
+        "CallCount": 9,
+        "MaxInputSize": 23,
+        "MaxOutputSize": 15400,
+        "MaxDuration": 1491049000000
+      },
+      {
+        "Name": "TaskOutput",
+        "CallCount": 6,
+        "MaxInputSize": 13,
+        "MaxOutputSize": 939,
+        "MaxDuration": 1491049000000
+      },
+      {
+        "Name": "TaskStop",
+        "CallCount": 1,
+        "MaxInputSize": 5,
+        "MaxOutputSize": 128,
+        "MaxDuration": 1491049000000
+      },
+      {
+        "Name": "TodoWrite",
+        "CallCount": 5,
+        "MaxInputSize": 191,
+        "MaxOutputSize": 939,
+        "MaxDuration": 1491049000000
+      },
+      {
+        "Name": "Write",
+        "CallCount": 3,
+        "MaxInputSize": 333,
+        "MaxOutputSize": 61,
+        "MaxDuration": 1491049000000
+      },
+      {
+        "Name": "bash_bun test 2\u003e\u00261 | tail...",
+        "CallCount": 1,
+        "MaxInputSize": 16,
+        "MaxOutputSize": 939,
+        "MaxDuration": 1491049000000
+      },
+      {
+        "Name": "bash_cat /home/runner/wor...",
+        "CallCount": 3,
+        "MaxInputSize": 40,
+        "MaxOutputSize": 939,
+        "MaxDuration": 1491049000000
+      },
+      {
+        "Name": "bash_cat /tmp/claude-1001...",
+        "CallCount": 1,
+        "MaxInputSize": 30,
+        "MaxOutputSize": 939,
+        "MaxDuration": 1491049000000
+      },
+      {
+        "Name": "bash_cat /tmp/gh-aw/repo-...",
+        "CallCount": 1,
+        "MaxInputSize": 16,
+        "MaxOutputSize": 28,
+        "MaxDuration": 1491049000000
+      },
+      {
+        "Name": "bash_cat \u003e /tmp/gh-aw/age...",
+        "CallCount": 1,
+        "MaxInputSize": 499,
+        "MaxOutputSize": 128,
+        "MaxDuration": 1491049000000
+      },
+      {
+        "Name": "bash_cd /tmp/gh-aw/repo-m...",
+        "CallCount": 1,
+        "MaxInputSize": 31,
+        "MaxOutputSize": 28,
+        "MaxDuration": 1491049000000
+      },
+      {
+        "Name": "bash_curl -fsSL https://b...",
+        "CallCount": 1,
+        "MaxInputSize": 23,
+        "MaxOutputSize": 939,
+        "MaxDuration": 1491049000000
+      },
+      {
+        "Name": "bash_du -sh /tmp/gh-aw/re...",
+        "CallCount": 3,
+        "MaxInputSize": 26,
+        "MaxOutputSize": 61,
+        "MaxDuration": 1491049000000
+      },
+      {
+        "Name": "bash_export PATH=\"$HOME/....",
+        "CallCount": 9,
+        "MaxInputSize": 50,
+        "MaxOutputSize": 939,
+        "MaxDuration": 1491049000000
+      },
+      {
+        "Name": "bash_find / -name \"bun\" -...",
+        "CallCount": 1,
+        "MaxInputSize": 17,
+        "MaxOutputSize": 939,
+        "MaxDuration": 1491049000000
+      },
+      {
+        "Name": "bash_find /tmp/gh-aw/repo...",
+        "CallCount": 1,
+        "MaxInputSize": 28,
+        "MaxOutputSize": 21,
+        "MaxDuration": 1491049000000
+      },
+      {
+        "Name": "bash_git add src/text/tex...",
+        "CallCount": 1,
+        "MaxInputSize": 204,
+        "MaxOutputSize": 61,
+        "MaxDuration": 1491049000000
+      },
+      {
+        "Name": "bash_git checkout -b perf...",
+        "CallCount": 1,
+        "MaxInputSize": 17,
+        "MaxOutputSize": 728,
+        "MaxDuration": 1491049000000
+      },
+      {
+        "Name": "bash_git stash \u0026\u0026 export ...",
+        "CallCount": 2,
+        "MaxInputSize": 42,
+        "MaxOutputSize": 249,
+        "MaxDuration": 1491049000000
+      },
+      {
+        "Name": "bash_git stash pop \u0026\u0026 exp...",
+        "CallCount": 1,
+        "MaxInputSize": 46,
+        "MaxOutputSize": 128,
+        "MaxDuration": 1491049000000
+      },
+      {
+        "Name": "bash_ls /home/runner/work...",
+        "CallCount": 4,
+        "MaxInputSize": 41,
+        "MaxOutputSize": 15400,
+        "MaxDuration": 1491049000000
+      },
+      {
+        "Name": "bash_ls /usr/local/bin/ |...",
+        "CallCount": 1,
+        "MaxInputSize": 29,
+        "MaxOutputSize": 939,
+        "MaxDuration": 1491049000000
+      },
+      {
+        "Name": "bash_which bun || ls ~/.b...",
+        "CallCount": 1,
+        "MaxInputSize": 32,
+        "MaxOutputSize": 939,
+        "MaxDuration": 1491049000000
+      },
+      {
+        "Name": "github_get_file_contents",
+        "CallCount": 2,
+        "MaxInputSize": 25,
+        "MaxOutputSize": 28,
+        "MaxDuration": 1491049000000
+      },
+      {
+        "Name": "github_list_pull_requests",
+        "CallCount": 2,
+        "MaxInputSize": 15,
+        "MaxOutputSize": 61,
+        "MaxDuration": 1491049000000
+      },
+      {
+        "Name": "github_search_issues",
+        "CallCount": 3,
+        "MaxInputSize": 22,
+        "MaxOutputSize": 15400,
+        "MaxDuration": 1491049000000
+      },
+      {
+        "Name": "github_search_pull_requests",
+        "CallCount": 3,
+        "MaxInputSize": 18,
+        "MaxOutputSize": 15400,
+        "MaxDuration": 1491049000000
+      },
+      {
+        "Name": "safeoutputs_create_issue",
+        "CallCount": 1,
+        "MaxInputSize": 532,
+        "MaxOutputSize": 61,
+        "MaxDuration": 1491049000000
+      },
+      {
+        "Name": "safeoutputs_create_pull_request",
+        "CallCount": 1,
+        "MaxInputSize": 843,
+        "MaxOutputSize": 61,
+        "MaxDuration": 1491049000000
+      },
+      {
+        "Name": "safeoutputs_push_repo_memory",
+        "CallCount": 4,
+        "MaxInputSize": 0,
+        "MaxOutputSize": 61,
+        "MaxDuration": 1491049000000
+      },
+      {
+        "Name": "Read",
+        "CallCount": 2,
+        "MaxInputSize": 23,
+        "MaxOutputSize": 2822,
+        "MaxDuration": 6115000000
+      }
+    ],
+    "ToolSequences": [
+      [
+        "Glob",
+        "Read",
+        "Read",
+        "bash_ls /home/runner/work...",
+        "github_search_pull_requests",
+        "github_search_issues",
+        "bash_ls /home/runner/work...",
+        "Read",
+        "Read",
+        "Read",
+        "bash_ls /home/runner/work...",
+        "Read",
+        "TodoWrite",
+        "bash_bun test 2\u003e\u00261 | tail...",
+        "bash_which bun || ls ~/.b...",
+        "bash_find / -name \"bun\" -...",
+        "TaskOutput",
+        "bash_cat /tmp/claude-1001...",
+        "bash_ls /usr/local/bin/ |...",
+        "bash_cat /home/runner/wor...",
+        "bash_cat /home/runner/wor...",
+        "bash_ls /home/runner/work...",
+        "bash_cat /home/runner/wor...",
+        "bash_curl -fsSL https://b...",
+        "bash_export PATH=\"$HOME/....",
+        "bash_export PATH=\"$HOME/....",
+        "bash_export PATH=\"$HOME/....",
+        "Read",
+        "Read",
+        "bash_git checkout -b perf...",
+        "TodoWrite",
+        "Edit",
+        "Edit",
+        "Edit",
+        "Edit",
+        "Edit",
+        "Edit",
+        "Edit",
+        "Edit",
+        "Edit",
+        "Edit",
+        "Edit",
+        "Edit",
+        "Edit",
+        "Edit",
+        "Edit",
+        "Edit",
+        "Edit",
+        "bash_export PATH=\"$HOME/....",
+        "bash_export PATH=\"$HOME/....",
+        "bash_export PATH=\"$HOME/....",
+        "bash_export PATH=\"$HOME/....",
+        "bash_export PATH=\"$HOME/....",
+        "Read",
+        "bash_git stash \u0026\u0026 export ...",
+        "bash_export PATH=\"$HOME/....",
+        "TaskOutput",
+        "TaskOutput",
+        "TaskStop",
+        "bash_cat \u003e /tmp/gh-aw/age...",
+        "bash_git stash \u0026\u0026 export ...",
+        "TaskOutput",
+        "TaskOutput",
+        "TaskOutput",
+        "bash_git stash pop \u0026\u0026 exp...",
+        "TodoWrite",
+        "bash_git add src/text/tex...",
+        "safeoutputs_create_pull_request",
+        "github_search_pull_requests",
+        "github_list_pull_requests",
+        "github_search_pull_requests",
+        "github_list_pull_requests",
+        "github_search_issues",
+        "github_search_issues",
+        "TodoWrite",
+        "safeoutputs_create_issue",
+        "TodoWrite",
+        "Write",
+        "safeoutputs_push_repo_memory",
+        "Write",
+        "safeoutputs_push_repo_memory",
+        "bash_du -sh /tmp/gh-aw/re...",
+        "bash_du -sh /tmp/gh-aw/re...",
+        "bash_cat /tmp/gh-aw/repo-...",
+        "safeoutputs_push_repo_memory",
+        "github_get_file_contents",
+        "github_get_file_contents",
+        "bash_du -sh /tmp/gh-aw/re...",
+        "bash_cd /tmp/gh-aw/repo-m...",
+        "Write",
+        "safeoutputs_push_repo_memory",
+        "bash_find /tmp/gh-aw/repo..."
+      ],
+      [
+        "Read",
+        "Read"
+      ]
+    ]
+  },
+  "access_analysis": null,
+  "firewall_analysis": {
+    "allowed_domains": [
+      "api.anthropic.com:443",
+      "bun.sh:443",
+      "github.com:443",
+      "raw.githubusercontent.com:443",
+      "registry.npmjs.org:443",
+      "release-assets.githubusercontent.com:443"
+    ],
+    "total_requests": 112,
+    "allowed_requests": 112,
+    "blocked_requests": 0,
+    "requests_by_domain": {
+      "api.anthropic.com:443": {
+        "allowed": 94,
+        "blocked": 0
+      },
+      "bun.sh:443": {
+        "allowed": 1,
+        "blocked": 0
+      },
+      "github.com:443": {
+        "allowed": 1,
+        "blocked": 0
+      },
+      "raw.githubusercontent.com:443": {
+        "allowed": 1,
+        "blocked": 0
+      },
+      "registry.npmjs.org:443": {
+        "allowed": 14,
+        "blocked": 0
+      },
+      "release-assets.githubusercontent.com:443": {
+        "allowed": 1,
+        "blocked": 0
+      }
+    }
+  },
+  "redacted_domains_analysis": null,
+  "missing_tools": null,
+  "missing_data": null,
+  "noops": null,
+  "mcp_failures": null,
+  "artifacts_list": [
+    "agent-stdio.log",
+    "agent_output.json",
+    "aw-perf-assist-applied-ops-and-has-fragment.patch",
+    "aw-prompts/prompt.txt",
+    "aw_info.json",
+    "detection.log",
+    "mcp-logs/gateway.md",
+    "mcp-logs/github.log",
+    "mcp-logs/mcp-gateway.log",
+    "mcp-logs/rpc-messages.jsonl",
+    "mcp-logs/safeoutputs/server.log",
+    "mcp-logs/safeoutputs.log",
+    "mcp-logs/start-gateway.log",
+    "mcp-logs/stderr.log",
+    "mcp-logs/tools.json",
+    "safe-output-items.jsonl",
+    "safeoutputs.jsonl",
+    "sandbox/firewall/logs/access.log",
+    "sandbox/firewall/logs/cache.log",
+    "state.json",
+    "workflow-logs/0_conclusion.txt",
+    "workflow-logs/1_push_repo_memory.txt",
+    "workflow-logs/2_safe_outputs.txt",
+    "workflow-logs/3_agent.txt",
+    "workflow-logs/4_activation.txt",
+    "workflow-logs/5_pre_activation.txt",
+    "workflow-logs/activation/system.txt",
+    "workflow-logs/agent/system.txt",
+    "workflow-logs/conclusion/system.txt",
+    "workflow-logs/pre_activation/system.txt",
+    "workflow-logs/push_repo_memory/system.txt",
+    "workflow-logs/safe_outputs/system.txt"
+  ],
+  "job_details": [
+    {
+      "name": "pre_activation",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-03-24T13:03:16Z",
+      "completed_at": "2026-03-24T13:03:23Z",
+      "Duration": 7000000000
+    },
+    {
+      "name": "activation",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-03-24T13:03:27Z",
+      "completed_at": "2026-03-24T13:03:37Z",
+      "Duration": 10000000000
+    },
+    {
+      "name": "agent",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-03-24T13:03:40Z",
+      "completed_at": "2026-03-24T13:30:15Z",
+      "Duration": 1595000000000
+    },
+    {
+      "name": "safe_outputs",
+      "status": "completed",
+      "conclusion": "failure",
+      "started_at": "2026-03-24T13:30:18Z",
+      "completed_at": "2026-03-24T13:30:33Z",
+      "Duration": 15000000000
+    },
+    {
+      "name": "push_repo_memory",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-03-24T13:30:18Z",
+      "completed_at": "2026-03-24T13:30:35Z",
+      "Duration": 17000000000
+    },
+    {
+      "name": "conclusion",
+      "status": "completed",
+      "conclusion": "success",
+      "started_at": "2026-03-24T13:30:39Z",
+      "completed_at": "2026-03-24T13:30:51Z",
+      "Duration": 12000000000
+    }
+  ]
+}

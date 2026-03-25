@@ -24,6 +24,7 @@ import {
   deleteFragment,
   fragmentSummaryOps,
   splitFragment,
+  visibleLenDimension,
   withVisibility,
 } from "./fragment.js";
 import { MAX_LOCATOR, MIN_LOCATOR, compareLocators, locatorBetween } from "./locator.js";
@@ -71,29 +72,18 @@ import { UndoMap } from "./undo-map.js";
 // ---------------------------------------------------------------------------
 
 /**
- * Compare locators for fragment sorting. This differs from lexicographic
- * comparison: when one locator is a prefix of another, we consider them
- * "at the same position" and return 0 to allow tie-breaking by operation ID.
+ * Compare locators for fragment sorting using full lexicographic comparison.
  *
- * This ensures that when a fragment is split (getting child locators) and
- * another fragment has the same parent locator, they interleave correctly
- * based on operation ID, rather than the parent always sorting first.
+ * When one locator is a prefix of another, the shorter one sorts FIRST.
+ * This is correct because child locators (e.g., [L, X]) represent positions
+ * INSIDE the parent's original span - they should come after the parent's
+ * left portion and before concurrent siblings that sort later.
+ *
+ * Operation ID tie-breaking only applies when locators are EXACTLY equal,
+ * which happens with concurrent inserts at the same position.
  */
 function compareLocatorsForSort(a: Locator, b: Locator): number {
-  const minLen = Math.min(a.levels.length, b.levels.length);
-
-  // Compare common prefix
-  for (let i = 0; i < minLen; i++) {
-    const aLevel = a.levels[i];
-    const bLevel = b.levels[i];
-    if (aLevel !== undefined && bLevel !== undefined && aLevel !== bLevel) {
-      return aLevel - bLevel;
-    }
-  }
-
-  // One is a prefix of the other (or they're equal).
-  // Treat as "same position" to allow tie-breaking by operation ID.
-  return 0;
+  return compareLocators(a, b);
 }
 
 /**
@@ -168,8 +158,11 @@ export class TextBuffer {
   private undoStack: UndoEntry[];
   private redoStack: UndoEntry[];
 
-  // Track applied remote operation IDs for idempotency
-  private appliedOps: Set<string>;
+  // Track applied remote operation IDs for idempotency (replicaId -> Set<counter>)
+  private appliedOps: Map<ReplicaId, Set<number>>;
+
+  // Index of all insertionIds in the fragment tree for O(1) hasFragment checks
+  private _fragmentIds: Map<ReplicaId, Set<number>>;
 
   // Pending operations waiting for their causal dependencies
   private pendingOps: Operation[];
@@ -194,7 +187,8 @@ export class TextBuffer {
     this.lastEditType = null;
     this.undoStack = [];
     this.redoStack = [];
-    this.appliedOps = new Set();
+    this.appliedOps = new Map();
+    this._fragmentIds = new Map();
     this.pendingOps = [];
     this._now = Date.now;
     this._liveSnapshots = 0;
@@ -232,8 +226,8 @@ export class TextBuffer {
       const locator = locatorBetween(MIN_LOCATOR, MAX_LOCATOR);
       const fragment = createFragment(opId, 0, locator, normalized, true);
 
-      // Build SumTree with single fragment
-      buffer.fragments = SumTree.fromItems([fragment], fragmentSummaryOps);
+      // Build SumTree with single fragment and initialize the insertionId index
+      buffer.setFragments([fragment]);
     }
     return buffer;
   }
@@ -596,8 +590,7 @@ export class TextBuffer {
    */
   applyRemote(operation: Operation): void {
     // Idempotency check: skip operations that have already been applied.
-    const opKey = `${operation.id.replicaId}:${operation.id.counter}`;
-    if (this.appliedOps.has(opKey)) {
+    if (this.hasAppliedOp(operation.id)) {
       return; // Already applied
     }
 
@@ -654,22 +647,16 @@ export class TextBuffer {
     return true;
   }
 
-  /** Check if any fragment with the given insertionId exists. */
+  /** Check if any fragment with the given insertionId exists. O(1) via index. */
   private hasFragment(insertionId: OperationId): boolean {
-    for (const frag of this.fragmentsArray()) {
-      if (operationIdsEqual(frag.insertionId, insertionId)) {
-        return true;
-      }
-    }
-    return false;
+    return this._fragmentIds.get(insertionId.replicaId)?.has(insertionId.counter) ?? false;
   }
 
   /**
    * Apply a remote operation that has been confirmed as causally ready.
    */
   private applyRemoteInternal(operation: Operation): void {
-    const opKey = `${operation.id.replicaId}:${operation.id.counter}`;
-    this.appliedOps.add(opKey);
+    this.markAppliedOp(operation.id);
 
     switch (operation.type) {
       case "insert":
@@ -694,8 +681,7 @@ export class TextBuffer {
       const stillPending: Operation[] = [];
 
       for (const pendingOp of this.pendingOps) {
-        const opKey = `${pendingOp.id.replicaId}:${pendingOp.id.counter}`;
-        if (this.appliedOps.has(opKey)) {
+        if (this.hasAppliedOp(pendingOp.id)) {
           continue; // Already applied (idempotency)
         }
         if (this.isCausallyReady(pendingOp)) {
@@ -725,10 +711,42 @@ export class TextBuffer {
       this.recordImplicitOp(opId, "insert");
     }
 
+    // Fast path: inserting at end of document with no splits needed
+    // Skip fast path when there are live snapshots (mutations would corrupt them)
+    const totalVisibleLen = this.fragments.summary().visibleLen;
+    if (offset === totalVisibleLen && !this.fragments.isEmpty() && this._liveSnapshots === 0) {
+      // Get the last fragment to compute locator
+      const lastIdx = this.fragments.length() - 1;
+      const lastFrag = this.fragments.get(lastIdx);
+
+      if (lastFrag) {
+        const locator = locatorBetween(lastFrag.locator, MAX_LOCATOR);
+        const newFrag = createFragment(opId, 0, locator, text, true);
+
+        // O(log n) in-place push (avoids O(n) shallowClone)
+        this.fragments.pushMut(newFrag);
+        this.addToFragmentIndex(opId);
+
+        return {
+          type: "insert",
+          id: opId,
+          text,
+          after: {
+            insertionId: lastFrag.insertionId,
+            offset: lastFrag.insertionOffset + lastFrag.length,
+          },
+          before: { insertionId: MAX_OPERATION_ID, offset: 0 },
+          version: cloneVersionVector(this._version),
+          locator,
+        };
+      }
+    }
+
+    // Standard path for other cases
     const frags = this.fragmentsArray();
 
     // Find the position to insert: seek to the visible offset
-    const { leftLocator, rightLocator, insertLocator, afterRef, beforeRef } =
+    const { leftLocator, rightLocator, insertLocator, afterRef, beforeRef, splitInfo } =
       this.findInsertPosition(frags, offset);
 
     // Use explicit insertLocator if provided (for split cases), otherwise compute via locatorBetween
@@ -737,10 +755,25 @@ export class TextBuffer {
     // Create the new fragment
     const newFrag = createFragment(opId, 0, locator, text, true);
 
-    // Insert and sort using the same approach as remote inserts for consistency.
-    this.insertFragmentByLocator(frags, newFrag);
-    sortFragments(frags);
-    this.fragments = SumTree.fromItems(frags, fragmentSummaryOps);
+    // Apply changes using direct tree operations when possible
+    // Note: When there are live snapshots, we must use setFragments to create
+    // a new tree with a separate arena, since insertAt shares the arena and
+    // GC could incorrectly free nodes still referenced by snapshots.
+    if (splitInfo !== undefined || this._liveSnapshots > 0) {
+      // Split case or live snapshots: use array-based approach (O(n))
+      this.insertFragmentByLocator(frags, newFrag);
+      // Must sort after splits: split parts get new locators that may need to
+      // interleave with other fragments (e.g., [...,8] must come after [...,4,10])
+      if (splitInfo !== undefined) {
+        sortFragments(frags);
+      }
+      this.setFragments(frags);
+    } else {
+      // No split and no snapshots: use direct tree insertion (O(log n))
+      const insertIdx = this.findTreeInsertIndex(newFrag);
+      this.fragments = this.fragments.insertAt(insertIdx, newFrag);
+      this.addToFragmentIndex(opId);
+    }
 
     return {
       type: "insert",
@@ -751,6 +784,18 @@ export class TextBuffer {
       version: cloneVersionVector(this._version),
       locator,
     };
+  }
+
+  /**
+   * Add a fragment ID to the index for O(1) hasFragment checks.
+   */
+  private addToFragmentIndex(id: OperationId): void {
+    let counters = this._fragmentIds.get(id.replicaId);
+    if (counters === undefined) {
+      counters = new Set();
+      this._fragmentIds.set(id.replicaId, counters);
+    }
+    counters.add(id.counter);
   }
 
   private findInsertPosition(
@@ -764,6 +809,12 @@ export class TextBuffer {
     insertIndex: number;
     afterRef: { insertionId: OperationId; offset: number };
     beforeRef: { insertionId: OperationId; offset: number };
+    /** Split info for direct tree operations (undefined if no split needed) */
+    splitInfo?: {
+      originalIndex: number;
+      left: Fragment;
+      right: Fragment;
+    };
   } {
     if (frags.length === 0) {
       return {
@@ -834,6 +885,11 @@ export class TextBuffer {
             beforeRef: {
               insertionId: right.insertionId,
               offset: right.insertionOffset,
+            },
+            splitInfo: {
+              originalIndex: i,
+              left,
+              right,
             },
           };
         }
@@ -981,7 +1037,7 @@ export class TextBuffer {
     // Split fragments get child locators that must interleave correctly
     // with fragments from other operations at the same parent locator.
     sortFragments(newFrags);
-    this.fragments = SumTree.fromItems(newFrags, fragmentSummaryOps);
+    this.setFragments(newFrags);
 
     return {
       type: "delete",
@@ -1011,7 +1067,7 @@ export class TextBuffer {
     }
 
     if (changed) {
-      this.fragments = SumTree.fromItems(newFrags, fragmentSummaryOps);
+      this.setFragments(newFrags);
     }
   }
 
@@ -1033,63 +1089,147 @@ export class TextBuffer {
     observeVersion(this._version, op.id.replicaId, op.id.counter);
     mergeVersionVectors(this._version, op.version);
 
-    const frags = this.fragmentsArray();
+    // Check the undo map to determine initial visibility - an undo operation
+    // for this insert might have arrived before the insert itself.
+    const visible = !this.undoMap.isUndone(op.id);
+    const newFrag = createFragment(op.id, 0, op.locator, op.text, visible);
 
-    // findRefIndex calls may split fragments, which is necessary for causal
-    // correctness, but we don't use the returned indices for positioning.
-    if (!operationIdsEqual(op.after.insertionId, MIN_OPERATION_ID)) {
-      this.findRefIndex(frags, op.after, "after");
+    // Fast path: use O(log n) tree operations when no live snapshots and no splits needed
+    const needsAfterSplit = !operationIdsEqual(op.after.insertionId, MIN_OPERATION_ID);
+    const needsBeforeSplit = !operationIdsEqual(op.before.insertionId, MAX_OPERATION_ID);
+
+    if (this._liveSnapshots === 0 && !needsAfterSplit && !needsBeforeSplit) {
+      // No splits needed: use O(log² n) tree insertion directly
+      const insertIndex = this.findTreeInsertIndex(newFrag);
+      this.fragments.insertAtMut(insertIndex, newFrag);
+      this.addToFragmentIndex(op.id);
+    } else if (this._liveSnapshots === 0) {
+      // Splits needed: use array for splits, then direct tree insertion
+      const frags = this.fragmentsArray();
+
+      if (needsAfterSplit) {
+        this.findRefIndex(frags, op.after, "after");
+      }
+      if (needsBeforeSplit) {
+        this.findRefIndex(frags, op.before, "before");
+      }
+
+      // After splits, re-sort and rebuild tree, then use direct insertion
+      sortFragments(frags);
+      this.setFragments(frags);
+
+      // Now use O(log² n) insertion for the new fragment
+      const insertIndex = this.findTreeInsertIndex(newFrag);
+      this.fragments.insertAtMut(insertIndex, newFrag);
+      this.addToFragmentIndex(op.id);
+    } else {
+      // Snapshot safety fallback: use full array-based approach
+      const frags = this.fragmentsArray();
+
+      if (needsAfterSplit) {
+        this.findRefIndex(frags, op.after, "after");
+      }
+      if (needsBeforeSplit) {
+        this.findRefIndex(frags, op.before, "before");
+      }
+
+      sortFragments(frags);
+      this.insertFragmentByLocator(frags, newFrag);
+      this.setFragments(frags);
     }
-    if (!operationIdsEqual(op.before.insertionId, MAX_OPERATION_ID)) {
-      this.findRefIndex(frags, op.before, "before");
-    }
-
-    // After splits, the array may not be in locator order. Re-sort it.
-    sortFragments(frags);
-
-    // Create the new fragment with its original locator.
-    // The sort function handles interleaving with children based on operation ID.
-    const newFrag = createFragment(op.id, 0, op.locator, op.text, true);
-
-    // Insert the fragment at its locator-sorted position
-    this.insertFragmentByLocator(frags, newFrag);
-
-    // Re-sort after insertion to ensure correct interleaving
-    sortFragments(frags);
-
-    this.fragments = SumTree.fromItems(frags, fragmentSummaryOps);
   }
 
   /**
    * Insert a fragment into the array at its locator-sorted position.
    * Modifies the array in place.
+   *
+   * Uses binary search for O(log n) position finding, with comparison logic
+   * identical to sortFragments to ensure consistent ordering.
    */
   private insertFragmentByLocator(frags: Fragment[], newFrag: Fragment): void {
-    let insertIndex = 0;
-    for (let i = 0; i < frags.length; i++) {
-      const frag = frags[i];
-      if (frag === undefined) continue;
-
-      const cmp = compareLocators(newFrag.locator, frag.locator);
-      if (cmp < 0) {
-        break;
-      }
-      if (cmp === 0) {
-        // Same locator — tie-break by (replicaId, counter, insertionOffset)
-        const idCmp = compareOperationIds(newFrag.insertionId, frag.insertionId);
-        if (idCmp < 0) {
-          break;
-        }
-        if (idCmp === 0) {
-          // Same operation — compare insertionOffset
-          if (newFrag.insertionOffset < frag.insertionOffset) {
-            break;
-          }
-        }
-      }
-      insertIndex = i + 1;
+    if (frags.length === 0) {
+      frags.push(newFrag);
+      return;
     }
-    frags.splice(insertIndex, 0, newFrag);
+
+    // Binary search for the correct insertion position
+    let low = 0;
+    let high = frags.length;
+
+    while (low < high) {
+      const mid = (low + high) >>> 1;
+      const frag = frags[mid];
+      if (frag === undefined) {
+        // Skip undefined entries (shouldn't happen, but defensive)
+        low = mid + 1;
+        continue;
+      }
+
+      // Use same comparison as sortFragments for consistency
+      const cmp = this.compareFragmentsForSort(newFrag, frag);
+      if (cmp <= 0) {
+        high = mid;
+      } else {
+        low = mid + 1;
+      }
+    }
+
+    frags.splice(low, 0, newFrag);
+  }
+
+  /**
+   * Compare two fragments using the same logic as sortFragments.
+   * This ensures insertFragmentByLocator produces the same order as sorting.
+   * Returns: <0 if a should come before b, >0 if after, 0 if equal.
+   */
+  private compareFragmentsForSort(a: Fragment, b: Fragment): number {
+    // First, compare by locator prefix (not lexicographic!)
+    const locCmp = compareLocatorsForSort(a.locator, b.locator);
+    if (locCmp !== 0) return locCmp;
+
+    // Same prefix: tie-break by operation ID
+    const idCmp = compareOperationIds(a.insertionId, b.insertionId);
+    if (idCmp !== 0) return idCmp;
+
+    // Same operation: sort by insertionOffset (split parts)
+    const offsetCmp = a.insertionOffset - b.insertionOffset;
+    if (offsetCmp !== 0) return offsetCmp;
+
+    // Finally, sort by locator length (children after parent)
+    return a.locator.levels.length - b.locator.levels.length;
+  }
+
+  /**
+   * Find the correct tree index for inserting a fragment using full comparison.
+   * Uses binary search with O(log n) tree.get() per comparison = O(log² n) total.
+   * This ensures consistent ordering with sortFragments/insertFragmentByLocator.
+   */
+  private findTreeInsertIndex(newFrag: Fragment): number {
+    const n = this.fragments.length();
+    if (n === 0) {
+      return 0;
+    }
+
+    let low = 0;
+    let high = n;
+
+    while (low < high) {
+      const mid = (low + high) >>> 1;
+      const frag = this.fragments.get(mid);
+      if (frag === undefined) {
+        low = mid + 1;
+        continue;
+      }
+
+      const cmp = this.compareFragmentsForSort(newFrag, frag);
+      if (cmp <= 0) {
+        high = mid;
+      } else {
+        low = mid + 1;
+      }
+    }
+
+    return low;
   }
 
   /**
@@ -1280,7 +1420,7 @@ export class TextBuffer {
       return a.insertionOffset - b.insertionOffset;
     });
 
-    this.fragments = SumTree.fromItems(resultFrags, fragmentSummaryOps);
+    this.setFragments(resultFrags);
   }
 
   private applyRemoteUndo(op: UndoOperation): void {
@@ -1302,6 +1442,40 @@ export class TextBuffer {
   /** Get all fragments as an array. */
   private fragmentsArray(): Fragment[] {
     return this.fragments.toArray();
+  }
+
+  /** Check if an operation has already been applied. O(1) numeric lookup. */
+  private hasAppliedOp(id: OperationId): boolean {
+    return this.appliedOps.get(id.replicaId)?.has(id.counter) ?? false;
+  }
+
+  /** Mark an operation as applied. */
+  private markAppliedOp(id: OperationId): void {
+    let counters = this.appliedOps.get(id.replicaId);
+    if (counters === undefined) {
+      counters = new Set();
+      this.appliedOps.set(id.replicaId, counters);
+    }
+    counters.add(id.counter);
+  }
+
+  /**
+   * Replace the fragment tree with a new set of fragments.
+   * Rebuilds both the SumTree and the insertionId index for O(1) hasFragment checks.
+   */
+  private setFragments(frags: Fragment[]): void {
+    this.fragments = SumTree.fromItems(frags, fragmentSummaryOps);
+    const index = new Map<ReplicaId, Set<number>>();
+    for (const frag of frags) {
+      const rid = frag.insertionId.replicaId;
+      let counters = index.get(rid);
+      if (counters === undefined) {
+        counters = new Set();
+        index.set(rid, counters);
+      }
+      counters.add(frag.insertionId.counter);
+    }
+    this._fragmentIds = index;
   }
 
   // ---------------------------------------------------------------------------
@@ -1350,7 +1524,9 @@ export class TextBuffer {
       undoMap: undoMapEntries,
       undoStack,
       redoStack,
-      appliedOps: [...this.appliedOps],
+      appliedOps: [...this.appliedOps.entries()].flatMap(([rid, counters]) =>
+        [...counters].map((c) => `${rid}:${c}`),
+      ),
       nextTransactionId: this.nextTransactionId,
       groupDelay: this.groupDelay,
     };
@@ -1410,7 +1586,7 @@ export class TextBuffer {
 
       return createFragment(insertionId, sf.io, locator, sf.t, sf.v, deletions, baseLocator);
     });
-    buffer.fragments = SumTree.fromItems(fragments, fragmentSummaryOps);
+    buffer.setFragments(fragments);
 
     // Restore undo map
     buffer.undoMap.mergeFrom(
@@ -1442,8 +1618,20 @@ export class TextBuffer {
       })),
     }));
 
-    // Restore applied ops set
-    buffer.appliedOps = new Set(snapshot.appliedOps);
+    // Restore applied ops set (stored as "replicaId:counter" strings)
+    for (const key of snapshot.appliedOps) {
+      const colonIdx = key.indexOf(":");
+      if (colonIdx !== -1) {
+        const rid = replicaId(Number(key.slice(0, colonIdx)));
+        const counter = Number(key.slice(colonIdx + 1));
+        let counters = buffer.appliedOps.get(rid);
+        if (counters === undefined) {
+          counters = new Set();
+          buffer.appliedOps.set(rid, counters);
+        }
+        counters.add(counter);
+      }
+    }
 
     // Restore transaction state
     buffer.nextTransactionId = snapshot.nextTransactionId;

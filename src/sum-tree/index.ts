@@ -20,6 +20,11 @@ export interface Summary<S> {
   identity(): S;
   /** Combine two summaries (must be associative) */
   combine(left: S, right: S): S;
+  /**
+   * Optional: extract item count from a summary for O(log n) itemIndex().
+   * If not provided, falls back to O(n) recursive counting.
+   */
+  getItemCount?(summary: S): number;
 }
 
 /**
@@ -499,6 +504,50 @@ export class Cursor<T extends Summarizable<S>, S, D> {
       }
     }
   }
+
+  /**
+   * Get the 0-based item index of the current cursor position.
+   * Returns the number of items before the current position.
+   * O(log n) if the summary supports getItemCount, O(n) otherwise.
+   */
+  itemIndex(): number {
+    if (this._atEnd) {
+      return this.tree.length();
+    }
+
+    let index = 0;
+    const arena = this.tree.getArena();
+    const summaryOps = this.tree.getSummaryOps();
+
+    for (let i = 0; i < this.stack.length; i++) {
+      const entry = this.stack[i];
+      if (entry === undefined) continue;
+
+      // Count items in all siblings before current index
+      for (let j = 0; j < entry.childIndex; j++) {
+        if (arena.isLeaf(entry.nodeId)) {
+          // Each position before childIndex is one item
+          index++;
+        } else {
+          const childId = arena.getChild(entry.nodeId, j);
+          if (childId !== INVALID_NODE_ID) {
+            // Use O(1) summary lookup if available, otherwise O(subtree) traversal
+            const getItemCount = summaryOps.getItemCount;
+            if (getItemCount !== undefined) {
+              const summary = this.tree.getSummary(childId);
+              if (summary !== undefined) {
+                index += getItemCount(summary);
+              }
+            } else {
+              index += this.tree.countItems(childId);
+            }
+          }
+        }
+      }
+    }
+
+    return index;
+  }
 }
 
 /**
@@ -584,6 +633,53 @@ export class SumTree<T extends Summarizable<S>, S> {
    */
   push(item: T): SumTree<T, S> {
     return this.insertAt(this.length(), item);
+  }
+
+  /**
+   * Push an item to the end of the tree, mutating in place.
+   * This is O(log n) as it avoids the O(n) shallowClone and path copying.
+   * Use when you don't need to preserve the original tree.
+   */
+  pushMut(item: T): void {
+    this.insertAtMut(this.length(), item);
+  }
+
+  /**
+   * Insert an item at the given index, mutating in place.
+   * This is O(log n) as it avoids the O(n) shallowClone and path copying.
+   * Use when you don't need to preserve the original tree.
+   */
+  insertAtMut(index: number, item: T): void {
+    // Find the leaf and position for insertion
+    const path = this.findLeafForIndex(index);
+    if (path.length === 0) {
+      // Empty tree, insert into root
+      const items = [item];
+      this._root = this.createLeaf(items);
+      return;
+    }
+
+    // Insert directly into the existing leaf (no path cloning)
+    const leafEntry = path[path.length - 1];
+    if (leafEntry === undefined) {
+      return;
+    }
+
+    const leafData = this.arena.getItem(leafEntry.nodeId);
+    const items = leafData?.items ?? [];
+    items.splice(leafEntry.indexInNode, 0, item);
+
+    // Update leaf
+    this.arena.setItem(leafEntry.nodeId, { items });
+    this.arena.setCount(leafEntry.nodeId, items.length);
+
+    // Check for overflow and split if needed
+    if (items.length > this.branchingFactor) {
+      this.splitAndPropagate(path);
+    } else {
+      // Just update summaries up the path
+      this.updateSummariesUp(path);
+    }
   }
 
   /**
@@ -674,6 +770,43 @@ export class SumTree<T extends Summarizable<S>, S> {
   }
 
   /**
+   * Remove item at the given index, mutating the tree in place.
+   * Use when you don't need to preserve the original tree.
+   */
+  removeAtMut(index: number): void {
+    if (index < 0 || index >= this.length()) {
+      throw new Error(`Index ${index} out of bounds`);
+    }
+
+    const path = this.findLeafForIndex(index);
+    if (path.length === 0) {
+      return;
+    }
+
+    // Remove directly from the existing leaf (no path cloning)
+    const leafEntry = path[path.length - 1];
+    if (leafEntry === undefined) {
+      return;
+    }
+
+    const leafData = this.arena.getItem(leafEntry.nodeId);
+    const items = leafData?.items ?? [];
+    items.splice(leafEntry.indexInNode, 1);
+
+    // Update leaf
+    this.arena.setItem(leafEntry.nodeId, { items });
+    this.arena.setCount(leafEntry.nodeId, items.length);
+
+    // Check for underflow and merge if needed
+    const minItems = Math.floor(this.branchingFactor / 2);
+    if (items.length < minItems && path.length > 1) {
+      this.mergeOrRedistribute(path);
+    } else {
+      this.updateSummariesUp(path);
+    }
+  }
+
+  /**
    * Get item at index.
    */
   get(index: number): T | undefined {
@@ -693,8 +826,15 @@ export class SumTree<T extends Summarizable<S>, S> {
 
   /**
    * Get the number of items in the tree.
+   * O(1) if the summary supports getItemCount, O(n) otherwise.
    */
   length(): number {
+    if (this.summaryOps.getItemCount !== undefined) {
+      const summary = this.summaries.get(this._root);
+      if (summary !== undefined) {
+        return this.summaryOps.getItemCount(summary);
+      }
+    }
     return this.countItems(this._root);
   }
 
@@ -897,7 +1037,11 @@ export class SumTree<T extends Summarizable<S>, S> {
     return id;
   }
 
-  private countItems(nodeId: NodeId): number {
+  /**
+   * Count items in a subtree.
+   * Public to allow Cursor.itemIndex() to use it.
+   */
+  countItems(nodeId: NodeId): number {
     if (this.arena.isLeaf(nodeId)) {
       return this.arena.getCount(nodeId);
     }
@@ -966,7 +1110,15 @@ export class SumTree<T extends Summarizable<S>, S> {
         const childId = children[i];
         if (childId === undefined) continue;
 
-        const childCount = this.countItems(childId);
+        // Use O(1) summary lookup if available, otherwise O(subtree) traversal
+        let childCount: number;
+        const getItemCount = this.summaryOps.getItemCount;
+        if (getItemCount !== undefined) {
+          const summary = this.summaries.get(childId);
+          childCount = summary !== undefined ? getItemCount(summary) : this.countItems(childId);
+        } else {
+          childCount = this.countItems(childId);
+        }
 
         if (remaining < childCount || i === children.length - 1) {
           path.push({ nodeId: current, indexInNode: i });
