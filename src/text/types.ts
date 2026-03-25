@@ -129,6 +129,7 @@ export interface FragmentSummary {
   readonly deletedLen: number;
   readonly deletedLines: number;
   readonly maxInsertionId: OperationId;
+  readonly maxLocator: Locator;
 }
 
 // ---------------------------------------------------------------------------
