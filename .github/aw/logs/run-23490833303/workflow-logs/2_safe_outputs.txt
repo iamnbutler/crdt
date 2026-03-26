@@ -1,0 +1,1818 @@
+﻿2026-03-24T13:30:19.8679965Z Current runner version: '2.333.0'
+2026-03-24T13:30:19.8714692Z ##[group]Runner Image Provisioner
+2026-03-24T13:30:19.8716765Z Hosted Compute Agent
+2026-03-24T13:30:19.8717377Z Version: 20260213.493
+2026-03-24T13:30:19.8717936Z Commit: 5c115507f6dd24b8de37d8bbe0bb4509d0cc0fa3
+2026-03-24T13:30:19.8718673Z Build Date: 2026-02-13T00:28:41Z
+2026-03-24T13:30:19.8719245Z Worker ID: {576406fe-903c-46aa-a2b7-96e833379db9}
+2026-03-24T13:30:19.8719890Z Azure Region: centralus
+2026-03-24T13:30:19.8720411Z ##[endgroup]
+2026-03-24T13:30:19.8721931Z ##[group]VM Image
+2026-03-24T13:30:19.8722471Z - OS: Linux (x64)
+2026-03-24T13:30:19.8723001Z - Source: Docker
+2026-03-24T13:30:19.8723480Z - Name: ubuntu:24.04
+2026-03-24T13:30:19.8723935Z - Version: 20260323.53.1
+2026-03-24T13:30:19.8724714Z ##[endgroup]
+2026-03-24T13:30:19.8725980Z ##[group]GITHUB_TOKEN Permissions
+2026-03-24T13:30:19.8728731Z Contents: write
+2026-03-24T13:30:19.8729310Z Discussions: write
+2026-03-24T13:30:19.8730020Z Issues: write
+2026-03-24T13:30:19.8730637Z Metadata: read
+2026-03-24T13:30:19.8731077Z PullRequests: write
+2026-03-24T13:30:19.8731562Z ##[endgroup]
+2026-03-24T13:30:19.8734729Z Secret source: Actions
+2026-03-24T13:30:19.8735515Z Prepare workflow directory
+2026-03-24T13:30:19.9715416Z Prepare all required actions
+2026-03-24T13:30:19.9797679Z Getting action download info
+2026-03-24T13:30:20.6890683Z Download action repository 'github/gh-aw-actions@998487a673ace02b3d9586e7511268089af88971' (SHA:998487a673ace02b3d9586e7511268089af88971)
+2026-03-24T13:30:21.6480834Z Download action repository 'actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c' (SHA:3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c)
+2026-03-24T13:30:22.2962005Z Download action repository 'actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd' (SHA:de0fac2e4500dabe0009e67214ff5f5447ce83dd)
+2026-03-24T13:30:22.3816234Z Download action repository 'actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd' (SHA:ed597411d8f924073f98dfc5c65a23a2325f34cd)
+2026-03-24T13:30:22.8587497Z Download action repository 'actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f' (SHA:bbbca2ddaa5d8feaa63e36b76fdaad77386f024f)
+2026-03-24T13:30:23.1707660Z Complete job name: safe_outputs
+2026-03-24T13:30:23.2616216Z ##[group]Run github/gh-aw-actions/setup@998487a673ace02b3d9586e7511268089af88971
+2026-03-24T13:30:23.2617695Z with:
+2026-03-24T13:30:23.2618102Z   destination: /opt/gh-aw/actions
+2026-03-24T13:30:23.2618611Z   safe-output-custom-tokens: false
+2026-03-24T13:30:23.2619277Z env:
+2026-03-24T13:30:23.2619784Z   GH_AW_CALLER_WORKFLOW_ID: iamnbutler/crdt/daily-perf-improver
+2026-03-24T13:30:23.2620410Z   GH_AW_ENGINE_ID: claude
+2026-03-24T13:30:23.2620863Z   GH_AW_WORKFLOW_ID: daily-perf-improver
+2026-03-24T13:30:23.2621717Z   GH_AW_WORKFLOW_NAME: Daily Perf Improver
+2026-03-24T13:30:23.2622867Z   GH_AW_WORKFLOW_SOURCE: githubnext/agentics/workflows/daily-perf-improver.md@4957663821dbb3260348084fa2f1659701950fef
+2026-03-24T13:30:23.2624459Z   GH_AW_WORKFLOW_SOURCE_URL: https://github.com/githubnext/agentics/tree/4957663821dbb3260348084fa2f1659701950fef/workflows/daily-perf-improver.md
+2026-03-24T13:30:23.2625585Z ##[endgroup]
+2026-03-24T13:30:23.2757124Z ##[group]Run /home/runner/work/_actions/github/gh-aw-actions/998487a673ace02b3d9586e7511268089af88971/setup/setup.sh
+2026-03-24T13:30:23.2758585Z [36;1m/home/runner/work/_actions/github/gh-aw-actions/998487a673ace02b3d9586e7511268089af88971/setup/setup.sh[0m
+2026-03-24T13:30:23.2771156Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+2026-03-24T13:30:23.2771763Z env:
+2026-03-24T13:30:23.2772241Z   GH_AW_CALLER_WORKFLOW_ID: iamnbutler/crdt/daily-perf-improver
+2026-03-24T13:30:23.2773667Z   GH_AW_ENGINE_ID: claude
+2026-03-24T13:30:23.2774121Z   GH_AW_WORKFLOW_ID: daily-perf-improver
+2026-03-24T13:30:23.2774648Z   GH_AW_WORKFLOW_NAME: Daily Perf Improver
+2026-03-24T13:30:23.2775593Z   GH_AW_WORKFLOW_SOURCE: githubnext/agentics/workflows/daily-perf-improver.md@4957663821dbb3260348084fa2f1659701950fef
+2026-03-24T13:30:23.2777731Z   GH_AW_WORKFLOW_SOURCE_URL: https://github.com/githubnext/agentics/tree/4957663821dbb3260348084fa2f1659701950fef/workflows/daily-perf-improver.md
+2026-03-24T13:30:23.2780064Z   INPUT_DESTINATION: /opt/gh-aw/actions
+2026-03-24T13:30:23.2780600Z   INPUT_SAFE_OUTPUT_CUSTOM_TOKENS: false
+2026-03-24T13:30:23.2781080Z ##[endgroup]
+2026-03-24T13:30:23.3024023Z Copying activation files to /opt/gh-aw/actions
+2026-03-24T13:30:23.3024695Z Safe-output custom tokens support: false
+2026-03-24T13:30:23.3078934Z Created directory: /opt/gh-aw/actions
+2026-03-24T13:30:23.9965376Z Created /tmp/gh-aw directory
+2026-03-24T13:30:24.5969363Z Script directory: /home/runner/work/_actions/github/gh-aw-actions/998487a673ace02b3d9586e7511268089af88971/setup
+2026-03-24T13:30:24.5971954Z Looking for JavaScript sources in: /home/runner/work/_actions/github/gh-aw-actions/998487a673ace02b3d9586e7511268089af88971/setup/js
+2026-03-24T13:30:24.5973548Z Contents of /home/runner/work/_actions/github/gh-aw-actions/998487a673ace02b3d9586e7511268089af88971/setup:
+2026-03-24T13:30:24.5974450Z total 72
+2026-03-24T13:30:24.5974846Z drwxr-xr-x 6 runner runner  4096 Mar 24 13:30 .
+2026-03-24T13:30:24.5983854Z drwxr-xr-x 5 runner runner  4096 Mar 24 13:30 ..
+2026-03-24T13:30:24.5984694Z -rw-r--r-- 1 runner runner   873 Mar 17 14:23 action.yml
+2026-03-24T13:30:24.5985355Z drwxr-xr-x 3 runner runner 36864 Mar 24 13:30 js
+2026-03-24T13:30:24.5986681Z drwxr-xr-x 2 runner runner  4096 Mar 24 13:30 md
+2026-03-24T13:30:24.5987307Z -rwxr-xr-x 1 runner runner 11911 Mar 17 14:23 setup.sh
+2026-03-24T13:30:24.5987923Z drwxr-xr-x 2 runner runner  4096 Mar 24 13:30 sh
+2026-03-24T13:30:24.5988519Z drwxr-xr-x 2 runner runner  4096 Mar 24 13:30 src
+2026-03-24T13:30:24.5989438Z Files in /home/runner/work/_actions/github/gh-aw-actions/998487a673ace02b3d9586e7511268089af88971/setup/js:
+2026-03-24T13:30:24.5990287Z TESTING_LIVE_API.md
+2026-03-24T13:30:24.5990677Z add_comment.cjs
+2026-03-24T13:30:24.5992072Z add_comment.test.cjs
+2026-03-24T13:30:24.5993541Z add_copilot_reviewer.cjs
+2026-03-24T13:30:24.5994047Z add_copilot_reviewer.test.cjs
+2026-03-24T13:30:24.5994500Z add_labels.cjs
+2026-03-24T13:30:24.5994855Z add_labels.test.cjs
+2026-03-24T13:30:24.5995329Z add_reaction.cjs
+2026-03-24T13:30:24.5996100Z add_reaction.test.cjs
+2026-03-24T13:30:24.5996789Z add_reaction_and_edit_comment.cjs
+2026-03-24T13:30:24.5997686Z Found 460 files in /home/runner/work/_actions/github/gh-aw-actions/998487a673ace02b3d9586e7511268089af88971/setup/js
+2026-03-24T13:30:24.5998586Z Copied: add_comment.cjs
+2026-03-24T13:30:24.5999032Z Skipping test file: add_comment.test.cjs
+2026-03-24T13:30:24.6000412Z Copied: add_copilot_reviewer.cjs
+2026-03-24T13:30:24.6000945Z Skipping test file: add_copilot_reviewer.test.cjs
+2026-03-24T13:30:24.6001503Z Copied: add_labels.cjs
+2026-03-24T13:30:24.6001932Z Skipping test file: add_labels.test.cjs
+2026-03-24T13:30:24.6002419Z Copied: add_reaction.cjs
+2026-03-24T13:30:24.6002856Z Skipping test file: add_reaction.test.cjs
+2026-03-24T13:30:24.6003380Z Copied: add_reaction_and_edit_comment.cjs
+2026-03-24T13:30:24.6004010Z Skipping test file: add_reaction_and_edit_comment.test.cjs
+2026-03-24T13:30:24.6004697Z Copied: add_reviewer.cjs
+2026-03-24T13:30:24.6005146Z Skipping test file: add_reviewer.test.cjs
+2026-03-24T13:30:24.6005668Z Copied: add_workflow_run_comment.cjs
+2026-03-24T13:30:24.6006211Z Skipping test file: add_workflow_run_comment.test.cjs
+2026-03-24T13:30:24.6006991Z Copied: assign_agent_helpers.cjs
+2026-03-24T13:30:24.6007502Z Skipping test file: assign_agent_helpers.test.cjs
+2026-03-24T13:30:24.6008072Z Copied: assign_copilot_to_created_issues.cjs
+2026-03-24T13:30:24.6008713Z Skipping test file: assign_copilot_to_created_issues.test.cjs
+2026-03-24T13:30:24.6009317Z Copied: assign_issue.cjs
+2026-03-24T13:30:24.6009756Z Skipping test file: assign_issue.test.cjs
+2026-03-24T13:30:24.6010253Z Copied: assign_milestone.cjs
+2026-03-24T13:30:24.6010752Z Skipping test file: assign_milestone.test.cjs
+2026-03-24T13:30:24.6011279Z Copied: assign_to_agent.cjs
+2026-03-24T13:30:24.6012001Z Skipping test file: assign_to_agent.test.cjs
+2026-03-24T13:30:24.6012521Z Copied: assign_to_user.cjs
+2026-03-24T13:30:24.6012972Z Skipping test file: assign_to_user.test.cjs
+2026-03-24T13:30:24.6013503Z Copied: autofix_code_scanning_alert.cjs
+2026-03-24T13:30:24.6014091Z Skipping test file: autofix_code_scanning_alert.test.cjs
+2026-03-24T13:30:24.6014676Z Copied: call_workflow.cjs
+2026-03-24T13:30:24.6015119Z Skipping test file: call_workflow.test.cjs
+2026-03-24T13:30:24.6015699Z Skipping test file: check_admin_permissions.test.cjs
+2026-03-24T13:30:24.6016266Z Copied: check_command_position.cjs
+2026-03-24T13:30:24.6019495Z Skipping test file: check_command_position.test.cjs
+2026-03-24T13:30:24.6020097Z Copied: check_membership.cjs
+2026-03-24T13:30:24.6020594Z Skipping test file: check_membership.test.cjs
+2026-03-24T13:30:24.6021138Z Copied: check_permissions.cjs
+2026-03-24T13:30:24.6021636Z Skipping test file: check_permissions.test.cjs
+2026-03-24T13:30:24.6022209Z Copied: check_permissions_utils.cjs
+2026-03-24T13:30:24.6022779Z Skipping test file: check_permissions_utils.test.cjs
+2026-03-24T13:30:24.6023346Z Copied: check_rate_limit.cjs
+2026-03-24T13:30:24.6023825Z Skipping test file: check_rate_limit.test.cjs
+2026-03-24T13:30:24.6024367Z Copied: check_skip_bots.cjs
+2026-03-24T13:30:24.6024829Z Skipping test file: check_skip_bots.test.cjs
+2026-03-24T13:30:24.6025356Z Copied: check_skip_if_helpers.cjs
+2026-03-24T13:30:24.6025946Z Copied: check_skip_if_match.cjs
+2026-03-24T13:30:24.6026634Z Skipping test file: check_skip_if_match.test.cjs
+2026-03-24T13:30:24.6027204Z Copied: check_skip_if_no_match.cjs
+2026-03-24T13:30:24.6027726Z Skipping test file: check_skip_if_no_match.test.cjs
+2026-03-24T13:30:24.6028276Z Copied: check_skip_roles.cjs
+2026-03-24T13:30:24.6028745Z Skipping test file: check_skip_roles.test.cjs
+2026-03-24T13:30:24.6029261Z Copied: check_stop_time.cjs
+2026-03-24T13:30:24.6029722Z Skipping test file: check_stop_time.test.cjs
+2026-03-24T13:30:24.6030319Z Copied: check_team_member.cjs
+2026-03-24T13:30:24.6030823Z Skipping test file: check_team_member.test.cjs
+2026-03-24T13:30:24.6031371Z Copied: check_workflow_recompile_needed.cjs
+2026-03-24T13:30:24.6032848Z Skipping test file: check_workflow_recompile_needed.test.cjs
+2026-03-24T13:30:24.6033500Z Copied: check_workflow_timestamp.cjs
+2026-03-24T13:30:24.6034177Z Skipping test file: check_workflow_timestamp.test.cjs
+2026-03-24T13:30:24.6034766Z Copied: check_workflow_timestamp_api.cjs
+2026-03-24T13:30:24.6035360Z Skipping test file: check_workflow_timestamp_api.test.cjs
+2026-03-24T13:30:24.6035950Z Copied: checkout_pr_branch.cjs
+2026-03-24T13:30:24.6036648Z Skipping test file: checkout_pr_branch.test.cjs
+2026-03-24T13:30:24.6037211Z Copied: close_discussion.cjs
+2026-03-24T13:30:24.6037687Z Skipping test file: close_discussion.test.cjs
+2026-03-24T13:30:24.6038220Z Copied: close_entity_helpers.cjs
+2026-03-24T13:30:24.6038725Z Skipping test file: close_entity_helpers.test.cjs
+2026-03-24T13:30:24.6039285Z Copied: close_expired_discussions.cjs
+2026-03-24T13:30:24.6039860Z Skipping test file: close_expired_discussions.test.cjs
+2026-03-24T13:30:24.6040432Z Copied: close_expired_issues.cjs
+2026-03-24T13:30:24.6040938Z Skipping test file: close_expired_issues.test.cjs
+2026-03-24T13:30:24.6041494Z Copied: close_expired_pull_requests.cjs
+2026-03-24T13:30:24.6042083Z Skipping test file: close_expired_pull_requests.test.cjs
+2026-03-24T13:30:24.6042656Z Copied: close_issue.cjs
+2026-03-24T13:30:24.6043093Z Skipping test file: close_issue.test.cjs
+2026-03-24T13:30:24.6043589Z Copied: close_older_discussions.cjs
+2026-03-24T13:30:24.6044139Z Skipping test file: close_older_discussions.test.cjs
+2026-03-24T13:30:24.6044698Z Copied: close_older_entities.cjs
+2026-03-24T13:30:24.6045198Z Skipping test file: close_older_entities.test.cjs
+2026-03-24T13:30:24.6045744Z Copied: close_older_issues.cjs
+2026-03-24T13:30:24.6046233Z Skipping test file: close_older_issues.test.cjs
+2026-03-24T13:30:24.6046949Z Copied: close_pull_request.cjs
+2026-03-24T13:30:24.6047443Z Skipping test file: close_pull_request.test.cjs
+2026-03-24T13:30:24.6048143Z Copied: collect_ndjson_output.cjs
+2026-03-24T13:30:24.6048659Z Skipping test file: collect_ndjson_output.test.cjs
+2026-03-24T13:30:24.6050172Z Copied: comment_limit_helpers.cjs
+2026-03-24T13:30:24.6050726Z Skipping test file: comment_limit_helpers.test.cjs
+2026-03-24T13:30:24.6051275Z Copied: compute_text.cjs
+2026-03-24T13:30:24.6051722Z Skipping test file: compute_text.test.cjs
+2026-03-24T13:30:24.6052218Z Copied: constants.cjs
+2026-03-24T13:30:24.6052632Z Skipping test file: constants.test.cjs
+2026-03-24T13:30:24.6053124Z Copied: create_agent_session.cjs
+2026-03-24T13:30:24.6053639Z Skipping test file: create_agent_session.test.cjs
+2026-03-24T13:30:24.6054196Z Copied: create_code_scanning_alert.cjs
+2026-03-24T13:30:24.6054761Z Skipping test file: create_code_scanning_alert.test.cjs
+2026-03-24T13:30:24.6055329Z Copied: create_discussion.cjs
+2026-03-24T13:30:24.6055934Z Skipping test file: create_discussion_category_normalization.test.cjs
+2026-03-24T13:30:24.6056903Z Skipping test file: create_discussion_fallback.test.cjs
+2026-03-24T13:30:24.6057550Z Skipping test file: create_discussion_labels.test.cjs
+2026-03-24T13:30:24.6058106Z Copied: create_issue.cjs
+2026-03-24T13:30:24.6058568Z Skipping test file: create_issue.test.cjs
+2026-03-24T13:30:24.6059110Z Skipping test file: create_issue_group.test.cjs
+2026-03-24T13:30:24.6059710Z Skipping test file: create_issue_new_arch.test.cjs
+2026-03-24T13:30:24.6060301Z Copied: create_missing_data_issue.cjs
+2026-03-24T13:30:24.6060800Z Copied: create_missing_tool_issue.cjs
+2026-03-24T13:30:24.6061304Z Copied: create_pr_review_comment.cjs
+2026-03-24T13:30:24.6061852Z Skipping test file: create_pr_review_comment.test.cjs
+2026-03-24T13:30:24.6062409Z Copied: create_project.cjs
+2026-03-24T13:30:24.6062855Z Copied: create_project_status_update.cjs
+2026-03-24T13:30:24.6063449Z Skipping test file: create_project_status_update.test.cjs
+2026-03-24T13:30:24.6064041Z Copied: create_pull_request.cjs
+2026-03-24T13:30:24.6064542Z Skipping test file: create_pull_request.test.cjs
+2026-03-24T13:30:24.6065716Z Copied: demo_enhanced_errors.cjs
+2026-03-24T13:30:24.6066250Z Copied: determine_automatic_lockdown.cjs
+2026-03-24T13:30:24.6067227Z Skipping test file: determine_automatic_lockdown.test.cjs
+2026-03-24T13:30:24.6067842Z Copied: dispatch_workflow.cjs
+2026-03-24T13:30:24.6068349Z Skipping test file: dispatch_workflow.test.cjs
+2026-03-24T13:30:24.6068906Z Copied: display_file_helpers.cjs
+2026-03-24T13:30:24.6069412Z Skipping test file: display_file_helpers.test.cjs
+2026-03-24T13:30:24.6069978Z Copied: dynamic_checkout.cjs
+2026-03-24T13:30:24.6070453Z Skipping test file: dynamic_checkout.test.cjs
+2026-03-24T13:30:24.6070991Z Copied: ephemerals.cjs
+2026-03-24T13:30:24.6071412Z Skipping test file: ephemerals.test.cjs
+2026-03-24T13:30:24.6071906Z Copied: error_codes.cjs
+2026-03-24T13:30:24.6072431Z Copied: error_helpers.cjs
+2026-03-24T13:30:24.6072889Z Skipping test file: error_helpers.test.cjs
+2026-03-24T13:30:24.6073391Z Copied: error_recovery.cjs
+2026-03-24T13:30:24.6073853Z Skipping test file: error_recovery.test.cjs
+2026-03-24T13:30:24.6074366Z Copied: estimate_tokens.cjs
+2026-03-24T13:30:24.6074833Z Skipping test file: estimate_tokens.test.cjs
+2026-03-24T13:30:24.6075364Z Copied: expiration_helpers.cjs
+2026-03-24T13:30:24.6075835Z Copied: expired_entity_cleanup_helpers.cjs
+2026-03-24T13:30:24.6076528Z Copied: expired_entity_main_flow.cjs
+2026-03-24T13:30:24.6077085Z Skipping test file: expired_entity_main_flow.test.cjs
+2026-03-24T13:30:24.6077672Z Copied: expired_entity_search_helpers.cjs
+2026-03-24T13:30:24.6078298Z Skipping test file: expired_entity_search_helpers.test.cjs
+2026-03-24T13:30:24.6078894Z Copied: extra_empty_commit.cjs
+2026-03-24T13:30:24.6079393Z Skipping test file: extra_empty_commit.test.cjs
+2026-03-24T13:30:24.6079916Z Copied: file_helpers.cjs
+2026-03-24T13:30:24.6080363Z Skipping test file: file_helpers.test.cjs
+2026-03-24T13:30:24.6080863Z Copied: find_repo_checkout.cjs
+2026-03-24T13:30:24.6083173Z Skipping test file: find_repo_checkout.test.cjs
+2026-03-24T13:30:24.6085019Z Copied: firewall_blocked_domains.cjs
+2026-03-24T13:30:24.6085611Z Skipping test file: firewall_blocked_domains.test.cjs
+2026-03-24T13:30:24.6090767Z Copied: frontmatter_hash.cjs
+2026-03-24T13:30:24.6092253Z Skipping test file: frontmatter_hash.test.cjs
+2026-03-24T13:30:24.6093015Z Skipping test file: frontmatter_hash_github_api.test.cjs
+2026-03-24T13:30:24.6093640Z Copied: frontmatter_hash_pure.cjs
+2026-03-24T13:30:24.6195226Z Skipping test file: frontmatter_hash_pure.test.cjs
+2026-03-24T13:30:24.6196154Z Copied: fuzz_markdown_code_region_balancer_harness.cjs
+2026-03-24T13:30:24.6197110Z Copied: fuzz_mentions_harness.cjs
+2026-03-24T13:30:24.6197661Z Copied: fuzz_runtime_import_expressions_harness.cjs
+2026-03-24T13:30:24.6198400Z Skipping test file: fuzz_runtime_import_expressions_harness.test.cjs
+2026-03-24T13:30:24.6199098Z Copied: fuzz_sanitize_incoming_text_harness.cjs
+2026-03-24T13:30:24.6199653Z Copied: fuzz_sanitize_label_harness.cjs
+2026-03-24T13:30:24.6200199Z Copied: fuzz_sanitize_output_harness.cjs
+2026-03-24T13:30:24.6200775Z Copied: fuzz_template_substitution_harness.cjs
+2026-03-24T13:30:24.6201445Z Skipping test file: fuzz_template_substitution_harness.test.cjs
+2026-03-24T13:30:24.6202077Z Copied: fuzz_update_body_harness.cjs
+2026-03-24T13:30:24.6202565Z Copied: generate_aw_info.cjs
+2026-03-24T13:30:24.6203043Z Skipping test file: generate_aw_info.test.cjs
+2026-03-24T13:30:24.6205373Z Copied: generate_compact_schema.cjs
+2026-03-24T13:30:24.6206175Z Skipping test file: generate_compact_schema.test.cjs
+2026-03-24T13:30:24.6207215Z Copied: generate_footer.cjs
+2026-03-24T13:30:24.6207690Z Skipping test file: generate_footer.test.cjs
+2026-03-24T13:30:24.6208209Z Copied: generate_git_patch.cjs
+2026-03-24T13:30:24.6208704Z Skipping test file: generate_git_patch.test.cjs
+2026-03-24T13:30:24.6209246Z Copied: generate_history_link.cjs
+2026-03-24T13:30:24.6209767Z Skipping test file: generate_history_link.test.cjs
+2026-03-24T13:30:24.6210329Z Copied: generate_mcp_scripts_config.cjs
+2026-03-24T13:30:24.6210925Z Skipping test file: generate_mcp_scripts_config.test.cjs
+2026-03-24T13:30:24.6211518Z Copied: generate_safe_outputs_tools.cjs
+2026-03-24T13:30:24.6212410Z Skipping test file: generate_safe_outputs_tools.test.cjs
+2026-03-24T13:30:24.6213019Z Copied: generate_workflow_overview.cjs
+2026-03-24T13:30:24.6213594Z Skipping test file: generate_workflow_overview.test.cjs
+2026-03-24T13:30:24.6214178Z Copied: get_base_branch.cjs
+2026-03-24T13:30:24.6214637Z Skipping test file: get_base_branch.test.cjs
+2026-03-24T13:30:24.6215446Z Copied: get_current_branch.cjs
+2026-03-24T13:30:24.6218746Z Skipping test file: get_current_branch.test.cjs
+2026-03-24T13:30:24.6219935Z Copied: get_repository_url.cjs
+2026-03-24T13:30:24.6220438Z Skipping test file: get_repository_url.test.cjs
+2026-03-24T13:30:24.6220978Z Copied: get_tracker_id.cjs
+2026-03-24T13:30:24.6221430Z Skipping test file: get_tracker_id.test.cjs
+2026-03-24T13:30:24.6221938Z Copied: git_helpers.cjs
+2026-03-24T13:30:24.6222395Z Skipping test file: git_helpers.test.cjs
+2026-03-24T13:30:24.6222959Z Skipping test file: git_patch_integration.test.cjs
+2026-03-24T13:30:24.6223517Z Copied: github_api_helpers.cjs
+2026-03-24T13:30:24.6224019Z Skipping test file: github_api_helpers.test.cjs
+2026-03-24T13:30:24.6224564Z Copied: glob_pattern_helpers.cjs
+2026-03-24T13:30:24.6226151Z Skipping test file: glob_pattern_helpers.test.cjs
+2026-03-24T13:30:24.6227064Z Copied: handle_agent_failure.cjs
+2026-03-24T13:30:24.6227576Z Skipping test file: handle_agent_failure.test.cjs
+2026-03-24T13:30:24.6228138Z Copied: handle_create_pr_error.cjs
+2026-03-24T13:30:24.6228677Z Skipping test file: handle_create_pr_error.test.cjs
+2026-03-24T13:30:24.6229238Z Copied: handle_noop_message.cjs
+2026-03-24T13:30:24.6229741Z Skipping test file: handle_noop_message.test.cjs
+2026-03-24T13:30:24.6230277Z Copied: handler_auth.cjs
+2026-03-24T13:30:24.6230723Z Skipping test file: handler_auth.test.cjs
+2026-03-24T13:30:24.6231651Z Copied: hide_comment.cjs
+2026-03-24T13:30:24.6232979Z Skipping test file: hide_comment.test.cjs
+2026-03-24T13:30:24.6235110Z Copied: interpolate_prompt.cjs
+2026-03-24T13:30:24.6235730Z Skipping test file: interpolate_prompt.test.cjs
+2026-03-24T13:30:24.6236634Z Skipping test file: interpolate_prompt_additional.test.cjs
+2026-03-24T13:30:24.6237243Z Copied: is_truthy.cjs
+2026-03-24T13:30:24.6237657Z Skipping test file: is_truthy.test.cjs
+2026-03-24T13:30:24.6239198Z Copied: json_object_to_markdown.cjs
+2026-03-24T13:30:24.6240404Z Skipping test file: json_object_to_markdown.test.cjs
+2026-03-24T13:30:24.6240990Z Copied: json_repair_helpers.cjs
+2026-03-24T13:30:24.6241495Z Skipping test file: json_repair_helpers.test.cjs
+2026-03-24T13:30:24.6242058Z Copied: limit_enforcement_helpers.cjs
+2026-03-24T13:30:24.6242623Z Skipping test file: limit_enforcement_helpers.test.cjs
+2026-03-24T13:30:24.6243676Z Copied: link_sub_issue.cjs
+2026-03-24T13:30:24.6244155Z Skipping test file: link_sub_issue.test.cjs
+2026-03-24T13:30:24.6244781Z Copied: load_agent_output.cjs
+2026-03-24T13:30:24.6248057Z Skipping test file: load_agent_output.test.cjs
+2026-03-24T13:30:24.6248717Z Copied: lock-issue.cjs
+2026-03-24T13:30:24.6249173Z Skipping test file: lock-issue.test.cjs
+2026-03-24T13:30:24.6249708Z Copied: log_parser_bootstrap.cjs
+2026-03-24T13:30:24.6250241Z Skipping test file: log_parser_bootstrap.test.cjs
+2026-03-24T13:30:24.6250802Z Copied: log_parser_shared.cjs
+2026-03-24T13:30:24.6251290Z Skipping test file: log_parser_shared.test.cjs
+2026-03-24T13:30:24.6252625Z Copied: manifest_file_helpers.cjs
+2026-03-24T13:30:24.6253177Z Skipping test file: manifest_file_helpers.test.cjs
+2026-03-24T13:30:24.6253786Z Copied: mark_pull_request_as_ready_for_review.cjs
+2026-03-24T13:30:24.6254352Z Copied: markdown_code_region_balancer.cjs
+2026-03-24T13:30:24.6254964Z Skipping test file: markdown_code_region_balancer.test.cjs
+2026-03-24T13:30:24.6255593Z Copied: markdown_transformer.cjs
+2026-03-24T13:30:24.6256122Z Skipping test file: markdown_transformer.test.cjs
+2026-03-24T13:30:24.6256955Z Copied: markdown_unfencing.cjs
+2026-03-24T13:30:24.6257461Z Skipping test file: markdown_unfencing.test.cjs
+2026-03-24T13:30:24.6258962Z Copied: mcp-scripts-runner.cjs
+2026-03-24T13:30:24.6259691Z Skipping test file: mcp-scripts-runner.test.cjs
+2026-03-24T13:30:24.6260280Z Copied: mcp_enhanced_errors.cjs
+2026-03-24T13:30:24.6261345Z Skipping test file: mcp_enhanced_errors.test.cjs
+2026-03-24T13:30:24.6261899Z Copied: mcp_handler_go.cjs
+2026-03-24T13:30:24.6263638Z Skipping test file: mcp_handler_go.test.cjs
+2026-03-24T13:30:24.6265021Z Copied: mcp_handler_javascript.cjs
+2026-03-24T13:30:24.6266105Z Skipping test file: mcp_handler_javascript.test.cjs
+2026-03-24T13:30:24.6266911Z Copied: mcp_handler_python.cjs
+2026-03-24T13:30:24.6267369Z Copied: mcp_handler_shell.cjs
+2026-03-24T13:30:24.6267827Z Copied: mcp_http_transport.cjs
+2026-03-24T13:30:24.6268330Z Skipping test file: mcp_http_transport.test.cjs
+2026-03-24T13:30:24.6268873Z Copied: mcp_logger.cjs
+2026-03-24T13:30:24.6269399Z Skipping test file: mcp_logger.test.cjs
+2026-03-24T13:30:24.6269919Z Copied: mcp_scripts_bootstrap.cjs
+2026-03-24T13:30:24.6270456Z Skipping test file: mcp_scripts_bootstrap.test.cjs
+2026-03-24T13:30:24.6272109Z Copied: mcp_scripts_config_loader.cjs
+2026-03-24T13:30:24.6272710Z Skipping test file: mcp_scripts_config_loader.test.cjs
+2026-03-24T13:30:24.6273291Z Copied: mcp_scripts_mcp_server.cjs
+2026-03-24T13:30:24.6273839Z Skipping test file: mcp_scripts_mcp_server.test.cjs
+2026-03-24T13:30:24.6274430Z Copied: mcp_scripts_mcp_server_http.cjs
+2026-03-24T13:30:24.6275021Z Skipping test file: mcp_scripts_mcp_server_http.test.cjs
+2026-03-24T13:30:24.6275625Z Copied: mcp_scripts_tool_factory.cjs
+2026-03-24T13:30:24.6276176Z Skipping test file: mcp_scripts_tool_factory.test.cjs
+2026-03-24T13:30:24.6277697Z Copied: mcp_scripts_validation.cjs
+2026-03-24T13:30:24.6278268Z Skipping test file: mcp_scripts_validation.test.cjs
+2026-03-24T13:30:24.6278835Z Copied: mcp_server_core.cjs
+2026-03-24T13:30:24.6279295Z Skipping test file: mcp_server_core.test.cjs
+2026-03-24T13:30:24.6280061Z Copied: merge_remote_agent_github_folder.cjs
+2026-03-24T13:30:24.6280556Z Copied: messages.cjs
+2026-03-24T13:30:24.6280973Z Skipping test file: messages.test.cjs
+2026-03-24T13:30:24.6281482Z Copied: messages_close_discussion.cjs
+2026-03-24T13:30:24.6281965Z Copied: messages_core.cjs
+2026-03-24T13:30:24.6282421Z Skipping test file: messages_core.test.cjs
+2026-03-24T13:30:24.6283034Z Copied: messages_footer.cjs
+2026-03-24T13:30:24.6284122Z Copied: messages_run_status.cjs
+2026-03-24T13:30:24.6284579Z Copied: messages_staged.cjs
+2026-03-24T13:30:24.6285011Z Copied: missing_data.cjs
+2026-03-24T13:30:24.6285451Z Skipping test file: missing_data.test.cjs
+2026-03-24T13:30:24.6285974Z Copied: missing_info_formatter.cjs
+2026-03-24T13:30:24.6286712Z Skipping test file: missing_info_formatter.test.cjs
+2026-03-24T13:30:24.6287280Z Copied: missing_issue_helpers.cjs
+2026-03-24T13:30:24.6287809Z Skipping test file: missing_issue_helpers.test.cjs
+2026-03-24T13:30:24.6288371Z Copied: missing_messages_helper.cjs
+2026-03-24T13:30:24.6289698Z Skipping test file: missing_messages_helper.test.cjs
+2026-03-24T13:30:24.6290270Z Copied: missing_tool.cjs
+2026-03-24T13:30:24.6290717Z Skipping test file: missing_tool.test.cjs
+2026-03-24T13:30:24.6291204Z Copied: noop.cjs
+2026-03-24T13:30:24.6293589Z Skipping test file: noop.test.cjs
+2026-03-24T13:30:24.6294096Z Copied: noop_handler.cjs
+2026-03-24T13:30:24.6295262Z Skipping test file: noop_handler.test.cjs
+2026-03-24T13:30:24.6297068Z Copied: normalize_branch_name.cjs
+2026-03-24T13:30:24.6297621Z Skipping test file: normalize_branch_name.test.cjs
+2026-03-24T13:30:24.6298200Z Copied: notify_comment_error.cjs
+2026-03-24T13:30:24.6298713Z Skipping test file: notify_comment_error.test.cjs
+2026-03-24T13:30:24.6299271Z Copied: parse_claude_log.cjs
+2026-03-24T13:30:24.6299747Z Skipping test file: parse_claude_log.test.cjs
+2026-03-24T13:30:24.6300275Z Copied: parse_codex_log.cjs
+2026-03-24T13:30:24.6300738Z Skipping test file: parse_codex_log.test.cjs
+2026-03-24T13:30:24.6302312Z Copied: parse_copilot_log.cjs
+2026-03-24T13:30:24.6304131Z Skipping test file: parse_copilot_log.test.cjs
+2026-03-24T13:30:24.6304708Z Copied: parse_custom_log.cjs
+2026-03-24T13:30:24.6305387Z Skipping test file: parse_custom_log.test.cjs
+2026-03-24T13:30:24.6305941Z Copied: parse_firewall_logs.cjs
+2026-03-24T13:30:24.6306677Z Skipping test file: parse_firewall_logs.test.cjs
+2026-03-24T13:30:24.6307239Z Copied: parse_gemini_log.cjs
+2026-03-24T13:30:24.6307729Z Skipping test file: parse_gemini_log.test.cjs
+2026-03-24T13:30:24.6309329Z Copied: parse_mcp_gateway_log.cjs
+2026-03-24T13:30:24.6310053Z Skipping test file: parse_mcp_gateway_log.test.cjs
+2026-03-24T13:30:24.6311168Z Copied: parse_mcp_scripts_logs.cjs
+2026-03-24T13:30:24.6311715Z Skipping test file: parse_mcp_scripts_logs.test.cjs
+2026-03-24T13:30:24.6312302Z Copied: parse_threat_detection_results.cjs
+2026-03-24T13:30:24.6312818Z Copied: pr_helpers.cjs
+2026-03-24T13:30:24.6313249Z Skipping test file: pr_helpers.test.cjs
+2026-03-24T13:30:24.6313757Z Copied: pr_review_buffer.cjs
+2026-03-24T13:30:24.6315258Z Skipping test file: pr_review_buffer.test.cjs
+2026-03-24T13:30:24.6315961Z Copied: push_repo_memory.cjs
+2026-03-24T13:30:24.6438689Z Skipping test file: push_repo_memory.test.cjs
+2026-03-24T13:30:24.6439520Z Copied: push_to_pull_request_branch.cjs
+2026-03-24T13:30:24.6440150Z Skipping test file: push_to_pull_request_branch.test.cjs
+2026-03-24T13:30:24.6440738Z Copied: read_buffer.cjs
+2026-03-24T13:30:24.6441167Z Skipping test file: read_buffer.test.cjs
+2026-03-24T13:30:24.6441671Z Copied: redact_secrets.cjs
+2026-03-24T13:30:24.6442124Z Skipping test file: redact_secrets.test.cjs
+2026-03-24T13:30:24.6442651Z Copied: remove_duplicate_title.cjs
+2026-03-24T13:30:24.6443166Z Skipping test file: remove_duplicate_title.test.cjs
+2026-03-24T13:30:24.6444360Z Copied: remove_labels.cjs
+2026-03-24T13:30:24.6444824Z Skipping test file: remove_labels.test.cjs
+2026-03-24T13:30:24.6445353Z Copied: remove_trigger_label.cjs
+2026-03-24T13:30:24.6446165Z Copied: render_template.cjs
+2026-03-24T13:30:24.6446890Z Skipping test file: render_template.test.cjs
+2026-03-24T13:30:24.6447429Z Copied: reply_to_pr_review_comment.cjs
+2026-03-24T13:30:24.6448001Z Skipping test file: reply_to_pr_review_comment.test.cjs
+2026-03-24T13:30:24.6448575Z Copied: repo_helpers.cjs
+2026-03-24T13:30:24.6449007Z Skipping test file: repo_helpers.test.cjs
+2026-03-24T13:30:24.6450238Z Copied: resolve_host_repo.cjs
+2026-03-24T13:30:24.6450730Z Skipping test file: resolve_host_repo.test.cjs
+2026-03-24T13:30:24.6451260Z Copied: resolve_mentions.cjs
+2026-03-24T13:30:24.6451733Z Skipping test file: resolve_mentions.test.cjs
+2026-03-24T13:30:24.6452278Z Copied: resolve_mentions_from_payload.cjs
+2026-03-24T13:30:24.6452795Z Copied: resolve_pr_review_thread.cjs
+2026-03-24T13:30:24.6453337Z Skipping test file: resolve_pr_review_thread.test.cjs
+2026-03-24T13:30:24.6453924Z Copied: run_operation_update_upgrade.cjs
+2026-03-24T13:30:24.6457316Z Skipping test file: run_operation_update_upgrade.test.cjs
+2026-03-24T13:30:24.6459411Z Copied: runtime_import.cjs
+2026-03-24T13:30:24.6459910Z Skipping test file: runtime_import.test.cjs
+2026-03-24T13:30:24.6460452Z Copied: safe-outputs-mcp-server.cjs
+2026-03-24T13:30:24.6462708Z Copied: safe_output_handler_manager.cjs
+2026-03-24T13:30:24.6463379Z Skipping test file: safe_output_handler_manager.test.cjs
+2026-03-24T13:30:24.6463975Z Copied: safe_output_helpers.cjs
+2026-03-24T13:30:24.6464471Z Skipping test file: safe_output_helpers.test.cjs
+2026-03-24T13:30:24.6465022Z Copied: safe_output_manifest.cjs
+2026-03-24T13:30:24.6465563Z Skipping test file: safe_output_manifest.test.cjs
+2026-03-24T13:30:24.6466139Z Copied: safe_output_processor.cjs
+2026-03-24T13:30:24.6469704Z Skipping test file: safe_output_processor.test.cjs
+2026-03-24T13:30:24.6470826Z Copied: safe_output_summary.cjs
+2026-03-24T13:30:24.6471848Z Skipping test file: safe_output_summary.test.cjs
+2026-03-24T13:30:24.6474585Z Copied: safe_output_topological_sort.cjs
+2026-03-24T13:30:24.6499599Z Skipping test file: safe_output_topological_sort.test.cjs
+2026-03-24T13:30:24.6503711Z Copied: safe_output_type_validator.cjs
+2026-03-24T13:30:24.6505232Z Skipping test file: safe_output_type_validator.test.cjs
+2026-03-24T13:30:24.6508541Z Skipping test file: safe_output_types_validation.test.cjs
+2026-03-24T13:30:24.6510972Z Copied: safe_output_validator.cjs
+2026-03-24T13:30:24.6511570Z Skipping test file: safe_output_validator.test.cjs
+2026-03-24T13:30:24.6513777Z Copied: safe_outputs_action_outputs.cjs
+2026-03-24T13:30:24.6515684Z Skipping test file: safe_outputs_action_outputs.test.cjs
+2026-03-24T13:30:24.6517077Z Copied: safe_outputs_append.cjs
+2026-03-24T13:30:24.6520978Z Skipping test file: safe_outputs_append.test.cjs
+2026-03-24T13:30:24.6522139Z Copied: safe_outputs_bootstrap.cjs
+2026-03-24T13:30:24.6523240Z Skipping test file: safe_outputs_bootstrap.test.cjs
+2026-03-24T13:30:24.6524654Z Skipping test file: safe_outputs_branch_detection.test.cjs
+2026-03-24T13:30:24.6525815Z Copied: safe_outputs_config.cjs
+2026-03-24T13:30:24.6527572Z Skipping test file: safe_outputs_config.test.cjs
+2026-03-24T13:30:24.6528490Z Copied: safe_outputs_handlers.cjs
+2026-03-24T13:30:24.6533981Z Skipping test file: safe_outputs_handlers.test.cjs
+2026-03-24T13:30:24.6535587Z Skipping test file: safe_outputs_mcp_add_comment_constraints.test.cjs
+2026-03-24T13:30:24.6536920Z Copied: safe_outputs_mcp_client.cjs
+2026-03-24T13:30:24.6537474Z Skipping test file: safe_outputs_mcp_client.test.cjs
+2026-03-24T13:30:24.6538150Z Skipping test file: safe_outputs_mcp_error_messages.test.cjs
+2026-03-24T13:30:24.6539677Z Skipping test file: safe_outputs_mcp_large_content.test.cjs
+2026-03-24T13:30:24.6540486Z Skipping test file: safe_outputs_mcp_schema_validation.test.cjs
+2026-03-24T13:30:24.6541669Z Copied: safe_outputs_mcp_server.cjs
+2026-03-24T13:30:24.6542927Z Skipping test file: safe_outputs_mcp_server.test.cjs
+2026-03-24T13:30:24.6543620Z Skipping test file: safe_outputs_mcp_server_defaults.test.cjs
+2026-03-24T13:30:24.6544251Z Copied: safe_outputs_mcp_server_http.cjs
+2026-03-24T13:30:24.6545157Z Skipping test file: safe_outputs_mcp_server_http_call_workflow.test.cjs
+2026-03-24T13:30:24.6547006Z Skipping test file: safe_outputs_mcp_server_http_dispatch.test.cjs
+2026-03-24T13:30:24.6548813Z Skipping test file: safe_outputs_mcp_server_patch.test.cjs
+2026-03-24T13:30:24.6549895Z Copied: safe_outputs_tools_loader.cjs
+2026-03-24T13:30:24.6550492Z Skipping test file: safe_outputs_tools_loader.test.cjs
+2026-03-24T13:30:24.6551164Z Skipping test file: safe_outputs_type_validation.test.cjs
+2026-03-24T13:30:24.6551763Z Copied: sanitize_content.cjs
+2026-03-24T13:30:24.6552553Z Skipping test file: sanitize_content.test.cjs
+2026-03-24T13:30:24.6553615Z Copied: sanitize_content_core.cjs
+2026-03-24T13:30:24.6554109Z Copied: sanitize_incoming_text.cjs
+2026-03-24T13:30:24.6555031Z Copied: sanitize_label_content.cjs
+2026-03-24T13:30:24.6558111Z Skipping test file: sanitize_label_content.test.cjs
+2026-03-24T13:30:24.6558699Z Copied: sanitize_output.cjs
+2026-03-24T13:30:24.6559190Z Skipping test file: sanitize_output.test.cjs
+2026-03-24T13:30:24.6559701Z Copied: sanitize_title.cjs
+2026-03-24T13:30:24.6560526Z Skipping test file: sanitize_title.test.cjs
+2026-03-24T13:30:24.6562304Z Copied: sanitize_workflow_name.cjs
+2026-03-24T13:30:24.6562869Z Skipping test file: sanitize_workflow_name.test.cjs
+2026-03-24T13:30:24.6563437Z Copied: sanitized_logging.cjs
+2026-03-24T13:30:24.6563924Z Skipping test file: sanitized_logging.test.cjs
+2026-03-24T13:30:24.6564462Z Copied: set_issue_type.cjs
+2026-03-24T13:30:24.6564910Z Skipping test file: set_issue_type.test.cjs
+2026-03-24T13:30:24.6565421Z Copied: setup_globals.cjs
+2026-03-24T13:30:24.6565889Z Skipping test file: setup_sh_file_lists.test.cjs
+2026-03-24T13:30:24.6567791Z Copied: setup_threat_detection.cjs
+2026-03-24T13:30:24.6568303Z Copied: shim.cjs
+2026-03-24T13:30:24.6568691Z Copied: staged_preview.cjs
+2026-03-24T13:30:24.6569151Z Skipping test file: staged_preview.test.cjs
+2026-03-24T13:30:24.6569676Z Copied: sub_issue_helpers.cjs
+2026-03-24T13:30:24.6570181Z Skipping test file: sub_issue_helpers.test.cjs
+2026-03-24T13:30:24.6570704Z Copied: submit_pr_review.cjs
+2026-03-24T13:30:24.6571354Z Skipping test file: submit_pr_review.test.cjs
+2026-03-24T13:30:24.6572276Z Copied: substitute_placeholders.cjs
+2026-03-24T13:30:24.6573545Z Skipping test file: substitute_placeholders.test.cjs
+2026-03-24T13:30:24.6574147Z Copied: templatable.cjs
+2026-03-24T13:30:24.6574589Z Skipping test file: templatable.test.cjs
+2026-03-24T13:30:24.6575093Z Copied: temporary_id.cjs
+2026-03-24T13:30:24.6575537Z Skipping test file: temporary_id.test.cjs
+2026-03-24T13:30:24.6576763Z Copied: test-live-github-api.cjs
+2026-03-24T13:30:24.6577231Z Copied: unassign_from_user.cjs
+2026-03-24T13:30:24.6577721Z Skipping test file: unassign_from_user.test.cjs
+2026-03-24T13:30:24.6578239Z Copied: unlock-issue.cjs
+2026-03-24T13:30:24.6579833Z Skipping test file: unlock-issue.test.cjs
+2026-03-24T13:30:24.6580376Z Copied: update_activation_comment.cjs
+2026-03-24T13:30:24.6580965Z Skipping test file: update_activation_comment.test.cjs
+2026-03-24T13:30:24.6581546Z Copied: update_context_helpers.cjs
+2026-03-24T13:30:24.6582074Z Skipping test file: update_context_helpers.test.cjs
+2026-03-24T13:30:24.6582636Z Copied: update_discussion.cjs
+2026-03-24T13:30:24.6583076Z Copied: update_handler_factory.cjs
+2026-03-24T13:30:24.6583590Z Skipping test file: update_handler_factory.test.cjs
+2026-03-24T13:30:24.6584892Z Copied: update_issue.cjs
+2026-03-24T13:30:24.6585372Z Skipping test file: update_issue.test.cjs
+2026-03-24T13:30:24.6585929Z Skipping test file: update_issue_generator.test.cjs
+2026-03-24T13:30:24.6587471Z Copied: update_pr_description_helpers.cjs
+2026-03-24T13:30:24.6588095Z Skipping test file: update_pr_description_helpers.test.cjs
+2026-03-24T13:30:24.6588691Z Copied: update_project.cjs
+2026-03-24T13:30:24.6589136Z Skipping test file: update_project.test.cjs
+2026-03-24T13:30:24.6589646Z Copied: update_pull_request.cjs
+2026-03-24T13:30:24.6590740Z Skipping test file: update_pull_request.test.cjs
+2026-03-24T13:30:24.6591473Z Copied: update_release.cjs
+2026-03-24T13:30:24.6591930Z Skipping test file: update_release.test.cjs
+2026-03-24T13:30:24.6592431Z Copied: update_runner.cjs
+2026-03-24T13:30:24.6592881Z Skipping test file: update_runner.test.cjs
+2026-03-24T13:30:24.6593830Z Copied: upload_assets.cjs
+2026-03-24T13:30:24.6598084Z Skipping test file: upload_assets.test.cjs
+2026-03-24T13:30:24.6598656Z Copied: validate_context_variables.cjs
+2026-03-24T13:30:24.6599244Z Skipping test file: validate_context_variables.test.cjs
+2026-03-24T13:30:24.6600272Z Copied: validate_lockdown_requirements.cjs
+2026-03-24T13:30:24.6613613Z Skipping test file: validate_lockdown_requirements.test.cjs
+2026-03-24T13:30:24.6614284Z Copied: validate_memory_files.cjs
+2026-03-24T13:30:24.6615308Z Skipping test file: validate_memory_files.test.cjs
+2026-03-24T13:30:24.6615876Z Copied: validate_secrets.cjs
+2026-03-24T13:30:24.6616652Z Skipping test file: validate_secrets.test.cjs
+2026-03-24T13:30:24.6618073Z Copied: workflow_metadata_helpers.cjs
+2026-03-24T13:30:24.6619508Z Skipping test file: workflow_metadata_helpers.test.cjs
+2026-03-24T13:30:24.6621164Z Copied: write_large_content_to_file.cjs
+2026-03-24T13:30:24.6621788Z Skipping test file: write_large_content_to_file.test.cjs
+2026-03-24T13:30:24.6622932Z Copied: package-lock.json
+2026-03-24T13:30:24.6623369Z Copied: package.json
+2026-03-24T13:30:24.6623767Z Copied: safe_outputs_tools.json
+2026-03-24T13:30:24.6628277Z Copied: tsconfig.build.json
+2026-03-24T13:30:24.6628879Z Copied: tsconfig.json
+2026-03-24T13:30:24.6629811Z Found shell scripts directory: /home/runner/work/_actions/github/gh-aw-actions/998487a673ace02b3d9586e7511268089af88971/setup/sh
+2026-03-24T13:30:24.6630880Z Copied shell script: append_agent_step_summary.sh
+2026-03-24T13:30:24.6636290Z Copied shell script: check_mcp_servers.sh
+2026-03-24T13:30:24.6637173Z Copied shell script: check_mcp_servers_test.sh
+2026-03-24T13:30:24.6638150Z Copied shell script: clean_git_credentials.sh
+2026-03-24T13:30:24.6678761Z Copied shell script: clean_git_credentials_test.sh
+2026-03-24T13:30:24.6680223Z Copied shell script: clone_repo_memory_branch.sh
+2026-03-24T13:30:24.6681111Z Copied shell script: compute_artifact_prefix.sh
+2026-03-24T13:30:24.6681706Z Copied shell script: configure_gh_for_ghe.sh
+2026-03-24T13:30:24.6682748Z Copied shell script: configure_gh_for_ghe_test.sh
+2026-03-24T13:30:24.6683428Z Copied shell script: convert_gateway_config_claude.sh
+2026-03-24T13:30:24.6684477Z Copied shell script: convert_gateway_config_codex.sh
+2026-03-24T13:30:24.6685641Z Copied shell script: convert_gateway_config_codex_test.sh
+2026-03-24T13:30:24.6688985Z Copied shell script: convert_gateway_config_copilot.sh
+2026-03-24T13:30:24.6691357Z Copied shell script: convert_gateway_config_gemini.sh
+2026-03-24T13:30:24.6698432Z Copied shell script: create_cache_memory_dir.sh
+2026-03-24T13:30:24.6699618Z Copied shell script: create_gh_aw_tmp_dir.sh
+2026-03-24T13:30:24.6700175Z Copied shell script: create_prompt_first.sh
+2026-03-24T13:30:24.6700796Z Copied shell script: detect_inference_access_error.sh
+2026-03-24T13:30:24.6701408Z Copied shell script: download_docker_images.sh
+2026-03-24T13:30:24.6701993Z Copied shell script: download_docker_images_test.sh
+2026-03-24T13:30:24.6702875Z Copied shell script: generate_git_patch.sh
+2026-03-24T13:30:24.6703403Z Copied shell script: install_awf_binary.sh
+2026-03-24T13:30:24.6703933Z Copied shell script: install_copilot_cli.sh
+2026-03-24T13:30:24.6704469Z Copied shell script: install_docker_macos.sh
+2026-03-24T13:30:24.6706009Z Copied shell script: print_prompt_summary.sh
+2026-03-24T13:30:24.6706797Z Copied shell script: sanitize_path.sh
+2026-03-24T13:30:24.6707306Z Copied shell script: sanitize_path_test.sh
+2026-03-24T13:30:24.6707820Z Copied shell script: start_mcp_gateway.sh
+2026-03-24T13:30:24.6708604Z Copied shell script: start_mcp_gateway_test.sh
+2026-03-24T13:30:24.6709206Z Copied shell script: start_mcp_scripts_server.sh
+2026-03-24T13:30:24.6710970Z Copied shell script: start_safe_outputs_server.sh
+2026-03-24T13:30:24.6714045Z Copied shell script: stop_mcp_gateway.sh
+2026-03-24T13:30:24.6757058Z Copied shell script: validate_gatewayed_server.sh
+2026-03-24T13:30:24.6757903Z Copied shell script: validate_gatewayed_server_test.sh
+2026-03-24T13:30:24.6758525Z Copied shell script: validate_multi_secret.sh
+2026-03-24T13:30:24.6759126Z Copied shell script: validate_prompt_placeholders.sh
+2026-03-24T13:30:24.6760268Z Copied shell script: validate_prompt_placeholders_test.sh
+2026-03-24T13:30:24.6761266Z Copied shell script: verify_mcp_gateway_health.sh
+2026-03-24T13:30:24.6762455Z Successfully copied 275 files to /opt/gh-aw/actions
+2026-03-24T13:30:24.6764315Z Copying prompt markdown files to /opt/gh-aw/prompts
+2026-03-24T13:30:24.6765439Z Found markdown prompts directory: /home/runner/work/_actions/github/gh-aw-actions/998487a673ace02b3d9586e7511268089af88971/setup/md
+2026-03-24T13:30:24.6766742Z Copied prompt: agent_failure_comment.md
+2026-03-24T13:30:24.6767499Z Copied prompt: agent_failure_issue.md
+2026-03-24T13:30:24.6768234Z Copied prompt: agentic_workflows_guide.md
+2026-03-24T13:30:24.6768756Z Copied prompt: cache_memory_prompt.md
+2026-03-24T13:30:24.6769278Z Copied prompt: cache_memory_prompt_multi.md
+2026-03-24T13:30:24.6770241Z Copied prompt: github_mcp_tools_prompt.md
+2026-03-24T13:30:24.6770866Z Copied prompt: github_mcp_tools_with_safeoutputs_prompt.md
+2026-03-24T13:30:24.6771480Z Copied prompt: inference_access_error.md
+2026-03-24T13:30:24.6771989Z Copied prompt: issue_group_parent.md
+2026-03-24T13:30:24.6774078Z Copied prompt: manifest_protection_create_pr_fallback.md
+2026-03-24T13:30:24.6776241Z Copied prompt: manifest_protection_push_failed_fallback.md
+2026-03-24T13:30:24.6779422Z Copied prompt: manifest_protection_push_to_pr_fallback.md
+2026-03-24T13:30:24.6780087Z Copied prompt: markdown.md
+2026-03-24T13:30:24.6780919Z Copied prompt: missing_data_issue.md
+2026-03-24T13:30:24.6781609Z Copied prompt: missing_tool_issue.md
+2026-03-24T13:30:24.6782680Z Copied prompt: noop_comment.md
+2026-03-24T13:30:24.6783164Z Copied prompt: noop_runs_issue.md
+2026-03-24T13:30:24.6783633Z Copied prompt: playwright_prompt.md
+2026-03-24T13:30:24.6784124Z Copied prompt: pr_checkout_failure.md
+2026-03-24T13:30:24.6785307Z Copied prompt: pr_context_prompt.md
+2026-03-24T13:30:24.6785826Z Copied prompt: repo_memory_prompt.md
+2026-03-24T13:30:24.6786554Z Copied prompt: repo_memory_prompt_multi.md
+2026-03-24T13:30:24.6787370Z Copied prompt: safe_outputs_auto_create_issue.md
+2026-03-24T13:30:24.6788583Z Copied prompt: safe_outputs_create_pull_request.md
+2026-03-24T13:30:24.6789166Z Copied prompt: safe_outputs_prompt.md
+2026-03-24T13:30:24.6790580Z Copied prompt: safe_outputs_push_to_pr_branch.md
+2026-03-24T13:30:24.6791165Z Copied prompt: temp_folder_prompt.md
+2026-03-24T13:30:24.6792441Z Copied prompt: threat_detection.md
+2026-03-24T13:30:24.6794047Z Copied prompt: workflow_install_note.md
+2026-03-24T13:30:24.6796147Z Copied prompt: workflow_recompile_issue.md
+2026-03-24T13:30:24.6831244Z Copied prompt: xpia.md
+2026-03-24T13:30:24.6833077Z Successfully copied 31 prompt files to /opt/gh-aw/prompts
+2026-03-24T13:30:24.6835155Z Copying mcp-scripts files to /opt/gh-aw/mcp-scripts
+2026-03-24T13:30:24.6835918Z Copied mcp-scripts: mcp_scripts_bootstrap.cjs
+2026-03-24T13:30:24.6847069Z Copied mcp-scripts: mcp_scripts_config_loader.cjs
+2026-03-24T13:30:24.6847775Z Copied mcp-scripts: mcp_scripts_mcp_server.cjs
+2026-03-24T13:30:24.6848384Z Copied mcp-scripts: mcp_scripts_mcp_server_http.cjs
+2026-03-24T13:30:24.6848998Z Copied mcp-scripts: mcp_scripts_tool_factory.cjs
+2026-03-24T13:30:24.6849575Z Copied mcp-scripts: mcp_scripts_validation.cjs
+2026-03-24T13:30:24.6850116Z Copied mcp-scripts: mcp_server_core.cjs
+2026-03-24T13:30:24.6850622Z Copied mcp-scripts: mcp_logger.cjs
+2026-03-24T13:30:24.6851103Z Copied mcp-scripts: mcp_http_transport.cjs
+2026-03-24T13:30:24.6851651Z Copied mcp-scripts: mcp_handler_shell.cjs
+2026-03-24T13:30:24.6852164Z Copied mcp-scripts: mcp_handler_python.cjs
+2026-03-24T13:30:24.6852682Z Copied mcp-scripts: mcp_handler_go.cjs
+2026-03-24T13:30:24.6853516Z Copied mcp-scripts: mcp_handler_javascript.cjs
+2026-03-24T13:30:24.6854056Z Copied mcp-scripts: read_buffer.cjs
+2026-03-24T13:30:24.6854598Z Copied mcp-scripts: generate_mcp_scripts_config.cjs
+2026-03-24T13:30:24.6855174Z Copied mcp-scripts: setup_globals.cjs
+2026-03-24T13:30:24.6855665Z Copied mcp-scripts: error_helpers.cjs
+2026-03-24T13:30:24.6856153Z Copied mcp-scripts: error_codes.cjs
+2026-03-24T13:30:24.6864280Z Copied mcp-scripts: mcp_enhanced_errors.cjs
+2026-03-24T13:30:24.6864847Z Copied mcp-scripts: shim.cjs
+2026-03-24T13:30:24.6865339Z Copied mcp-scripts: mcp-scripts-runner.cjs
+2026-03-24T13:30:24.6867443Z Successfully copied 21 mcp-scripts files to /opt/gh-aw/mcp-scripts
+2026-03-24T13:30:24.6868230Z Copying safe-outputs files to /opt/gh-aw/safeoutputs
+2026-03-24T13:30:24.6870421Z Copied safe-outputs: safe_outputs_mcp_server.cjs
+2026-03-24T13:30:24.6871360Z Copied safe-outputs: safe_outputs_mcp_server_http.cjs
+2026-03-24T13:30:24.6871980Z Copied safe-outputs: safe_outputs_bootstrap.cjs
+2026-03-24T13:30:24.6874446Z Copied safe-outputs: safe_outputs_tools_loader.cjs
+2026-03-24T13:30:24.6875071Z Copied safe-outputs: safe_outputs_config.cjs
+2026-03-24T13:30:24.6875635Z Copied safe-outputs: safe_outputs_handlers.cjs
+2026-03-24T13:30:24.6876202Z Copied safe-outputs: safe_outputs_append.cjs
+2026-03-24T13:30:24.6877312Z Copied safe-outputs: mcp_server_core.cjs
+2026-03-24T13:30:24.6877829Z Copied safe-outputs: mcp_logger.cjs
+2026-03-24T13:30:24.6879033Z Copied safe-outputs: mcp_http_transport.cjs
+2026-03-24T13:30:24.6879642Z Copied safe-outputs: mcp_handler_python.cjs
+2026-03-24T13:30:24.6880177Z Copied safe-outputs: mcp_handler_shell.cjs
+2026-03-24T13:30:24.6880697Z Copied safe-outputs: mcp_handler_go.cjs
+2026-03-24T13:30:24.6881235Z Copied safe-outputs: mcp_handler_javascript.cjs
+2026-03-24T13:30:24.6881778Z Copied safe-outputs: read_buffer.cjs
+2026-03-24T13:30:24.6882298Z Copied safe-outputs: mcp_scripts_validation.cjs
+2026-03-24T13:30:24.6883264Z Copied safe-outputs: messages.cjs
+2026-03-24T13:30:24.6883793Z Copied safe-outputs: messages_core.cjs
+2026-03-24T13:30:24.6884642Z Copied safe-outputs: messages_footer.cjs
+2026-03-24T13:30:24.6886733Z Copied safe-outputs: messages_run_status.cjs
+2026-03-24T13:30:24.6887345Z Copied safe-outputs: messages_staged.cjs
+2026-03-24T13:30:24.6887901Z Copied safe-outputs: messages_close_discussion.cjs
+2026-03-24T13:30:24.6888470Z Copied safe-outputs: estimate_tokens.cjs
+2026-03-24T13:30:24.6889748Z Copied safe-outputs: generate_git_patch.cjs
+2026-03-24T13:30:24.6890327Z Copied safe-outputs: get_base_branch.cjs
+2026-03-24T13:30:24.6890840Z Copied safe-outputs: get_current_branch.cjs
+2026-03-24T13:30:24.6891389Z Copied safe-outputs: normalize_branch_name.cjs
+2026-03-24T13:30:24.6891972Z Copied safe-outputs: write_large_content_to_file.cjs
+2026-03-24T13:30:24.6892583Z Copied safe-outputs: generate_compact_schema.cjs
+2026-03-24T13:30:24.6901180Z Copied safe-outputs: setup_globals.cjs
+2026-03-24T13:30:24.6902459Z Copied safe-outputs: error_helpers.cjs
+2026-03-24T13:30:24.6903055Z Copied safe-outputs: error_codes.cjs
+2026-03-24T13:30:24.6903543Z Copied safe-outputs: git_helpers.cjs
+2026-03-24T13:30:24.6904055Z Copied safe-outputs: find_repo_checkout.cjs
+2026-03-24T13:30:24.6904599Z Copied safe-outputs: mcp_enhanced_errors.cjs
+2026-03-24T13:30:24.6937617Z Copied safe-outputs: comment_limit_helpers.cjs
+2026-03-24T13:30:24.6938207Z Copied safe-outputs: shim.cjs
+2026-03-24T13:30:24.6938687Z Copied safe-outputs: repo_helpers.cjs
+2026-03-24T13:30:24.6940849Z Copied safe-outputs: glob_pattern_helpers.cjs
+2026-03-24T13:30:24.6941438Z Copied safe-outputs: handler_auth.cjs
+2026-03-24T13:30:24.6943182Z Copied safe-outputs: missing_messages_helper.cjs
+2026-03-24T13:30:24.6944492Z Copied safe-outputs: firewall_blocked_domains.cjs
+2026-03-24T13:30:24.6945454Z Copied safe-outputs: missing_info_formatter.cjs
+2026-03-24T13:30:24.6960281Z Copied safe-outputs: sanitize_content_core.cjs
+2026-03-24T13:30:24.6963431Z Copied safe-outputs: markdown_code_region_balancer.cjs
+2026-03-24T13:30:24.6965403Z Copied safe-outputs: temporary_id.cjs
+2026-03-24T13:30:24.6965971Z Copied safe-outputs MCP entry point: mcp-server.cjs
+2026-03-24T13:30:24.6997239Z Copied safe-outputs tools definition: tools.json
+2026-03-24T13:30:24.6997910Z Created empty config.json for safe-outputs server
+2026-03-24T13:30:24.6998626Z Successfully copied 48 safe-outputs files to /opt/gh-aw/safeoutputs
+2026-03-24T13:30:24.6999423Z Custom tokens not enabled - skipping @actions/github installation
+2026-03-24T13:30:24.7503922Z ##[group]Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+2026-03-24T13:30:24.7505049Z with:
+2026-03-24T13:30:24.7546953Z   name: agent
+2026-03-24T13:30:24.7547618Z   path: /tmp/gh-aw/
+2026-03-24T13:30:24.7548181Z   merge-multiple: false
+2026-03-24T13:30:24.7548773Z   repository: iamnbutler/crdt
+2026-03-24T13:30:24.7549359Z   run-id: 23490833303
+2026-03-24T13:30:24.7550016Z   skip-decompress: false
+2026-03-24T13:30:24.7550917Z   digest-mismatch: error
+2026-03-24T13:30:24.7551595Z env:
+2026-03-24T13:30:24.7552079Z   GH_AW_CALLER_WORKFLOW_ID: iamnbutler/crdt/daily-perf-improver
+2026-03-24T13:30:24.7552687Z   GH_AW_ENGINE_ID: claude
+2026-03-24T13:30:24.7553151Z   GH_AW_WORKFLOW_ID: daily-perf-improver
+2026-03-24T13:30:24.7553666Z   GH_AW_WORKFLOW_NAME: Daily Perf Improver
+2026-03-24T13:30:24.7558489Z   GH_AW_WORKFLOW_SOURCE: githubnext/agentics/workflows/daily-perf-improver.md@4957663821dbb3260348084fa2f1659701950fef
+2026-03-24T13:30:24.7561218Z   GH_AW_WORKFLOW_SOURCE_URL: https://github.com/githubnext/agentics/tree/4957663821dbb3260348084fa2f1659701950fef/workflows/daily-perf-improver.md
+2026-03-24T13:30:24.7563943Z ##[endgroup]
+2026-03-24T13:30:25.3546782Z Downloading single artifact
+2026-03-24T13:30:25.5372028Z Preparing to download the following artifacts:
+2026-03-24T13:30:25.5377743Z - agent (ID: 6080869087, Size: 528632, Expected Digest: sha256:589e744c54ba6858b5f81bd89c966141e0a328dfcca2ec9ef3157032d56a16c2)
+2026-03-24T13:30:25.8111890Z Redirecting to blob download url: https://productionresultssa6.blob.core.windows.net/actions-results/57da4661-9c0f-4b08-ab2a-b73345eaa9bf/workflow-job-run-070caf14-6c62-5ed1-b3b5-036305f05e2a/artifacts/d4f0bc5a29de06b510f9aa428f1eedba926012b591fef7a518e776a7c9bd1824.zip
+2026-03-24T13:30:25.8115842Z Starting download of artifact to: /tmp/gh-aw
+2026-03-24T13:30:26.0003310Z (node:1060) [DEP0005] DeprecationWarning: Buffer() is deprecated due to security and usability issues. Please use the Buffer.alloc(), Buffer.allocUnsafe(), or Buffer.from() methods instead.
+2026-03-24T13:30:26.0005133Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-03-24T13:30:26.2250397Z SHA256 digest of downloaded artifact is 589e744c54ba6858b5f81bd89c966141e0a328dfcca2ec9ef3157032d56a16c2
+2026-03-24T13:30:26.2252072Z Artifact download completed successfully.
+2026-03-24T13:30:26.2252721Z Total of 1 artifact(s) downloaded
+2026-03-24T13:30:26.2253283Z Download artifact has finished successfully
+2026-03-24T13:30:26.2350208Z ##[group]Run mkdir -p /tmp/gh-aw/
+2026-03-24T13:30:26.2350835Z [36;1mmkdir -p /tmp/gh-aw/[0m
+2026-03-24T13:30:26.2351343Z [36;1mfind "/tmp/gh-aw/" -type f -print[0m
+2026-03-24T13:30:26.2352069Z [36;1mecho "GH_AW_AGENT_OUTPUT=/tmp/gh-aw/agent_output.json" >> "$GITHUB_ENV"[0m
+2026-03-24T13:30:26.2358768Z shell: /usr/bin/bash -e {0}
+2026-03-24T13:30:26.2359241Z env:
+2026-03-24T13:30:26.2359738Z   GH_AW_CALLER_WORKFLOW_ID: iamnbutler/crdt/daily-perf-improver
+2026-03-24T13:30:26.2360366Z   GH_AW_ENGINE_ID: claude
+2026-03-24T13:30:26.2360816Z   GH_AW_WORKFLOW_ID: daily-perf-improver
+2026-03-24T13:30:26.2361340Z   GH_AW_WORKFLOW_NAME: Daily Perf Improver
+2026-03-24T13:30:26.2362290Z   GH_AW_WORKFLOW_SOURCE: githubnext/agentics/workflows/daily-perf-improver.md@4957663821dbb3260348084fa2f1659701950fef
+2026-03-24T13:30:26.2363864Z   GH_AW_WORKFLOW_SOURCE_URL: https://github.com/githubnext/agentics/tree/4957663821dbb3260348084fa2f1659701950fef/workflows/daily-perf-improver.md
+2026-03-24T13:30:26.2365018Z ##[endgroup]
+2026-03-24T13:30:26.2450848Z /tmp/gh-aw/mcp-logs/start-gateway.log
+2026-03-24T13:30:26.2451777Z /tmp/gh-aw/mcp-logs/safeoutputs/server.log
+2026-03-24T13:30:26.2453041Z /tmp/gh-aw/mcp-logs/gateway.md
+2026-03-24T13:30:26.2453598Z /tmp/gh-aw/mcp-logs/github.log
+2026-03-24T13:30:26.2454124Z /tmp/gh-aw/mcp-logs/stderr.log
+2026-03-24T13:30:26.2454650Z /tmp/gh-aw/mcp-logs/safeoutputs.log
+2026-03-24T13:30:26.2456053Z /tmp/gh-aw/mcp-logs/tools.json
+2026-03-24T13:30:26.2457111Z /tmp/gh-aw/mcp-logs/mcp-gateway.log
+2026-03-24T13:30:26.2457655Z /tmp/gh-aw/mcp-logs/rpc-messages.jsonl
+2026-03-24T13:30:26.2458174Z /tmp/gh-aw/agent-stdio.log
+2026-03-24T13:30:26.2458639Z /tmp/gh-aw/aw-prompts/prompt.txt
+2026-03-24T13:30:26.2459146Z /tmp/gh-aw/sandbox/firewall/logs/cache.log
+2026-03-24T13:30:26.2459705Z /tmp/gh-aw/sandbox/firewall/logs/access.log
+2026-03-24T13:30:26.2460246Z /tmp/gh-aw/agent/perf-bench.ts
+2026-03-24T13:30:26.2460731Z /tmp/gh-aw/agent_output.json
+2026-03-24T13:30:26.2461226Z /tmp/gh-aw/safeoutputs.jsonl
+2026-03-24T13:30:26.2461837Z /tmp/gh-aw/aw-perf-assist-applied-ops-and-has-fragment.patch
+2026-03-24T13:30:26.2632871Z ##[group]Run actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
+2026-03-24T13:30:26.2655125Z with:
+2026-03-24T13:30:26.2655542Z   name: agent
+2026-03-24T13:30:26.2655933Z   path: /tmp/gh-aw/
+2026-03-24T13:30:26.2656708Z   merge-multiple: false
+2026-03-24T13:30:26.2657177Z   repository: iamnbutler/crdt
+2026-03-24T13:30:26.2657627Z   run-id: 23490833303
+2026-03-24T13:30:26.2658033Z   skip-decompress: false
+2026-03-24T13:30:26.2658459Z   digest-mismatch: error
+2026-03-24T13:30:26.2658854Z env:
+2026-03-24T13:30:26.2659348Z   GH_AW_CALLER_WORKFLOW_ID: iamnbutler/crdt/daily-perf-improver
+2026-03-24T13:30:26.2659990Z   GH_AW_ENGINE_ID: claude
+2026-03-24T13:30:26.2660439Z   GH_AW_WORKFLOW_ID: daily-perf-improver
+2026-03-24T13:30:26.2660969Z   GH_AW_WORKFLOW_NAME: Daily Perf Improver
+2026-03-24T13:30:26.2661932Z   GH_AW_WORKFLOW_SOURCE: githubnext/agentics/workflows/daily-perf-improver.md@4957663821dbb3260348084fa2f1659701950fef
+2026-03-24T13:30:26.2664467Z   GH_AW_WORKFLOW_SOURCE_URL: https://github.com/githubnext/agentics/tree/4957663821dbb3260348084fa2f1659701950fef/workflows/daily-perf-improver.md
+2026-03-24T13:30:26.2665715Z   GH_AW_AGENT_OUTPUT: /tmp/gh-aw/agent_output.json
+2026-03-24T13:30:26.2666255Z ##[endgroup]
+2026-03-24T13:30:27.0039643Z Downloading single artifact
+2026-03-24T13:30:27.0044035Z Preparing to download the following artifacts:
+2026-03-24T13:30:27.0045251Z - agent (ID: 6080869087, Size: 528632, Expected Digest: sha256:589e744c54ba6858b5f81bd89c966141e0a328dfcca2ec9ef3157032d56a16c2)
+2026-03-24T13:30:27.0053094Z Redirecting to blob download url: https://productionresultssa6.blob.core.windows.net/actions-results/57da4661-9c0f-4b08-ab2a-b73345eaa9bf/workflow-job-run-070caf14-6c62-5ed1-b3b5-036305f05e2a/artifacts/d4f0bc5a29de06b510f9aa428f1eedba926012b591fef7a518e776a7c9bd1824.zip
+2026-03-24T13:30:27.0055176Z Starting download of artifact to: /tmp/gh-aw
+2026-03-24T13:30:27.0974370Z (node:1078) [DEP0005] DeprecationWarning: Buffer() is deprecated due to security and usability issues. Please use the Buffer.alloc(), Buffer.allocUnsafe(), or Buffer.from() methods instead.
+2026-03-24T13:30:27.0976269Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-03-24T13:30:27.3651227Z SHA256 digest of downloaded artifact is 589e744c54ba6858b5f81bd89c966141e0a328dfcca2ec9ef3157032d56a16c2
+2026-03-24T13:30:27.3658826Z Artifact download completed successfully.
+2026-03-24T13:30:27.3662486Z Total of 1 artifact(s) downloaded
+2026-03-24T13:30:27.3672635Z Download artifact has finished successfully
+2026-03-24T13:30:27.3948179Z ##[group]Run actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd
+2026-03-24T13:30:27.3949064Z with:
+2026-03-24T13:30:27.3949417Z   ref: dev
+2026-03-24T13:30:27.3950025Z   token: ***
+2026-03-24T13:30:27.3950435Z   persist-credentials: false
+2026-03-24T13:30:27.3950898Z   fetch-depth: 1
+2026-03-24T13:30:27.3951314Z   repository: iamnbutler/crdt
+2026-03-24T13:30:27.3951963Z   ssh-strict: true
+2026-03-24T13:30:27.3952349Z   ssh-user: git
+2026-03-24T13:30:27.3952754Z   clean: true
+2026-03-24T13:30:27.3954747Z   sparse-checkout-cone-mode: true
+2026-03-24T13:30:27.3955345Z   fetch-tags: false
+2026-03-24T13:30:27.3955744Z   show-progress: true
+2026-03-24T13:30:27.3956152Z   lfs: false
+2026-03-24T13:30:27.3956830Z   submodules: false
+2026-03-24T13:30:27.3957243Z   set-safe-directory: true
+2026-03-24T13:30:27.3957681Z env:
+2026-03-24T13:30:27.3958178Z   GH_AW_CALLER_WORKFLOW_ID: iamnbutler/crdt/daily-perf-improver
+2026-03-24T13:30:27.3958812Z   GH_AW_ENGINE_ID: claude
+2026-03-24T13:30:27.3959878Z   GH_AW_WORKFLOW_ID: daily-perf-improver
+2026-03-24T13:30:27.3960455Z   GH_AW_WORKFLOW_NAME: Daily Perf Improver
+2026-03-24T13:30:27.3961440Z   GH_AW_WORKFLOW_SOURCE: githubnext/agentics/workflows/daily-perf-improver.md@4957663821dbb3260348084fa2f1659701950fef
+2026-03-24T13:30:27.3963388Z   GH_AW_WORKFLOW_SOURCE_URL: https://github.com/githubnext/agentics/tree/4957663821dbb3260348084fa2f1659701950fef/workflows/daily-perf-improver.md
+2026-03-24T13:30:27.3965499Z   GH_AW_AGENT_OUTPUT: /tmp/gh-aw/agent_output.json
+2026-03-24T13:30:27.3966078Z ##[endgroup]
+2026-03-24T13:30:27.5632300Z Syncing repository: iamnbutler/crdt
+2026-03-24T13:30:27.5634265Z ##[group]Getting Git version info
+2026-03-24T13:30:27.5634933Z Working directory is '/home/runner/work/crdt/crdt'
+2026-03-24T13:30:27.5635865Z [command]/usr/bin/git version
+2026-03-24T13:30:27.5828625Z git version 2.53.0
+2026-03-24T13:30:27.5893441Z ##[endgroup]
+2026-03-24T13:30:27.5920737Z Temporarily overriding HOME='/home/runner/work/_temp/fb6f78aa-71c8-45f9-b657-03afc8ea994f' before making global git config changes
+2026-03-24T13:30:27.5927873Z Adding repository directory to the temporary git global config as a safe directory
+2026-03-24T13:30:27.5944675Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/crdt/crdt
+2026-03-24T13:30:27.6009715Z Deleting the contents of '/home/runner/work/crdt/crdt'
+2026-03-24T13:30:27.6025444Z ##[group]Initializing the repository
+2026-03-24T13:30:27.6040313Z [command]/usr/bin/git init /home/runner/work/crdt/crdt
+2026-03-24T13:30:27.6303009Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-03-24T13:30:27.6311440Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-03-24T13:30:27.6318368Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-03-24T13:30:27.6322361Z hint: call:
+2026-03-24T13:30:27.6325600Z hint:
+2026-03-24T13:30:27.6336994Z hint: 	git config --global init.defaultBranch <name>
+2026-03-24T13:30:27.6348395Z hint:
+2026-03-24T13:30:27.6351739Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-03-24T13:30:27.6354431Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-03-24T13:30:27.6357054Z hint:
+2026-03-24T13:30:27.6361993Z hint: 	git branch -m <name>
+2026-03-24T13:30:27.6362479Z hint:
+2026-03-24T13:30:27.6363081Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-03-24T13:30:27.6370835Z Initialized empty Git repository in /home/runner/work/crdt/crdt/.git/
+2026-03-24T13:30:27.6392710Z [command]/usr/bin/git remote add origin https://github.com/iamnbutler/crdt
+2026-03-24T13:30:27.6471258Z ##[endgroup]
+2026-03-24T13:30:27.6472189Z ##[group]Disabling automatic garbage collection
+2026-03-24T13:30:27.6477893Z [command]/usr/bin/git config --local gc.auto 0
+2026-03-24T13:30:27.6551232Z ##[endgroup]
+2026-03-24T13:30:27.6551980Z ##[group]Setting up auth
+2026-03-24T13:30:27.6552511Z Removing SSH command configuration
+2026-03-24T13:30:27.6562485Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-03-24T13:30:27.6634408Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-03-24T13:30:27.7135654Z Removing HTTP extra header
+2026-03-24T13:30:27.7148351Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-03-24T13:30:27.7208214Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-03-24T13:30:27.7443858Z Removing includeIf entries pointing to credentials config files
+2026-03-24T13:30:27.7469441Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-03-24T13:30:27.7542847Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-03-24T13:30:27.7844885Z [command]/usr/bin/git config --file /home/runner/work/_temp/git-credentials-b278a0a7-c4fd-4cd8-809e-69ca702fa4ba.config http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-03-24T13:30:27.7900785Z [command]/usr/bin/git config --local includeIf.gitdir:/home/runner/work/crdt/crdt/.git.path /home/runner/work/_temp/git-credentials-b278a0a7-c4fd-4cd8-809e-69ca702fa4ba.config
+2026-03-24T13:30:27.7958387Z [command]/usr/bin/git config --local includeIf.gitdir:/home/runner/work/crdt/crdt/.git/worktrees/*.path /home/runner/work/_temp/git-credentials-b278a0a7-c4fd-4cd8-809e-69ca702fa4ba.config
+2026-03-24T13:30:27.8023036Z [command]/usr/bin/git config --local includeIf.gitdir:/github/workspace/.git.path /github/runner_temp/git-credentials-b278a0a7-c4fd-4cd8-809e-69ca702fa4ba.config
+2026-03-24T13:30:27.8081827Z [command]/usr/bin/git config --local includeIf.gitdir:/github/workspace/.git/worktrees/*.path /github/runner_temp/git-credentials-b278a0a7-c4fd-4cd8-809e-69ca702fa4ba.config
+2026-03-24T13:30:27.8121294Z ##[endgroup]
+2026-03-24T13:30:27.8122161Z ##[group]Fetching the repository
+2026-03-24T13:30:27.8133362Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +refs/heads/dev*:refs/remotes/origin/dev* +refs/tags/dev*:refs/tags/dev*
+2026-03-24T13:30:28.5073009Z From https://github.com/iamnbutler/crdt
+2026-03-24T13:30:28.5077664Z  * [new branch]      dev        -> origin/dev
+2026-03-24T13:30:28.5128874Z ##[endgroup]
+2026-03-24T13:30:28.5129664Z ##[group]Determining the checkout info
+2026-03-24T13:30:28.5140281Z [command]/usr/bin/git branch --list --remote origin/dev
+2026-03-24T13:30:28.5165740Z   origin/dev
+2026-03-24T13:30:28.5179272Z ##[endgroup]
+2026-03-24T13:30:28.5181173Z [command]/usr/bin/git sparse-checkout disable
+2026-03-24T13:30:28.5280192Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-03-24T13:30:28.5327865Z ##[group]Checking out the ref
+2026-03-24T13:30:28.5330208Z [command]/usr/bin/git checkout --progress --force -B dev refs/remotes/origin/dev
+2026-03-24T13:30:28.5524975Z Switched to a new branch 'dev'
+2026-03-24T13:30:28.5531517Z branch 'dev' set up to track 'origin/dev'.
+2026-03-24T13:30:28.5547539Z ##[endgroup]
+2026-03-24T13:30:28.5593704Z [command]/usr/bin/git log -1 --format=%H
+2026-03-24T13:30:28.5622285Z e8f98ecf8b8f154c22c12f8b7b03fefca3968ca5
+2026-03-24T13:30:28.5651872Z ##[group]Removing auth
+2026-03-24T13:30:28.5653490Z Removing SSH command configuration
+2026-03-24T13:30:28.5663070Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-03-24T13:30:28.5721091Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-03-24T13:30:28.5977725Z Removing HTTP extra header
+2026-03-24T13:30:28.5984111Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-03-24T13:30:28.6024183Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-03-24T13:30:28.6270071Z Removing includeIf entries pointing to credentials config files
+2026-03-24T13:30:28.6273332Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-03-24T13:30:28.6295295Z includeif.gitdir:/home/runner/work/crdt/crdt/.git.path
+2026-03-24T13:30:28.6299590Z includeif.gitdir:/home/runner/work/crdt/crdt/.git/worktrees/*.path
+2026-03-24T13:30:28.6300798Z includeif.gitdir:/github/workspace/.git.path
+2026-03-24T13:30:28.6301556Z includeif.gitdir:/github/workspace/.git/worktrees/*.path
+2026-03-24T13:30:28.6506068Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/crdt/crdt/.git.path
+2026-03-24T13:30:28.6507941Z /home/runner/work/_temp/git-credentials-b278a0a7-c4fd-4cd8-809e-69ca702fa4ba.config
+2026-03-24T13:30:28.6513115Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/crdt/crdt/.git.path /home/runner/work/_temp/git-credentials-b278a0a7-c4fd-4cd8-809e-69ca702fa4ba.config
+2026-03-24T13:30:28.6533874Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/home/runner/work/crdt/crdt/.git/worktrees/*.path
+2026-03-24T13:30:28.6563969Z /home/runner/work/_temp/git-credentials-b278a0a7-c4fd-4cd8-809e-69ca702fa4ba.config
+2026-03-24T13:30:28.6590340Z [command]/usr/bin/git config --local --unset includeif.gitdir:/home/runner/work/crdt/crdt/.git/worktrees/*.path /home/runner/work/_temp/git-credentials-b278a0a7-c4fd-4cd8-809e-69ca702fa4ba.config
+2026-03-24T13:30:28.6671866Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git.path
+2026-03-24T13:30:28.6747755Z /github/runner_temp/git-credentials-b278a0a7-c4fd-4cd8-809e-69ca702fa4ba.config
+2026-03-24T13:30:28.6803374Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git.path /github/runner_temp/git-credentials-b278a0a7-c4fd-4cd8-809e-69ca702fa4ba.config
+2026-03-24T13:30:28.6893484Z [command]/usr/bin/git config --local --get-all includeif.gitdir:/github/workspace/.git/worktrees/*.path
+2026-03-24T13:30:28.6977428Z /github/runner_temp/git-credentials-b278a0a7-c4fd-4cd8-809e-69ca702fa4ba.config
+2026-03-24T13:30:28.6997638Z [command]/usr/bin/git config --local --unset includeif.gitdir:/github/workspace/.git/worktrees/*.path /github/runner_temp/git-credentials-b278a0a7-c4fd-4cd8-809e-69ca702fa4ba.config
+2026-03-24T13:30:28.7069562Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-03-24T13:30:28.7706159Z Removing credentials config '/home/runner/work/_temp/git-credentials-b278a0a7-c4fd-4cd8-809e-69ca702fa4ba.config'
+2026-03-24T13:30:28.7720177Z ##[endgroup]
+2026-03-24T13:30:28.7953148Z ##[group]Run git config --global user.email "github-actions[bot]@users.noreply.github.com"
+2026-03-24T13:30:28.7955997Z [36;1mgit config --global user.email "github-actions[bot]@users.noreply.github.com"[0m
+2026-03-24T13:30:28.7958650Z [36;1mgit config --global user.name "github-actions[bot]"[0m
+2026-03-24T13:30:28.7960256Z [36;1mgit config --global am.keepcr true[0m
+2026-03-24T13:30:28.7961727Z [36;1m# Re-authenticate git with GitHub token[0m
+2026-03-24T13:30:28.7963668Z [36;1mSERVER_URL_STRIPPED="${SERVER_URL#https://}"[0m
+2026-03-24T13:30:28.7966278Z [36;1mgit remote set-url origin "https://x-access-token:${GIT_TOKEN}@${SERVER_URL_STRIPPED}/${REPO_NAME}.git"[0m
+2026-03-24T13:30:28.7969174Z [36;1mecho "Git configured with standard GitHub Actions identity"[0m
+2026-03-24T13:30:28.7978039Z shell: /usr/bin/bash -e {0}
+2026-03-24T13:30:28.7979281Z env:
+2026-03-24T13:30:28.7980471Z   GH_AW_CALLER_WORKFLOW_ID: iamnbutler/crdt/daily-perf-improver
+2026-03-24T13:30:28.7983040Z   GH_AW_ENGINE_ID: claude
+2026-03-24T13:30:28.7984223Z   GH_AW_WORKFLOW_ID: daily-perf-improver
+2026-03-24T13:30:28.7986078Z   GH_AW_WORKFLOW_NAME: Daily Perf Improver
+2026-03-24T13:30:28.7988946Z   GH_AW_WORKFLOW_SOURCE: githubnext/agentics/workflows/daily-perf-improver.md@4957663821dbb3260348084fa2f1659701950fef
+2026-03-24T13:30:28.7993729Z   GH_AW_WORKFLOW_SOURCE_URL: https://github.com/githubnext/agentics/tree/4957663821dbb3260348084fa2f1659701950fef/workflows/daily-perf-improver.md
+2026-03-24T13:30:28.7998318Z   GH_AW_AGENT_OUTPUT: /tmp/gh-aw/agent_output.json
+2026-03-24T13:30:28.7999759Z   REPO_NAME: iamnbutler/crdt
+2026-03-24T13:30:28.8001013Z   SERVER_URL: https://github.com
+2026-03-24T13:30:28.8002879Z   GIT_TOKEN: ***
+2026-03-24T13:30:28.8003799Z ##[endgroup]
+2026-03-24T13:30:28.8135220Z Git configured with standard GitHub Actions identity
+2026-03-24T13:30:28.8330878Z ##[group]Run actions/github-script@ed597411d8f924073f98dfc5c65a23a2325f34cd
+2026-03-24T13:30:28.8333287Z with:
+2026-03-24T13:30:28.8334552Z   github-token: ***
+2026-03-24T13:30:28.8398728Z   script: const { setupGlobals } = require('/opt/gh-aw/actions/setup_globals.cjs');
+setupGlobals(core, github, context, exec, io);
+const { main } = require('/opt/gh-aw/actions/safe_output_handler_manager.cjs');
+await main();
+
+2026-03-24T13:30:28.8402601Z   debug: false
+2026-03-24T13:30:28.8403526Z   user-agent: actions/github-script
+2026-03-24T13:30:28.8405064Z   result-encoding: json
+2026-03-24T13:30:28.8407863Z   retries: 0
+2026-03-24T13:30:28.8409449Z   retry-exempt-status-codes: 400,401,403,404,422
+2026-03-24T13:30:28.8412151Z env:
+2026-03-24T13:30:28.8415415Z   GH_AW_CALLER_WORKFLOW_ID: iamnbutler/crdt/daily-perf-improver
+2026-03-24T13:30:28.8417182Z   GH_AW_ENGINE_ID: claude
+2026-03-24T13:30:28.8418213Z   GH_AW_WORKFLOW_ID: daily-perf-improver
+2026-03-24T13:30:28.8419517Z   GH_AW_WORKFLOW_NAME: Daily Perf Improver
+2026-03-24T13:30:28.8421871Z   GH_AW_WORKFLOW_SOURCE: githubnext/agentics/workflows/daily-perf-improver.md@4957663821dbb3260348084fa2f1659701950fef
+2026-03-24T13:30:28.8426982Z   GH_AW_WORKFLOW_SOURCE_URL: https://github.com/githubnext/agentics/tree/4957663821dbb3260348084fa2f1659701950fef/workflows/daily-perf-improver.md
+2026-03-24T13:30:28.8432276Z   GH_AW_AGENT_OUTPUT: /tmp/gh-aw/agent_output.json
+2026-03-24T13:30:28.8692519Z   GH_AW_ALLOWED_DOMAINS: *.githubusercontent.com,*.jsr.io,*.pythonhosted.org,*.vsblob.vsassets.io,adoptium.net,anaconda.org,anthropic.com,api.adoptium.net,api.anthropic.com,api.foojay.io,api.github.com,api.npms.io,api.nuget.org,api.snapcraft.io,archive.apache.org,archive.ubuntu.com,azure.archive.ubuntu.com,azuresearch-usnc.nuget.org,azuresearch-ussc.nuget.org,binstar.org,bootstrap.pypa.io,builds.dotnet.microsoft.com,bun.sh,cdn.azul.com,cdn.jsdelivr.net,cdn.playwright.dev,central.sonatype.com,ci.dot.net,codeload.github.com,conda.anaconda.org,conda.binstar.org,crates.io,crl.geotrust.com,crl.globalsign.com,crl.identrust.com,crl.sectigo.com,crl.thawte.com,crl.usertrust.com,crl.verisign.com,crl3.digicert.com,crl4.digicert.com,crls.ssl.com,dc.services.visualstudio.com,deb.nodesource.com,deno.land,dist.nuget.org,dl.google.com,dlcdn.apache.org,dot.net,dotnet.microsoft.com,dotnetcli.blob.core.windows.net,download.eclipse.org,download.java.net,download.oracle.com,downloads.gradle-dn.com,esm.sh,files.pythonhosted.org,get.pnpm.io,ghcr.io,github-cloud.githubusercontent.com,github-cloud.s3.amazonaws.com,github.com,googleapis.deno.dev,googlechromelabs.github.io,gradle.org,host.docker.internal,index.crates.io,jcenter.bintray.com,jdk.java.net,json-schema.org,json.schemastore.org,jsr.io,keyserver.ubuntu.com,lfs.github.com,maven.apache.org,maven.google.com,maven.oracle.com,maven.pkg.github.com,nodejs.org,npm.pkg.github.com,npmjs.com,npmjs.org,nuget.org,nuget.pkg.github.com,nugetregistryv2prod.blob.core.windows.net,objects.githubusercontent.com,ocsp.digicert.com,ocsp.geotrust.com,ocsp.globalsign.com,ocsp.identrust.com,ocsp.sectigo.com,ocsp.ssl.com,ocsp.thawte.com,ocsp.usertrust.com,ocsp.verisign.com,oneocsp.microsoft.com,packagecloud.io,packages.cloud.google.com,packages.microsoft.com,pip.pypa.io,pkgs.dev.azure.com,playwright.download.prss.microsoft.com,plugins-artifacts.gradle.org,plugins.gradle.org,ppa.launchpad.net,pypi.org,pypi.python.org,raw.githubusercontent.com,registry.bower.io,registry.npmjs.com,registry.npmjs.org,registry.yarnpkg.com,repo.anaconda.com,repo.continuum.io,repo.gradle.org,repo.grails.org,repo.maven.apache.org,repo.spring.io,repo.yarnpkg.com,repo1.maven.org,s.symcb.com,s.symcd.com,security.ubuntu.com,sentry.io,services.gradle.org,sh.rustup.rs,skimdb.npmjs.com,static.crates.io,static.rust-lang.org,statsig.anthropic.com,storage.googleapis.com,telemetry.vercel.com,ts-crl.ws.symantec.com,ts-ocsp.ws.symantec.com,www.java.com,www.microsoft.com,www.npmjs.com,www.npmjs.org,yarnpkg.com
+2026-03-24T13:30:28.8967355Z   GITHUB_SERVER_URL: https://github.com
+2026-03-24T13:30:28.8969413Z   GITHUB_API_URL: https://api.github.com
+2026-03-24T13:30:28.9003289Z   GH_AW_SAFE_OUTPUTS_HANDLER_CONFIG: {"add_comment":{"hide_older_comments":true,"max":10,"target":"*"},"create_issue":{"labels":["automation","performance"],"max":4,"title_prefix":"[Perf Improver] "},"create_pull_request":{"draft":true,"labels":["automation","performance"],"max":4,"max_patch_size":1024,"protected_files":["package.json","bun.lockb","bunfig.toml","deno.json","deno.jsonc","deno.lock","global.json","NuGet.Config","Directory.Packages.props","mix.exs","mix.lock","go.mod","go.sum","stack.yaml","stack.yaml.lock","pom.xml","build.gradle","build.gradle.kts","settings.gradle","settings.gradle.kts","gradle.properties","package-lock.json","yarn.lock","pnpm-lock.yaml","npm-shrinkwrap.json","requirements.txt","Pipfile","Pipfile.lock","pyproject.toml","setup.py","setup.cfg","Gemfile","Gemfile.lock","uv.lock","CLAUDE.md"],"protected_files_policy":"fallback-to-issue","protected_path_prefixes":[".github/",".agents/",".claude/"],"title_prefix":"[Perf Improver] "},"missing_data":{},"missing_tool":{},"push_to_pull_request_branch":{"if_no_changes":"warn","max":4,"max_patch_size":1024,"protected_files":["package.json","bun.lockb","bunfig.toml","deno.json","deno.jsonc","deno.lock","global.json","NuGet.Config","Directory.Packages.props","mix.exs","mix.lock","go.mod","go.sum","stack.yaml","stack.yaml.lock","pom.xml","build.gradle","build.gradle.kts","settings.gradle","settings.gradle.kts","gradle.properties","package-lock.json","yarn.lock","pnpm-lock.yaml","npm-shrinkwrap.json","requirements.txt","Pipfile","Pipfile.lock","pyproject.toml","setup.py","setup.cfg","Gemfile","Gemfile.lock","uv.lock","CLAUDE.md"],"protected_path_prefixes":[".github/",".agents/",".claude/"],"target":"*","title_prefix":"[Perf Improver] "},"update_issue":{"allow_body":true,"max":1,"target":"*","title_prefix":"[Perf Improver] "}}
+2026-03-24T13:30:28.9029160Z   GH_AW_CI_TRIGGER_TOKEN: 
+2026-03-24T13:30:28.9030984Z ##[endgroup]
+2026-03-24T13:30:29.0533598Z Safe Output Handler Manager starting...
+2026-03-24T13:30:29.0620086Z Loaded config from GH_AW_SAFE_OUTPUTS_HANDLER_CONFIG: {"add_comment":{"hide_older_comments":true,"max":10,"target":"*"},"create_issue":{"labels":["automation","performance"],"max":4,"title_prefix":"[Perf Improver] "},"create_pull_request":{"draft":true,"labels":["automation","performance"],"max":4,"max_patch_size":1024,"protected_files":["package.json","bun.lockb","bunfig.toml","deno.json","deno.jsonc","deno.lock","global.json","NuGet.Config","Directory.Packages.props","mix.exs","mix.lock","go.mod","go.sum","stack.yaml","stack.yaml.lock","pom.xml","build.gradle","build.gradle.kts","settings.gradle","settings.gradle.kts","gradle.properties","package-lock.json","yarn.lock","pnpm-lock.yaml","npm-shrinkwrap.json","requirements.txt","Pipfile","Pipfile.lock","pyproject.toml","setup.py","setup.cfg","Gemfile","Gemfile.lock","uv.lock","CLAUDE.md"],"protected_files_policy":"fallback-to-issue","protected_path_prefixes":[".github/",".agents/",".claude/"],"title_prefix":"[Perf Improver] "},"missing_data":{},"missing_tool":{},"push_to_pull_request_branch":{"if_no_changes":"warn","max":4,"max_patch_size":1024,"protected_files":["package.json","bun.lockb","bunfig.toml","deno.json","deno.jsonc","deno.lock","global.json","NuGet.Config","Directory.Packages.props","mix.exs","mix.lock","go.mod","go.sum","stack.yaml","stack.yaml.lock","pom.xml","build.gradle","build.gradle.kts","settings.gradle","settings.gradle.kts","gradle.properties","package-lock.json","yarn.lock","pnpm-lock.yaml","npm-shrinkwrap.json","requirements.txt","Pipfile","Pipfile.lock","pyproject.toml","setup.py","setup.cfg","Gemfile","Gemfile.lock","uv.lock","CLAUDE.md"],"protected_path_prefixes":[".github/",".agents/",".claude/"],"target":"*","title_prefix":"[Perf Improver] "},"update_issue":{"allow_body":true,"max":1,"target":"*","title_prefix":"[Perf Improver] "}}
+2026-03-24T13:30:29.0684991Z Agent output content length: 5452
+2026-03-24T13:30:29.0686100Z Found 2 message(s) in agent output
+2026-03-24T13:30:29.0713151Z Loading and initializing safe output handlers based on configuration...
+2026-03-24T13:30:29.0714756Z Default target repo: iamnbutler/crdt
+2026-03-24T13:30:29.0715833Z Default labels: automation, performance
+2026-03-24T13:30:29.0727568Z Title prefix: [Perf Improver] 
+2026-03-24T13:30:29.0728578Z Max count: 4
+2026-03-24T13:30:29.0729767Z ✓ Loaded and initialized handler for: create_issue
+2026-03-24T13:30:29.0731045Z Add comment configuration: max=10, target=*
+2026-03-24T13:30:29.0732164Z Default target repo: iamnbutler/crdt
+2026-03-24T13:30:29.0733205Z Hide-older-comments is enabled
+2026-03-24T13:30:29.0734400Z ✓ Loaded and initialized handler for: add_comment
+2026-03-24T13:30:29.0744734Z Update issue configuration: max=1, target=*
+2026-03-24T13:30:29.0746310Z ✓ Loaded and initialized handler for: update_issue
+2026-03-24T13:30:29.0762710Z Base branch: (dynamic - resolved per target repo)
+2026-03-24T13:30:29.0783332Z Default target repo: iamnbutler/crdt
+2026-03-24T13:30:29.0784513Z Default labels: automation, performance
+2026-03-24T13:30:29.0785756Z Title prefix: [Perf Improver] 
+2026-03-24T13:30:29.0787008Z Draft default: true
+2026-03-24T13:30:29.0787814Z If no changes: warn
+2026-03-24T13:30:29.0788613Z Allow empty: false
+2026-03-24T13:30:29.0789402Z Auto-merge: false
+2026-03-24T13:30:29.0790840Z Max count: 4
+2026-03-24T13:30:29.0791623Z Max patch size: 1024 KB
+2026-03-24T13:30:29.0792832Z ✓ Loaded and initialized handler for: create_pull_request
+2026-03-24T13:30:29.0811448Z Target: *
+2026-03-24T13:30:29.0812245Z Title prefix: [Perf Improver] 
+2026-03-24T13:30:29.0814919Z If no changes: warn
+2026-03-24T13:30:29.0815795Z Max patch size: 1024 KB
+2026-03-24T13:30:29.0818840Z Max count: 4
+2026-03-24T13:30:29.0820185Z Default target repo: iamnbutler/crdt
+2026-03-24T13:30:29.0822369Z ✓ Loaded and initialized handler for: push_to_pull_request_branch
+2026-03-24T13:30:29.0832524Z Max count: unlimited
+2026-03-24T13:30:29.0834153Z ✓ Loaded and initialized handler for: missing_tool
+2026-03-24T13:30:29.0836651Z Max count: unlimited
+2026-03-24T13:30:29.0837738Z ✓ Loaded and initialized handler for: missing_data
+2026-03-24T13:30:29.0843806Z Loaded 7 handler(s)
+2026-03-24T13:30:29.0890290Z Collected 0 missing tool(s), 0 missing data item(s), and 0 noop message(s)
+2026-03-24T13:30:29.0892006Z Processing 2 message(s) in order of appearance...
+2026-03-24T13:30:29.0893294Z Processing message 1/2: create_pull_request
+2026-03-24T13:30:29.0895855Z Processing create_pull_request: title=perf: O(1) hasFragment lookup + numeric appliedOps map, bodyLength=3057
+2026-03-24T13:30:29.0898485Z Patch file path: /tmp/gh-aw/aw-perf-assist-applied-ops-and-has-fragment.patch
+2026-03-24T13:30:29.0900120Z Target repository: iamnbutler/crdt
+2026-03-24T13:30:29.4632710Z Base branch for iamnbutler/crdt: dev
+2026-03-24T13:30:29.4640899Z Patch size: 9 KB (maximum allowed: 1024 KB)
+2026-03-24T13:30:29.4644463Z Patch size validation passed
+2026-03-24T13:30:29.4658311Z Patch content validation passed
+2026-03-24T13:30:29.4683995Z Using branch name from JSONL with added salt: perf-assist/applied-ops-and-has-fragment-4be78e16f61fce18
+2026-03-24T13:30:29.4719668Z Branch name sanitized: "perf-assist/applied-ops-and-has-fragment" -> "perf-assist/applied-ops-and-has-fragment-4be78e16f61fce18"
+2026-03-24T13:30:29.4892562Z Creating pull request with title: [Perf Improver] perf: O(1) hasFragment lookup + numeric appliedOps map
+2026-03-24T13:30:29.4898411Z Labels: ["automation","performance"]
+2026-03-24T13:30:29.4902502Z Draft: true
+2026-03-24T13:30:29.4905584Z Body length: 3801
+2026-03-24T13:30:29.4909958Z Generated branch name: perf-assist/applied-ops-and-has-fragment-4be78e16f61fce18
+2026-03-24T13:30:29.4913381Z Base branch: dev
+2026-03-24T13:30:29.4925761Z Fetching base branch: dev
+2026-03-24T13:30:29.5010110Z [command]/usr/bin/git fetch origin dev
+2026-03-24T13:30:29.7830635Z From https://github.com/iamnbutler/crdt
+2026-03-24T13:30:29.7837330Z  * branch            dev        -> FETCH_HEAD
+2026-03-24T13:30:29.8019073Z [command]/usr/bin/git checkout dev
+2026-03-24T13:30:29.8212706Z Already on 'dev'
+2026-03-24T13:30:29.8223109Z Your branch is up to date with 'origin/dev'.
+2026-03-24T13:30:29.8237047Z Branch should not exist locally, creating new branch from base: perf-assist/applied-ops-and-has-fragment-4be78e16f61fce18
+2026-03-24T13:30:29.8251923Z [command]/usr/bin/git checkout -b perf-assist/applied-ops-and-has-fragment-4be78e16f61fce18
+2026-03-24T13:30:29.8332851Z Switched to a new branch 'perf-assist/applied-ops-and-has-fragment-4be78e16f61fce18'
+2026-03-24T13:30:29.8480356Z Created new branch from base: perf-assist/applied-ops-and-has-fragment-4be78e16f61fce18
+2026-03-24T13:30:29.8484427Z Applying patch...
+2026-03-24T13:30:29.8485513Z Patch preview (first 247 of 247 lines):
+2026-03-24T13:30:29.8487141Z From a878055ec18101550ba7c9a0292208a87742b2b3 Mon Sep 17 00:00:00 2001
+2026-03-24T13:30:29.8488988Z From: "github-actions[bot]" <github-actions[bot]@users.noreply.github.com>
+2026-03-24T13:30:29.8490491Z Date: Tue, 24 Mar 2026 13:25:49 +0000
+2026-03-24T13:30:29.8491940Z Subject: [PATCH] perf: O(1) hasFragment index and numeric appliedOps map
+2026-03-24T13:30:29.8496139Z MIME-Version: 1.0
+2026-03-24T13:30:29.8497271Z Content-Type: text/plain; charset=UTF-8
+2026-03-24T13:30:29.8498389Z Content-Transfer-Encoding: 8bit
+2026-03-24T13:30:29.8499023Z 
+2026-03-24T13:30:29.8499459Z Two hot-path optimizations in TextBuffer:
+2026-03-24T13:30:29.8500227Z 
+2026-03-24T13:30:29.8501020Z 1. `hasFragment`: Replace O(n) linear scan (with array allocation) with
+2026-03-24T13:30:29.8503093Z    O(1) lookup via a `Map<number, Set<number>>` (replicaId → counters)
+2026-03-24T13:30:29.8504789Z    index. Index is rebuilt in `setFragments()` alongside every SumTree
+2026-03-24T13:30:29.8511353Z    rebuild so it always reflects committed state.
+2026-03-24T13:30:29.8556865Z 
+2026-03-24T13:30:29.8558396Z 2. `appliedOps`: Replace `Set<string>` with `Map<number, Set<number>>`
+2026-03-24T13:30:29.8560499Z    to eliminate `\`${replicaId}:${counter}\`` string allocations on every
+2026-03-24T13:30:29.8562174Z    remote operation check. Serialization format is unchanged.
+2026-03-24T13:30:29.8563125Z 
+2026-03-24T13:30:29.8563708Z Co-Authored-By: Claude Sonnet 4.6 <noreply@anthropic.com>
+2026-03-24T13:30:29.8566538Z ---
+2026-03-24T13:30:29.8567635Z  src/text/text-buffer.ts | 98 +++++++++++++++++++++++++++++------------
+2026-03-24T13:30:29.8569180Z  1 file changed, 71 insertions(+), 27 deletions(-)
+2026-03-24T13:30:29.8569990Z 
+2026-03-24T13:30:29.8571114Z diff --git a/src/text/text-buffer.ts b/src/text/text-buffer.ts
+2026-03-24T13:30:29.8573072Z index ddbefd2..19b6114 100644
+2026-03-24T13:30:29.8574088Z --- a/src/text/text-buffer.ts
+2026-03-24T13:30:29.8575053Z +++ b/src/text/text-buffer.ts
+2026-03-24T13:30:29.8576779Z @@ -168,8 +168,11 @@ export class TextBuffer {
+2026-03-24T13:30:29.8577934Z    private undoStack: UndoEntry[];
+2026-03-24T13:30:29.8619482Z    private redoStack: UndoEntry[];
+2026-03-24T13:30:29.8620665Z  
+2026-03-24T13:30:29.8621599Z -  // Track applied remote operation IDs for idempotency
+2026-03-24T13:30:29.8626302Z -  private appliedOps: Set<string>;
+2026-03-24T13:30:29.8629455Z +  // Track applied remote operation IDs for idempotency (replicaId -> Set<counter>)
+2026-03-24T13:30:29.8631141Z +  private appliedOps: Map<number, Set<number>>;
+2026-03-24T13:30:29.8635442Z +
+2026-03-24T13:30:29.8637974Z +  // Index of all insertionIds in the fragment tree for O(1) hasFragment checks
+2026-03-24T13:30:29.8643538Z +  private _fragmentIds: Map<number, Set<number>>;
+2026-03-24T13:30:29.8646753Z  
+2026-03-24T13:30:29.8649392Z    // Pending operations waiting for their causal dependencies
+2026-03-24T13:30:29.8654343Z    private pendingOps: Operation[];
+2026-03-24T13:30:29.8677450Z @@ -194,7 +197,8 @@ export class TextBuffer {
+2026-03-24T13:30:29.8678702Z      this.lastEditType = null;
+2026-03-24T13:30:29.8679689Z      this.undoStack = [];
+2026-03-24T13:30:29.8680613Z      this.redoStack = [];
+2026-03-24T13:30:29.8681555Z -    this.appliedOps = new Set();
+2026-03-24T13:30:29.8685317Z +    this.appliedOps = new Map();
+2026-03-24T13:30:29.8729564Z +    this._fragmentIds = new Map();
+2026-03-24T13:30:29.8730962Z      this.pendingOps = [];
+2026-03-24T13:30:29.8731936Z      this._now = Date.now;
+2026-03-24T13:30:29.8732872Z      this._liveSnapshots = 0;
+2026-03-24T13:30:29.8733930Z @@ -232,8 +236,8 @@ export class TextBuffer {
+2026-03-24T13:30:29.8735267Z        const locator = locatorBetween(MIN_LOCATOR, MAX_LOCATOR);
+2026-03-24T13:30:29.8744240Z        const fragment = createFragment(opId, 0, locator, normalized, true);
+2026-03-24T13:30:29.8745736Z  
+2026-03-24T13:30:29.8746887Z -      // Build SumTree with single fragment
+2026-03-24T13:30:29.8748431Z -      buffer.fragments = SumTree.fromItems([fragment], fragmentSummaryOps);
+2026-03-24T13:30:29.8750308Z +      // Build SumTree with single fragment and initialize the insertionId index
+2026-03-24T13:30:29.8751828Z +      buffer.setFragments([fragment]);
+2026-03-24T13:30:29.8752855Z      }
+2026-03-24T13:30:29.8753592Z      return buffer;
+2026-03-24T13:30:29.8754376Z    }
+2026-03-24T13:30:29.8755182Z @@ -596,8 +600,7 @@ export class TextBuffer {
+2026-03-24T13:30:29.8756235Z     */
+2026-03-24T13:30:29.8757326Z    applyRemote(operation: Operation): void {
+2026-03-24T13:30:29.8758804Z      // Idempotency check: skip operations that have already been applied.
+2026-03-24T13:30:29.8760521Z -    const opKey = `${operation.id.replicaId}:${operation.id.counter}`;
+2026-03-24T13:30:29.8761958Z -    if (this.appliedOps.has(opKey)) {
+2026-03-24T13:30:29.8763729Z +    if (this.hasAppliedOp(operation.id)) {
+2026-03-24T13:30:29.8764862Z        return; // Already applied
+2026-03-24T13:30:29.8765831Z      }
+2026-03-24T13:30:29.8767731Z  
+2026-03-24T13:30:29.8769272Z @@ -654,22 +657,16 @@ export class TextBuffer {
+2026-03-24T13:30:29.8770411Z      return true;
+2026-03-24T13:30:29.8771960Z    }
+2026-03-24T13:30:29.8772680Z  
+2026-03-24T13:30:29.8773669Z -  /** Check if any fragment with the given insertionId exists. */
+2026-03-24T13:30:29.8776248Z +  /** Check if any fragment with the given insertionId exists. O(1) via index. */
+2026-03-24T13:30:29.8778182Z    private hasFragment(insertionId: OperationId): boolean {
+2026-03-24T13:30:29.8779535Z -    for (const frag of this.fragmentsArray()) {
+2026-03-24T13:30:29.8780878Z -      if (operationIdsEqual(frag.insertionId, insertionId)) {
+2026-03-24T13:30:29.8782117Z -        return true;
+2026-03-24T13:30:29.8782909Z -      }
+2026-03-24T13:30:29.8783603Z -    }
+2026-03-24T13:30:29.8784309Z -    return false;
+2026-03-24T13:30:29.8785776Z +    return this._fragmentIds.get(insertionId.replicaId)?.has(insertionId.counter) ?? false;
+2026-03-24T13:30:29.8875193Z    }
+2026-03-24T13:30:29.8876096Z  
+2026-03-24T13:30:29.8877008Z    /**
+2026-03-24T13:30:29.8878132Z     * Apply a remote operation that has been confirmed as causally ready.
+2026-03-24T13:30:29.8879493Z     */
+2026-03-24T13:30:29.8881835Z    private applyRemoteInternal(operation: Operation): void {
+2026-03-24T13:30:29.8883495Z -    const opKey = `${operation.id.replicaId}:${operation.id.counter}`;
+2026-03-24T13:30:29.8884973Z -    this.appliedOps.add(opKey);
+2026-03-24T13:30:29.8886561Z +    this.markAppliedOp(operation.id);
+2026-03-24T13:30:29.8890162Z  
+2026-03-24T13:30:29.8891317Z      switch (operation.type) {
+2026-03-24T13:30:29.8892273Z        case "insert":
+2026-03-24T13:30:29.8895378Z @@ -694,8 +691,7 @@ export class TextBuffer {
+2026-03-24T13:30:29.8896785Z        const stillPending: Operation[] = [];
+2026-03-24T13:30:29.8897836Z  
+2026-03-24T13:30:29.8898641Z        for (const pendingOp of this.pendingOps) {
+2026-03-24T13:30:29.8902259Z -        const opKey = `${pendingOp.id.replicaId}:${pendingOp.id.counter}`;
+2026-03-24T13:30:29.8940898Z -        if (this.appliedOps.has(opKey)) {
+2026-03-24T13:30:29.8944586Z +        if (this.hasAppliedOp(pendingOp.id)) {
+2026-03-24T13:30:29.8945968Z            continue; // Already applied (idempotency)
+2026-03-24T13:30:29.8948518Z          }
+2026-03-24T13:30:29.8950453Z          if (this.isCausallyReady(pendingOp)) {
+2026-03-24T13:30:29.8952007Z @@ -740,7 +736,7 @@ export class TextBuffer {
+2026-03-24T13:30:29.8953578Z      // Insert and sort using the same approach as remote inserts for consistency.
+2026-03-24T13:30:29.8955201Z      this.insertFragmentByLocator(frags, newFrag);
+2026-03-24T13:30:29.8956624Z      sortFragments(frags);
+2026-03-24T13:30:29.8957885Z -    this.fragments = SumTree.fromItems(frags, fragmentSummaryOps);
+2026-03-24T13:30:29.8959268Z +    this.setFragments(frags);
+2026-03-24T13:30:29.8960192Z  
+2026-03-24T13:30:29.8960870Z      return {
+2026-03-24T13:30:29.8961619Z        type: "insert",
+2026-03-24T13:30:29.8962526Z @@ -977,7 +973,7 @@ export class TextBuffer {
+2026-03-24T13:30:29.8963630Z        visibleOffset = fragEnd;
+2026-03-24T13:30:29.8964536Z      }
+2026-03-24T13:30:29.8965219Z  
+2026-03-24T13:30:29.8966280Z -    this.fragments = SumTree.fromItems(newFrags, fragmentSummaryOps);
+2026-03-24T13:30:29.8968184Z +    this.setFragments(newFrags);
+2026-03-24T13:30:29.8969152Z  
+2026-03-24T13:30:29.8969832Z      return {
+2026-03-24T13:30:29.8970607Z        type: "delete",
+2026-03-24T13:30:29.8971977Z @@ -1007,7 +1003,7 @@ export class TextBuffer {
+2026-03-24T13:30:29.8973077Z      }
+2026-03-24T13:30:29.8973852Z  
+2026-03-24T13:30:29.8974900Z      if (changed) {
+2026-03-24T13:30:29.8976110Z -      this.fragments = SumTree.fromItems(newFrags, fragmentSummaryOps);
+2026-03-24T13:30:29.8978301Z +      this.setFragments(newFrags);
+2026-03-24T13:30:29.8979273Z      }
+2026-03-24T13:30:29.8980044Z    }
+2026-03-24T13:30:29.8980724Z  
+2026-03-24T13:30:29.8981954Z @@ -1053,7 +1049,7 @@ export class TextBuffer {
+2026-03-24T13:30:29.8984621Z      // Re-sort after insertion to ensure correct interleaving
+2026-03-24T13:30:29.9000115Z      sortFragments(frags);
+2026-03-24T13:30:29.9001146Z  
+2026-03-24T13:30:29.9055917Z -    this.fragments = SumTree.fromItems(frags, fragmentSummaryOps);
+2026-03-24T13:30:29.9061008Z +    this.setFragments(frags);
+2026-03-24T13:30:29.9061953Z    }
+2026-03-24T13:30:29.9062634Z  
+2026-03-24T13:30:29.9063849Z    /**
+2026-03-24T13:30:29.9065309Z @@ -1276,7 +1272,7 @@ export class TextBuffer {
+2026-03-24T13:30:29.9077637Z        return a.insertionOffset - b.insertionOffset;
+2026-03-24T13:30:29.9078906Z      });
+2026-03-24T13:30:29.9079619Z  
+2026-03-24T13:30:29.9082272Z -    this.fragments = SumTree.fromItems(resultFrags, fragmentSummaryOps);
+2026-03-24T13:30:29.9085054Z +    this.setFragments(resultFrags);
+2026-03-24T13:30:29.9086541Z    }
+2026-03-24T13:30:29.9087488Z  
+2026-03-24T13:30:29.9088382Z    private applyRemoteUndo(op: UndoOperation): void {
+2026-03-24T13:30:29.9089656Z @@ -1295,11 +1291,45 @@ export class TextBuffer {
+2026-03-24T13:30:29.9090790Z    // Helpers
+2026-03-24T13:30:29.9091848Z    // ---------------------------------------------------------------------------
+2026-03-24T13:30:29.9093398Z  
+2026-03-24T13:30:29.9094492Z +  /** Check if an operation has already been applied. O(1) numeric lookup. */
+2026-03-24T13:30:29.9096728Z +  private hasAppliedOp(id: OperationId): boolean {
+2026-03-24T13:30:29.9100838Z +    return this.appliedOps.get(id.replicaId)?.has(id.counter) ?? false;
+2026-03-24T13:30:29.9102529Z +  }
+2026-03-24T13:30:29.9103209Z +
+2026-03-24T13:30:29.9103959Z +  /** Mark an operation as applied. */
+2026-03-24T13:30:29.9105230Z +  private markAppliedOp(id: OperationId): void {
+2026-03-24T13:30:29.9107127Z +    let counters = this.appliedOps.get(id.replicaId);
+2026-03-24T13:30:29.9108321Z +    if (counters === undefined) {
+2026-03-24T13:30:29.9109301Z +      counters = new Set();
+2026-03-24T13:30:29.9110329Z +      this.appliedOps.set(id.replicaId, counters);
+2026-03-24T13:30:29.9111445Z +    }
+2026-03-24T13:30:29.9112635Z +    counters.add(id.counter);
+2026-03-24T13:30:29.9114789Z +  }
+2026-03-24T13:30:29.9115478Z +
+2026-03-24T13:30:29.9116211Z    /** Get all fragments as an array. */
+2026-03-24T13:30:29.9149544Z    private fragmentsArray(): Fragment[] {
+2026-03-24T13:30:29.9150752Z      return this.fragments.toArray();
+2026-03-24T13:30:29.9151756Z    }
+2026-03-24T13:30:29.9152438Z  
+2026-03-24T13:30:29.9153106Z +  /**
+2026-03-24T13:30:29.9158311Z +   * Replace the fragment tree with a new set of fragments.
+2026-03-24T13:30:29.9162353Z +   * Rebuilds both the SumTree and the insertionId index for O(1) hasFragment checks.
+2026-03-24T13:30:29.9167145Z +   */
+2026-03-24T13:30:29.9168056Z +  private setFragments(frags: Fragment[]): void {
+2026-03-24T13:30:29.9169516Z +    this.fragments = SumTree.fromItems(frags, fragmentSummaryOps);
+2026-03-24T13:30:29.9171310Z +    const index: Map<number, Set<number>> = new Map();
+2026-03-24T13:30:29.9172472Z +    for (const frag of frags) {
+2026-03-24T13:30:29.9173545Z +      const rid = frag.insertionId.replicaId;
+2026-03-24T13:30:29.9174680Z +      let counters = index.get(rid);
+2026-03-24T13:30:29.9175714Z +      if (counters === undefined) {
+2026-03-24T13:30:29.9182121Z +        counters = new Set();
+2026-03-24T13:30:29.9184931Z +        index.set(rid, counters);
+2026-03-24T13:30:29.9186270Z +      }
+2026-03-24T13:30:29.9187645Z +      counters.add(frag.insertionId.counter);
+2026-03-24T13:30:29.9188864Z +    }
+2026-03-24T13:30:29.9190088Z +    this._fragmentIds = index;
+2026-03-24T13:30:29.9190999Z +  }
+2026-03-24T13:30:29.9191923Z +
+2026-03-24T13:30:29.9194888Z    // ---------------------------------------------------------------------------
+2026-03-24T13:30:29.9196239Z    // Serialization
+2026-03-24T13:30:29.9277708Z    // ---------------------------------------------------------------------------
+2026-03-24T13:30:29.9281822Z @@ -1346,7 +1376,9 @@ export class TextBuffer {
+2026-03-24T13:30:29.9283217Z        undoMap: undoMapEntries,
+2026-03-24T13:30:29.9285175Z        undoStack,
+2026-03-24T13:30:29.9285967Z        redoStack,
+2026-03-24T13:30:29.9297156Z -      appliedOps: [...this.appliedOps],
+2026-03-24T13:30:29.9298645Z +      appliedOps: [...this.appliedOps.entries()].flatMap(([rid, counters]) =>
+2026-03-24T13:30:29.9300126Z +        [...counters].map((c) => `${rid}:${c}`),
+2026-03-24T13:30:29.9302015Z +      ),
+2026-03-24T13:30:29.9305208Z        nextTransactionId: this.nextTransactionId,
+2026-03-24T13:30:29.9307431Z        groupDelay: this.groupDelay,
+2026-03-24T13:30:29.9308454Z      };
+2026-03-24T13:30:29.9311987Z @@ -1406,7 +1438,7 @@ export class TextBuffer {
+2026-03-24T13:30:29.9314121Z  
+2026-03-24T13:30:29.9315478Z        return createFragment(insertionId, sf.io, locator, sf.t, sf.v, deletions, baseLocator);
+2026-03-24T13:30:29.9317276Z      });
+2026-03-24T13:30:29.9318384Z -    buffer.fragments = SumTree.fromItems(fragments, fragmentSummaryOps);
+2026-03-24T13:30:29.9319820Z +    buffer.setFragments(fragments);
+2026-03-24T13:30:29.9320777Z  
+2026-03-24T13:30:29.9321497Z      // Restore undo map
+2026-03-24T13:30:29.9322654Z      buffer.undoMap.mergeFrom(
+2026-03-24T13:30:29.9323774Z @@ -1438,8 +1470,20 @@ export class TextBuffer {
+2026-03-24T13:30:29.9324818Z        })),
+2026-03-24T13:30:29.9325512Z      }));
+2026-03-24T13:30:29.9326199Z  
+2026-03-24T13:30:29.9397981Z -    // Restore applied ops set
+2026-03-24T13:30:29.9399287Z -    buffer.appliedOps = new Set(snapshot.appliedOps);
+2026-03-24T13:30:29.9400937Z +    // Restore applied ops set (stored as "replicaId:counter" strings)
+2026-03-24T13:30:29.9402432Z +    for (const key of snapshot.appliedOps) {
+2026-03-24T13:30:29.9403607Z +      const colonIdx = key.indexOf(":");
+2026-03-24T13:30:29.9404764Z +      if (colonIdx !== -1) {
+2026-03-24T13:30:29.9405848Z +        const rid = Number(key.slice(0, colonIdx));
+2026-03-24T13:30:29.9407397Z +        const counter = Number(key.slice(colonIdx + 1));
+2026-03-24T13:30:29.9408734Z +        let counters = buffer.appliedOps.get(rid);
+2026-03-24T13:30:29.9409948Z +        if (counters === undefined) {
+2026-03-24T13:30:29.9411489Z +          counters = new Set();
+2026-03-24T13:30:29.9412575Z +          buffer.appliedOps.set(rid, counters);
+2026-03-24T13:30:29.9413728Z +        }
+2026-03-24T13:30:29.9414521Z +        counters.add(counter);
+2026-03-24T13:30:29.9415451Z +      }
+2026-03-24T13:30:29.9416122Z +    }
+2026-03-24T13:30:29.9417065Z  
+2026-03-24T13:30:29.9418053Z      // Restore transaction state
+2026-03-24T13:30:29.9419287Z      buffer.nextTransactionId = snapshot.nextTransactionId;
+2026-03-24T13:30:29.9420492Z -- 
+2026-03-24T13:30:29.9421151Z 2.53.0
+2026-03-24T13:30:29.9421538Z 
+2026-03-24T13:30:29.9421548Z 
+2026-03-24T13:30:29.9422487Z [command]/usr/bin/git am --3way /tmp/gh-aw/aw-perf-assist-applied-ops-and-has-fragment.patch
+2026-03-24T13:30:29.9424420Z Applying: perf: O(1) hasFragment index and numeric appliedOps map
+2026-03-24T13:30:29.9491961Z error: sha1 information is lacking or useless (src/text/text-buffer.ts).
+2026-03-24T13:30:29.9516948Z error: could not build fake ancestor
+2026-03-24T13:30:29.9519580Z hint: Use 'git am --show-current-patch=diff' to see the failed patch
+2026-03-24T13:30:29.9521275Z hint: When you have resolved this problem, run "git am --continue".
+2026-03-24T13:30:29.9523728Z hint: If you prefer to skip this patch, run "git am --skip" instead.
+2026-03-24T13:30:29.9529549Z hint: To restore the original branch and stop patching, run "git am --abort".
+2026-03-24T13:30:29.9534789Z hint: Disable this message with "git config set advice.mergeConflict false"
+2026-03-24T13:30:29.9540372Z Patch failed at 0001 perf: O(1) hasFragment index and numeric appliedOps map
+2026-03-24T13:30:29.9651538Z ##[error]Failed to apply patch: The process '/usr/bin/git' failed with exit code 128
+2026-03-24T13:30:29.9688908Z Investigating patch failure...
+2026-03-24T13:30:29.9690458Z [command]/usr/bin/git status
+2026-03-24T13:30:29.9719289Z On branch perf-assist/applied-ops-and-has-fragment-4be78e16f61fce18
+2026-03-24T13:30:29.9722965Z You are in the middle of an am session.
+2026-03-24T13:30:29.9724672Z   (fix conflicts and then run "git am --continue")
+2026-03-24T13:30:29.9725874Z   (use "git am --skip" to skip this patch)
+2026-03-24T13:30:29.9759722Z   (use "git am --abort" to restore the original branch)
+2026-03-24T13:30:29.9761365Z 
+2026-03-24T13:30:29.9762168Z nothing to commit, working tree clean
+2026-03-24T13:30:29.9764992Z Git status output:
+2026-03-24T13:30:29.9768083Z On branch perf-assist/applied-ops-and-has-fragment-4be78e16f61fce18
+2026-03-24T13:30:29.9772678Z You are in the middle of an am session.
+2026-03-24T13:30:29.9775762Z   (fix conflicts and then run "git am --continue")
+2026-03-24T13:30:29.9781390Z   (use "git am --skip" to skip this patch)
+2026-03-24T13:30:29.9783102Z   (use "git am --abort" to restore the original branch)
+2026-03-24T13:30:29.9785959Z 
+2026-03-24T13:30:29.9788602Z nothing to commit, working tree clean
+2026-03-24T13:30:29.9789982Z 
+2026-03-24T13:30:29.9791142Z [command]/usr/bin/git am --show-current-patch=diff
+2026-03-24T13:30:29.9794127Z ---
+2026-03-24T13:30:29.9796006Z  src/text/text-buffer.ts | 98 +++++++++++++++++++++++++++++------------
+2026-03-24T13:30:29.9799425Z  1 file changed, 71 insertions(+), 27 deletions(-)
+2026-03-24T13:30:29.9800894Z 
+2026-03-24T13:30:29.9801911Z diff --git a/src/text/text-buffer.ts b/src/text/text-buffer.ts
+2026-03-24T13:30:29.9804887Z index ddbefd2..19b6114 100644
+2026-03-24T13:30:29.9855492Z --- a/src/text/text-buffer.ts
+2026-03-24T13:30:29.9856873Z +++ b/src/text/text-buffer.ts
+2026-03-24T13:30:29.9857916Z @@ -168,8 +168,11 @@ export class TextBuffer {
+2026-03-24T13:30:29.9863264Z    private undoStack: UndoEntry[];
+2026-03-24T13:30:29.9865531Z    private redoStack: UndoEntry[];
+2026-03-24T13:30:29.9867788Z  
+2026-03-24T13:30:29.9869029Z -  // Track applied remote operation IDs for idempotency
+2026-03-24T13:30:29.9870262Z -  private appliedOps: Set<string>;
+2026-03-24T13:30:29.9872591Z +  // Track applied remote operation IDs for idempotency (replicaId -> Set<counter>)
+2026-03-24T13:30:29.9874247Z +  private appliedOps: Map<number, Set<number>>;
+2026-03-24T13:30:29.9875644Z +
+2026-03-24T13:30:29.9877736Z +  // Index of all insertionIds in the fragment tree for O(1) hasFragment checks
+2026-03-24T13:30:29.9879326Z +  private _fragmentIds: Map<number, Set<number>>;
+2026-03-24T13:30:29.9880426Z  
+2026-03-24T13:30:29.9881387Z    // Pending operations waiting for their causal dependencies
+2026-03-24T13:30:29.9883270Z    private pendingOps: Operation[];
+2026-03-24T13:30:29.9885502Z @@ -194,7 +197,8 @@ export class TextBuffer {
+2026-03-24T13:30:29.9888461Z      this.lastEditType = null;
+2026-03-24T13:30:29.9890496Z      this.undoStack = [];
+2026-03-24T13:30:29.9891432Z      this.redoStack = [];
+2026-03-24T13:30:29.9892339Z -    this.appliedOps = new Set();
+2026-03-24T13:30:29.9893341Z +    this.appliedOps = new Map();
+2026-03-24T13:30:29.9894748Z +    this._fragmentIds = new Map();
+2026-03-24T13:30:29.9895770Z      this.pendingOps = [];
+2026-03-24T13:30:29.9896918Z      this._now = Date.now;
+2026-03-24T13:30:29.9897879Z      this._liveSnapshots = 0;
+2026-03-24T13:30:29.9898876Z @@ -232,8 +236,8 @@ export class TextBuffer {
+2026-03-24T13:30:29.9900502Z        const locator = locatorBetween(MIN_LOCATOR, MAX_LOCATOR);
+2026-03-24T13:30:29.9902082Z        const fragment = createFragment(opId, 0, locator, normalized, true);
+2026-03-24T13:30:29.9903411Z  
+2026-03-24T13:30:29.9904170Z -      // Build SumTree with single fragment
+2026-03-24T13:30:29.9908042Z -      buffer.fragments = SumTree.fromItems([fragment], fragmentSummaryOps);
+2026-03-24T13:30:29.9909976Z +      // Build SumTree with single fragment and initialize the insertionId index
+2026-03-24T13:30:29.9911665Z +      buffer.setFragments([fragment]);
+2026-03-24T13:30:29.9912968Z      }
+2026-03-24T13:30:29.9913676Z      return buffer;
+2026-03-24T13:30:29.9914430Z    }
+2026-03-24T13:30:29.9915203Z @@ -596,8 +600,7 @@ export class TextBuffer {
+2026-03-24T13:30:29.9916207Z     */
+2026-03-24T13:30:29.9917214Z    applyRemote(operation: Operation): void {
+2026-03-24T13:30:29.9919877Z      // Idempotency check: skip operations that have already been applied.
+2026-03-24T13:30:29.9921627Z -    const opKey = `${operation.id.replicaId}:${operation.id.counter}`;
+2026-03-24T13:30:29.9923009Z -    if (this.appliedOps.has(opKey)) {
+2026-03-24T13:30:29.9924672Z +    if (this.hasAppliedOp(operation.id)) {
+2026-03-24T13:30:29.9925747Z        return; // Already applied
+2026-03-24T13:30:29.9927625Z      }
+2026-03-24T13:30:29.9928426Z  
+2026-03-24T13:30:29.9929454Z @@ -654,22 +657,16 @@ export class TextBuffer {
+2026-03-24T13:30:29.9931085Z      return true;
+2026-03-24T13:30:29.9931848Z    }
+2026-03-24T13:30:29.9932512Z  
+2026-03-24T13:30:29.9933488Z -  /** Check if any fragment with the given insertionId exists. */
+2026-03-24T13:30:29.9935246Z +  /** Check if any fragment with the given insertionId exists. O(1) via index. */
+2026-03-24T13:30:29.9937436Z    private hasFragment(insertionId: OperationId): boolean {
+2026-03-24T13:30:29.9938770Z -    for (const frag of this.fragmentsArray()) {
+2026-03-24T13:30:29.9940138Z -      if (operationIdsEqual(frag.insertionId, insertionId)) {
+2026-03-24T13:30:29.9942801Z -        return true;
+2026-03-24T13:30:29.9943829Z -      }
+2026-03-24T13:30:29.9944765Z -    }
+2026-03-24T13:30:29.9946212Z -    return false;
+2026-03-24T13:30:29.9947877Z +    return this._fragmentIds.get(insertionId.replicaId)?.has(insertionId.counter) ?? false;
+2026-03-24T13:30:29.9950012Z    }
+2026-03-24T13:30:29.9950716Z  
+2026-03-24T13:30:29.9951375Z    /**
+2026-03-24T13:30:29.9954454Z     * Apply a remote operation that has been confirmed as causally ready.
+2026-03-24T13:30:29.9956209Z     */
+2026-03-24T13:30:29.9960483Z    private applyRemoteInternal(operation: Operation): void {
+2026-03-24T13:30:29.9963533Z -    const opKey = `${operation.id.replicaId}:${operation.id.counter}`;
+2026-03-24T13:30:29.9967321Z -    this.appliedOps.add(opKey);
+2026-03-24T13:30:29.9971888Z +    this.markAppliedOp(operation.id);
+2026-03-24T13:30:29.9973145Z  
+2026-03-24T13:30:29.9975731Z      switch (operation.type) {
+2026-03-24T13:30:29.9979424Z        case "insert":
+2026-03-24T13:30:29.9980614Z @@ -694,8 +691,7 @@ export class TextBuffer {
+2026-03-24T13:30:29.9981989Z        const stillPending: Operation[] = [];
+2026-03-24T13:30:29.9984986Z  
+2026-03-24T13:30:29.9985822Z        for (const pendingOp of this.pendingOps) {
+2026-03-24T13:30:29.9988953Z -        const opKey = `${pendingOp.id.replicaId}:${pendingOp.id.counter}`;
+2026-03-24T13:30:29.9991878Z -        if (this.appliedOps.has(opKey)) {
+2026-03-24T13:30:29.9993667Z +        if (this.hasAppliedOp(pendingOp.id)) {
+2026-03-24T13:30:29.9995103Z            continue; // Already applied (idempotency)
+2026-03-24T13:30:29.9997949Z          }
+2026-03-24T13:30:29.9998800Z          if (this.isCausallyReady(pendingOp)) {
+2026-03-24T13:30:29.9999931Z @@ -740,7 +736,7 @@ export class TextBuffer {
+2026-03-24T13:30:30.0001359Z      // Insert and sort using the same approach as remote inserts for consistency.
+2026-03-24T13:30:30.0003374Z      this.insertFragmentByLocator(frags, newFrag);
+2026-03-24T13:30:30.0004692Z      sortFragments(frags);
+2026-03-24T13:30:30.0006137Z -    this.fragments = SumTree.fromItems(frags, fragmentSummaryOps);
+2026-03-24T13:30:30.0008598Z +    this.setFragments(frags);
+2026-03-24T13:30:30.0010724Z  
+2026-03-24T13:30:30.0011434Z      return {
+2026-03-24T13:30:30.0012189Z        type: "insert",
+2026-03-24T13:30:30.0014091Z @@ -977,7 +973,7 @@ export class TextBuffer {
+2026-03-24T13:30:30.0016062Z        visibleOffset = fragEnd;
+2026-03-24T13:30:30.0017183Z      }
+2026-03-24T13:30:30.0017863Z  
+2026-03-24T13:30:30.0019147Z -    this.fragments = SumTree.fromItems(newFrags, fragmentSummaryOps);
+2026-03-24T13:30:30.0021319Z +    this.setFragments(newFrags);
+2026-03-24T13:30:30.0022827Z  
+2026-03-24T13:30:30.0026185Z      return {
+2026-03-24T13:30:30.0028021Z        type: "delete",
+2026-03-24T13:30:30.0028956Z @@ -1007,7 +1003,7 @@ export class TextBuffer {
+2026-03-24T13:30:30.0029990Z      }
+2026-03-24T13:30:30.0030666Z  
+2026-03-24T13:30:30.0032689Z      if (changed) {
+2026-03-24T13:30:30.0035363Z -      this.fragments = SumTree.fromItems(newFrags, fragmentSummaryOps);
+2026-03-24T13:30:30.0037048Z +      this.setFragments(newFrags);
+2026-03-24T13:30:30.0039476Z      }
+2026-03-24T13:30:30.0040183Z    }
+2026-03-24T13:30:30.0043872Z  
+2026-03-24T13:30:30.0044739Z @@ -1053,7 +1049,7 @@ export class TextBuffer {
+2026-03-24T13:30:30.0046044Z      // Re-sort after insertion to ensure correct interleaving
+2026-03-24T13:30:30.0052214Z      sortFragments(frags);
+2026-03-24T13:30:30.0055359Z  
+2026-03-24T13:30:30.0056722Z -    this.fragments = SumTree.fromItems(frags, fragmentSummaryOps);
+2026-03-24T13:30:30.0058397Z +    this.setFragments(frags);
+2026-03-24T13:30:30.0059301Z    }
+2026-03-24T13:30:30.0060697Z  
+2026-03-24T13:30:30.0070936Z    /**
+2026-03-24T13:30:30.0072221Z @@ -1276,7 +1272,7 @@ export class TextBuffer {
+2026-03-24T13:30:30.0075535Z        return a.insertionOffset - b.insertionOffset;
+2026-03-24T13:30:30.0079353Z      });
+2026-03-24T13:30:30.0080302Z  
+2026-03-24T13:30:30.0083786Z -    this.fragments = SumTree.fromItems(resultFrags, fragmentSummaryOps);
+2026-03-24T13:30:30.0088177Z +    this.setFragments(resultFrags);
+2026-03-24T13:30:30.0092684Z    }
+2026-03-24T13:30:30.0094372Z  
+2026-03-24T13:30:30.0095952Z    private applyRemoteUndo(op: UndoOperation): void {
+2026-03-24T13:30:30.0103598Z @@ -1295,11 +1291,45 @@ export class TextBuffer {
+2026-03-24T13:30:30.0121769Z    // Helpers
+2026-03-24T13:30:30.0163675Z    // ---------------------------------------------------------------------------
+2026-03-24T13:30:30.0169021Z  
+2026-03-24T13:30:30.0171661Z +  /** Check if an operation has already been applied. O(1) numeric lookup. */
+2026-03-24T13:30:30.0175944Z +  private hasAppliedOp(id: OperationId): boolean {
+2026-03-24T13:30:30.0177721Z +    return this.appliedOps.get(id.replicaId)?.has(id.counter) ?? false;
+2026-03-24T13:30:30.0181693Z +  }
+2026-03-24T13:30:30.0183446Z +
+2026-03-24T13:30:30.0185581Z +  /** Mark an operation as applied. */
+2026-03-24T13:30:30.0191159Z +  private markAppliedOp(id: OperationId): void {
+2026-03-24T13:30:30.0193255Z +    let counters = this.appliedOps.get(id.replicaId);
+2026-03-24T13:30:30.0195202Z +    if (counters === undefined) {
+2026-03-24T13:30:30.0222872Z +      counters = new Set();
+2026-03-24T13:30:30.0223967Z +      this.appliedOps.set(id.replicaId, counters);
+2026-03-24T13:30:30.0225082Z +    }
+2026-03-24T13:30:30.0226132Z +    counters.add(id.counter);
+2026-03-24T13:30:30.0227283Z +  }
+2026-03-24T13:30:30.0227944Z +
+2026-03-24T13:30:30.0228677Z    /** Get all fragments as an array. */
+2026-03-24T13:30:30.0229756Z    private fragmentsArray(): Fragment[] {
+2026-03-24T13:30:30.0230855Z      return this.fragments.toArray();
+2026-03-24T13:30:30.0231825Z    }
+2026-03-24T13:30:30.0232492Z  
+2026-03-24T13:30:30.0233151Z +  /**
+2026-03-24T13:30:30.0234079Z +   * Replace the fragment tree with a new set of fragments.
+2026-03-24T13:30:30.0235730Z +   * Rebuilds both the SumTree and the insertionId index for O(1) hasFragment checks.
+2026-03-24T13:30:30.0237543Z +   */
+2026-03-24T13:30:30.0238381Z +  private setFragments(frags: Fragment[]): void {
+2026-03-24T13:30:30.0248195Z +    this.fragments = SumTree.fromItems(frags, fragmentSummaryOps);
+2026-03-24T13:30:30.0249706Z +    const index: Map<number, Set<number>> = new Map();
+2026-03-24T13:30:30.0255644Z +    for (const frag of frags) {
+2026-03-24T13:30:30.0257003Z +      const rid = frag.insertionId.replicaId;
+2026-03-24T13:30:30.0258159Z +      let counters = index.get(rid);
+2026-03-24T13:30:30.0259990Z +      if (counters === undefined) {
+2026-03-24T13:30:30.0261001Z +        counters = new Set();
+2026-03-24T13:30:30.0261935Z +        index.set(rid, counters);
+2026-03-24T13:30:30.0266060Z +      }
+2026-03-24T13:30:30.0267152Z +      counters.add(frag.insertionId.counter);
+2026-03-24T13:30:30.0268186Z +    }
+2026-03-24T13:30:30.0268913Z +    this._fragmentIds = index;
+2026-03-24T13:30:30.0269790Z +  }
+2026-03-24T13:30:30.0271047Z +
+2026-03-24T13:30:30.0272005Z    // ---------------------------------------------------------------------------
+2026-03-24T13:30:30.0273392Z    // Serialization
+2026-03-24T13:30:30.0274900Z    // ---------------------------------------------------------------------------
+2026-03-24T13:30:30.0277183Z @@ -1346,7 +1376,9 @@ export class TextBuffer {
+2026-03-24T13:30:30.0278278Z        undoMap: undoMapEntries,
+2026-03-24T13:30:30.0279206Z        undoStack,
+2026-03-24T13:30:30.0279973Z        redoStack,
+2026-03-24T13:30:30.0282113Z -      appliedOps: [...this.appliedOps],
+2026-03-24T13:30:30.0291185Z +      appliedOps: [...this.appliedOps.entries()].flatMap(([rid, counters]) =>
+2026-03-24T13:30:30.0398804Z +        [...counters].map((c) => `${rid}:${c}`),
+2026-03-24T13:30:30.0400020Z +      ),
+2026-03-24T13:30:30.0400869Z        nextTransactionId: this.nextTransactionId,
+2026-03-24T13:30:30.0402044Z        groupDelay: this.groupDelay,
+2026-03-24T13:30:30.0402982Z      };
+2026-03-24T13:30:30.0403778Z @@ -1406,7 +1438,7 @@ export class TextBuffer {
+2026-03-24T13:30:30.0404889Z  
+2026-03-24T13:30:30.0406164Z        return createFragment(insertionId, sf.io, locator, sf.t, sf.v, deletions, baseLocator);
+2026-03-24T13:30:30.0407970Z      });
+2026-03-24T13:30:30.0409069Z -    buffer.fragments = SumTree.fromItems(fragments, fragmentSummaryOps);
+2026-03-24T13:30:30.0410480Z +    buffer.setFragments(fragments);
+2026-03-24T13:30:30.0411496Z  
+2026-03-24T13:30:30.0412187Z      // Restore undo map
+2026-03-24T13:30:30.0413099Z      buffer.undoMap.mergeFrom(
+2026-03-24T13:30:30.0414120Z @@ -1438,8 +1470,20 @@ export class TextBuffer {
+2026-03-24T13:30:30.0420646Z        })),
+2026-03-24T13:30:30.0421657Z      }));
+2026-03-24T13:30:30.0422328Z  
+2026-03-24T13:30:30.0423042Z -    // Restore applied ops set
+2026-03-24T13:30:30.0424149Z -    buffer.appliedOps = new Set(snapshot.appliedOps);
+2026-03-24T13:30:30.0425708Z +    // Restore applied ops set (stored as "replicaId:counter" strings)
+2026-03-24T13:30:30.0428713Z +    for (const key of snapshot.appliedOps) {
+2026-03-24T13:30:30.0430556Z +      const colonIdx = key.indexOf(":");
+2026-03-24T13:30:30.0431591Z +      if (colonIdx !== -1) {
+2026-03-24T13:30:30.0432971Z +        const rid = Number(key.slice(0, colonIdx));
+2026-03-24T13:30:30.0434502Z +        const counter = Number(key.slice(colonIdx + 1));
+2026-03-24T13:30:30.0435747Z +        let counters = buffer.appliedOps.get(rid);
+2026-03-24T13:30:30.0437155Z +        if (counters === undefined) {
+2026-03-24T13:30:30.0438389Z +          counters = new Set();
+2026-03-24T13:30:30.0441175Z +          buffer.appliedOps.set(rid, counters);
+2026-03-24T13:30:30.0442348Z +        }
+2026-03-24T13:30:30.0443385Z +        counters.add(counter);
+2026-03-24T13:30:30.0448874Z +      }
+2026-03-24T13:30:30.0449669Z +    }
+2026-03-24T13:30:30.0450337Z  
+2026-03-24T13:30:30.0451063Z      // Restore transaction state
+2026-03-24T13:30:30.0452762Z      buffer.nextTransactionId = snapshot.nextTransactionId;
+2026-03-24T13:30:30.0454001Z -- 
+2026-03-24T13:30:30.0454669Z 2.53.0
+2026-03-24T13:30:30.0455053Z 
+2026-03-24T13:30:30.0455426Z Failed patch content:
+2026-03-24T13:30:30.0456207Z ---
+2026-03-24T13:30:30.0459262Z  src/text/text-buffer.ts | 98 +++++++++++++++++++++++++++++------------
+2026-03-24T13:30:30.0461194Z  1 file changed, 71 insertions(+), 27 deletions(-)
+2026-03-24T13:30:30.0462002Z 
+2026-03-24T13:30:30.0462598Z diff --git a/src/text/text-buffer.ts b/src/text/text-buffer.ts
+2026-03-24T13:30:30.0463876Z index ddbefd2..19b6114 100644
+2026-03-24T13:30:30.0464811Z --- a/src/text/text-buffer.ts
+2026-03-24T13:30:30.0465752Z +++ b/src/text/text-buffer.ts
+2026-03-24T13:30:30.0467089Z @@ -168,8 +168,11 @@ export class TextBuffer {
+2026-03-24T13:30:30.0468196Z    private undoStack: UndoEntry[];
+2026-03-24T13:30:30.0469203Z    private redoStack: UndoEntry[];
+2026-03-24T13:30:30.0470128Z  
+2026-03-24T13:30:30.0470995Z -  // Track applied remote operation IDs for idempotency
+2026-03-24T13:30:30.0472178Z -  private appliedOps: Set<string>;
+2026-03-24T13:30:30.0473613Z +  // Track applied remote operation IDs for idempotency (replicaId -> Set<counter>)
+2026-03-24T13:30:30.0475846Z +  private appliedOps: Map<number, Set<number>>;
+2026-03-24T13:30:30.0477713Z +
+2026-03-24T13:30:30.0478818Z +  // Index of all insertionIds in the fragment tree for O(1) hasFragment checks
+2026-03-24T13:30:30.0483634Z +  private _fragmentIds: Map<number, Set<number>>;
+2026-03-24T13:30:30.0484850Z  
+2026-03-24T13:30:30.0485819Z    // Pending operations waiting for their causal dependencies
+2026-03-24T13:30:30.0487336Z    private pendingOps: Operation[];
+2026-03-24T13:30:30.0488471Z @@ -194,7 +197,8 @@ export class TextBuffer {
+2026-03-24T13:30:30.0489538Z      this.lastEditType = null;
+2026-03-24T13:30:30.0491029Z      this.undoStack = [];
+2026-03-24T13:30:30.0492604Z      this.redoStack = [];
+2026-03-24T13:30:30.0493536Z -    this.appliedOps = new Set();
+2026-03-24T13:30:30.0494540Z +    this.appliedOps = new Map();
+2026-03-24T13:30:30.0501195Z +    this._fragmentIds = new Map();
+2026-03-24T13:30:30.0502241Z      this.pendingOps = [];
+2026-03-24T13:30:30.0503485Z      this._now = Date.now;
+2026-03-24T13:30:30.0505519Z      this._liveSnapshots = 0;
+2026-03-24T13:30:30.0507053Z @@ -232,8 +236,8 @@ export class TextBuffer {
+2026-03-24T13:30:30.0508643Z        const locator = locatorBetween(MIN_LOCATOR, MAX_LOCATOR);
+2026-03-24T13:30:30.0514502Z        const fragment = createFragment(opId, 0, locator, normalized, true);
+2026-03-24T13:30:30.0517341Z  
+2026-03-24T13:30:30.0518211Z -      // Build SumTree with single fragment
+2026-03-24T13:30:30.0538268Z -      buffer.fragments = SumTree.fromItems([fragment], fragmentSummaryOps);
+2026-03-24T13:30:30.0541217Z +      // Build SumTree with single fragment and initialize the insertionId index
+2026-03-24T13:30:30.0543973Z +      buffer.setFragments([fragment]);
+2026-03-24T13:30:30.0545288Z      }
+2026-03-24T13:30:30.0548401Z      return buffer;
+2026-03-24T13:30:30.0549489Z    }
+2026-03-24T13:30:30.0551204Z @@ -596,8 +600,7 @@ export class TextBuffer {
+2026-03-24T13:30:30.0553450Z     */
+2026-03-24T13:30:30.0555453Z    applyRemote(operation: Operation): void {
+2026-03-24T13:30:30.0557299Z      // Idempotency check: skip operations that have already been applied.
+2026-03-24T13:30:30.0559419Z -    const opKey = `${operation.id.replicaId}:${operation.id.counter}`;
+2026-03-24T13:30:30.0561053Z -    if (this.appliedOps.has(opKey)) {
+2026-03-24T13:30:30.0563654Z +    if (this.hasAppliedOp(operation.id)) {
+2026-03-24T13:30:30.0566038Z        return; // Already applied
+2026-03-24T13:30:30.0567538Z      }
+2026-03-24T13:30:30.0568231Z  
+2026-03-24T13:30:30.0569000Z @@ -654,22 +657,16 @@ export class TextBuffer {
+2026-03-24T13:30:30.0571283Z      return true;
+2026-03-24T13:30:30.0572102Z    }
+2026-03-24T13:30:30.0572762Z  
+2026-03-24T13:30:30.0573720Z -  /** Check if any fragment with the given insertionId exists. */
+2026-03-24T13:30:30.0576167Z +  /** Check if any fragment with the given insertionId exists. O(1) via index. */
+2026-03-24T13:30:30.0578024Z    private hasFragment(insertionId: OperationId): boolean {
+2026-03-24T13:30:30.0579347Z -    for (const frag of this.fragmentsArray()) {
+2026-03-24T13:30:30.0583166Z -      if (operationIdsEqual(frag.insertionId, insertionId)) {
+2026-03-24T13:30:30.0584397Z -        return true;
+2026-03-24T13:30:30.0585182Z -      }
+2026-03-24T13:30:30.0585851Z -    }
+2026-03-24T13:30:30.0587732Z -    return false;
+2026-03-24T13:30:30.0589239Z +    return this._fragmentIds.get(insertionId.replicaId)?.has(insertionId.counter) ?? false;
+2026-03-24T13:30:30.0590786Z    }
+2026-03-24T13:30:30.0591438Z  
+2026-03-24T13:30:30.0595607Z    /**
+2026-03-24T13:30:30.0596995Z     * Apply a remote operation that has been confirmed as causally ready.
+2026-03-24T13:30:30.0600778Z     */
+2026-03-24T13:30:30.0601807Z    private applyRemoteInternal(operation: Operation): void {
+2026-03-24T13:30:30.0604123Z -    const opKey = `${operation.id.replicaId}:${operation.id.counter}`;
+2026-03-24T13:30:30.0608338Z -    this.appliedOps.add(opKey);
+2026-03-24T13:30:30.0609458Z +    this.markAppliedOp(operation.id);
+2026-03-24T13:30:30.0610476Z  
+2026-03-24T13:30:30.0611195Z      switch (operation.type) {
+2026-03-24T13:30:30.0612087Z        case "insert":
+2026-03-24T13:30:30.0612957Z @@ -694,8 +691,7 @@ export class TextBuffer {
+2026-03-24T13:30:30.0614053Z        const stillPending: Operation[] = [];
+2026-03-24T13:30:30.0615036Z  
+2026-03-24T13:30:30.0615829Z        for (const pendingOp of this.pendingOps) {
+2026-03-24T13:30:30.0617433Z -        const opKey = `${pendingOp.id.replicaId}:${pendingOp.id.counter}`;
+2026-03-24T13:30:30.0618807Z -        if (this.appliedOps.has(opKey)) {
+2026-03-24T13:30:30.0619920Z +        if (this.hasAppliedOp(pendingOp.id)) {
+2026-03-24T13:30:30.0621193Z            continue; // Already applied (idempotency)
+2026-03-24T13:30:30.0622244Z          }
+2026-03-24T13:30:30.0623043Z          if (this.isCausallyReady(pendingOp)) {
+2026-03-24T13:30:30.0624158Z @@ -740,7 +736,7 @@ export class TextBuffer {
+2026-03-24T13:30:30.0625556Z      // Insert and sort using the same approach as remote inserts for consistency.
+2026-03-24T13:30:30.0627858Z      this.insertFragmentByLocator(frags, newFrag);
+2026-03-24T13:30:30.0628989Z      sortFragments(frags);
+2026-03-24T13:30:30.0633577Z -    this.fragments = SumTree.fromItems(frags, fragmentSummaryOps);
+2026-03-24T13:30:30.0666518Z +    this.setFragments(frags);
+2026-03-24T13:30:30.0670417Z  
+2026-03-24T13:30:30.0671124Z      return {
+2026-03-24T13:30:30.0672902Z        type: "insert",
+2026-03-24T13:30:30.0675690Z @@ -977,7 +973,7 @@ export class TextBuffer {
+2026-03-24T13:30:30.0677118Z        visibleOffset = fragEnd;
+2026-03-24T13:30:30.0681445Z      }
+2026-03-24T13:30:30.0682153Z  
+2026-03-24T13:30:30.0683534Z -    this.fragments = SumTree.fromItems(newFrags, fragmentSummaryOps);
+2026-03-24T13:30:30.0684922Z +    this.setFragments(newFrags);
+2026-03-24T13:30:30.0685837Z  
+2026-03-24T13:30:30.0687423Z      return {
+2026-03-24T13:30:30.0688174Z        type: "delete",
+2026-03-24T13:30:30.0689061Z @@ -1007,7 +1003,7 @@ export class TextBuffer {
+2026-03-24T13:30:30.0690568Z      }
+2026-03-24T13:30:30.0691236Z  
+2026-03-24T13:30:30.0691901Z      if (changed) {
+2026-03-24T13:30:30.0693595Z -      this.fragments = SumTree.fromItems(newFrags, fragmentSummaryOps);
+2026-03-24T13:30:30.0694978Z +      this.setFragments(newFrags);
+2026-03-24T13:30:30.0695897Z      }
+2026-03-24T13:30:30.0696765Z    }
+2026-03-24T13:30:30.0697431Z  
+2026-03-24T13:30:30.0698259Z @@ -1053,7 +1049,7 @@ export class TextBuffer {
+2026-03-24T13:30:30.0701705Z      // Re-sort after insertion to ensure correct interleaving
+2026-03-24T13:30:30.0702989Z      sortFragments(frags);
+2026-03-24T13:30:30.0703823Z  
+2026-03-24T13:30:30.0704823Z -    this.fragments = SumTree.fromItems(frags, fragmentSummaryOps);
+2026-03-24T13:30:30.0707064Z +    this.setFragments(frags);
+2026-03-24T13:30:30.0707955Z    }
+2026-03-24T13:30:30.0708606Z  
+2026-03-24T13:30:30.0709236Z    /**
+2026-03-24T13:30:30.0710014Z @@ -1276,7 +1272,7 @@ export class TextBuffer {
+2026-03-24T13:30:30.0711824Z        return a.insertionOffset - b.insertionOffset;
+2026-03-24T13:30:30.0712929Z      });
+2026-03-24T13:30:30.0713596Z  
+2026-03-24T13:30:30.0714630Z -    this.fragments = SumTree.fromItems(resultFrags, fragmentSummaryOps);
+2026-03-24T13:30:30.0716029Z +    this.setFragments(resultFrags);
+2026-03-24T13:30:30.0718076Z    }
+2026-03-24T13:30:30.0718740Z  
+2026-03-24T13:30:30.0720138Z    private applyRemoteUndo(op: UndoOperation): void {
+2026-03-24T13:30:30.0721473Z @@ -1295,11 +1291,45 @@ export class TextBuffer {
+2026-03-24T13:30:30.0726803Z    // Helpers
+2026-03-24T13:30:30.0727870Z    // ---------------------------------------------------------------------------
+2026-03-24T13:30:30.0730961Z  
+2026-03-24T13:30:30.0732679Z +  /** Check if an operation has already been applied. O(1) numeric lookup. */
+2026-03-24T13:30:30.0734660Z +  private hasAppliedOp(id: OperationId): boolean {
+2026-03-24T13:30:30.0737893Z +    return this.appliedOps.get(id.replicaId)?.has(id.counter) ?? false;
+2026-03-24T13:30:30.0739263Z +  }
+2026-03-24T13:30:30.0741043Z +
+2026-03-24T13:30:30.0741889Z +  /** Mark an operation as applied. */
+2026-03-24T13:30:30.0744120Z +  private markAppliedOp(id: OperationId): void {
+2026-03-24T13:30:30.0745475Z +    let counters = this.appliedOps.get(id.replicaId);
+2026-03-24T13:30:30.0752566Z +    if (counters === undefined) {
+2026-03-24T13:30:30.0754308Z +      counters = new Set();
+2026-03-24T13:30:30.0755316Z +      this.appliedOps.set(id.replicaId, counters);
+2026-03-24T13:30:30.0757270Z +    }
+2026-03-24T13:30:30.0758013Z +    counters.add(id.counter);
+2026-03-24T13:30:30.0759921Z +  }
+2026-03-24T13:30:30.0760635Z +
+2026-03-24T13:30:30.0761343Z    /** Get all fragments as an array. */
+2026-03-24T13:30:30.0762419Z    private fragmentsArray(): Fragment[] {
+2026-03-24T13:30:30.0765446Z      return this.fragments.toArray();
+2026-03-24T13:30:30.0767424Z    }
+2026-03-24T13:30:30.0771215Z  
+2026-03-24T13:30:30.0771905Z +  /**
+2026-03-24T13:30:30.0772810Z +   * Replace the fragment tree with a new set of fragments.
+2026-03-24T13:30:30.0774884Z +   * Rebuilds both the SumTree and the insertionId index for O(1) hasFragment checks.
+2026-03-24T13:30:30.0793989Z +   */
+2026-03-24T13:30:30.0794889Z +  private setFragments(frags: Fragment[]): void {
+2026-03-24T13:30:30.0796518Z +    this.fragments = SumTree.fromItems(frags, fragmentSummaryOps);
+2026-03-24T13:30:30.0798398Z +    const index: Map<number, Set<number>> = new Map();
+2026-03-24T13:30:30.0803985Z +    for (const frag of frags) {
+2026-03-24T13:30:30.0808695Z +      const rid = frag.insertionId.replicaId;
+2026-03-24T13:30:30.0809919Z +      let counters = index.get(rid);
+2026-03-24T13:30:30.0810900Z +      if (counters === undefined) {
+2026-03-24T13:30:30.0811862Z +        counters = new Set();
+2026-03-24T13:30:30.0812764Z +        index.set(rid, counters);
+2026-03-24T13:30:30.0814458Z +      }
+2026-03-24T13:30:30.0815253Z +      counters.add(frag.insertionId.counter);
+2026-03-24T13:30:30.0816266Z +    }
+2026-03-24T13:30:30.0817166Z +    this._fragmentIds = index;
+2026-03-24T13:30:30.0818024Z +  }
+2026-03-24T13:30:30.0820056Z +
+2026-03-24T13:30:30.0821004Z    // ---------------------------------------------------------------------------
+2026-03-24T13:30:30.0822252Z    // Serialization
+2026-03-24T13:30:30.0824153Z    // ---------------------------------------------------------------------------
+2026-03-24T13:30:30.0826515Z @@ -1346,7 +1376,9 @@ export class TextBuffer {
+2026-03-24T13:30:30.0827603Z        undoMap: undoMapEntries,
+2026-03-24T13:30:30.0828697Z        undoStack,
+2026-03-24T13:30:30.0829447Z        redoStack,
+2026-03-24T13:30:30.0834976Z -      appliedOps: [...this.appliedOps],
+2026-03-24T13:30:30.0842923Z +      appliedOps: [...this.appliedOps.entries()].flatMap(([rid, counters]) =>
+2026-03-24T13:30:30.0846058Z +        [...counters].map((c) => `${rid}:${c}`),
+2026-03-24T13:30:30.0847319Z +      ),
+2026-03-24T13:30:30.0848124Z        nextTransactionId: this.nextTransactionId,
+2026-03-24T13:30:30.0849239Z        groupDelay: this.groupDelay,
+2026-03-24T13:30:30.0850155Z      };
+2026-03-24T13:30:30.0852972Z @@ -1406,7 +1438,7 @@ export class TextBuffer {
+2026-03-24T13:30:30.0853997Z  
+2026-03-24T13:30:30.0859937Z        return createFragment(insertionId, sf.io, locator, sf.t, sf.v, deletions, baseLocator);
+2026-03-24T13:30:30.0862916Z      });
+2026-03-24T13:30:30.0864090Z -    buffer.fragments = SumTree.fromItems(fragments, fragmentSummaryOps);
+2026-03-24T13:30:30.0870922Z +    buffer.setFragments(fragments);
+2026-03-24T13:30:30.0872059Z  
+2026-03-24T13:30:30.0872770Z      // Restore undo map
+2026-03-24T13:30:30.0874827Z      buffer.undoMap.mergeFrom(
+2026-03-24T13:30:30.0877191Z @@ -1438,8 +1470,20 @@ export class TextBuffer {
+2026-03-24T13:30:30.0878241Z        })),
+2026-03-24T13:30:30.0878917Z      }));
+2026-03-24T13:30:30.0880629Z  
+2026-03-24T13:30:30.0881352Z -    // Restore applied ops set
+2026-03-24T13:30:30.0883063Z -    buffer.appliedOps = new Set(snapshot.appliedOps);
+2026-03-24T13:30:30.0886785Z +    // Restore applied ops set (stored as "replicaId:counter" strings)
+2026-03-24T13:30:30.0890821Z +    for (const key of snapshot.appliedOps) {
+2026-03-24T13:30:30.0896725Z +      const colonIdx = key.indexOf(":");
+2026-03-24T13:30:30.0899733Z +      if (colonIdx !== -1) {
+2026-03-24T13:30:30.0901302Z +        const rid = Number(key.slice(0, colonIdx));
+2026-03-24T13:30:30.0905286Z +        const counter = Number(key.slice(colonIdx + 1));
+2026-03-24T13:30:30.0907266Z +        let counters = buffer.appliedOps.get(rid);
+2026-03-24T13:30:30.0909651Z +        if (counters === undefined) {
+2026-03-24T13:30:30.0910700Z +          counters = new Set();
+2026-03-24T13:30:30.0913203Z +          buffer.appliedOps.set(rid, counters);
+2026-03-24T13:30:30.0915785Z +        }
+2026-03-24T13:30:30.0917294Z +        counters.add(counter);
+2026-03-24T13:30:30.0920291Z +      }
+2026-03-24T13:30:30.0924533Z +    }
+2026-03-24T13:30:30.0925323Z  
+2026-03-24T13:30:30.0930021Z      // Restore transaction state
+2026-03-24T13:30:30.0931279Z      buffer.nextTransactionId = snapshot.nextTransactionId;
+2026-03-24T13:30:30.0935958Z -- 
+2026-03-24T13:30:30.0940396Z 2.53.0
+2026-03-24T13:30:30.0941873Z 
+2026-03-24T13:30:30.0941884Z 
+2026-03-24T13:30:30.0949997Z ##[error]✗ Message 1 (create_pull_request) failed: Failed to apply patch
+2026-03-24T13:30:30.0971650Z ##[warning]⚠️ Code push operation 'create_pull_request' failed — remaining safe outputs will be cancelled
+2026-03-24T13:30:30.0982758Z ⏭ Message 2 (create_issue) cancelled — Cancelled: code push operation failed (create_pull_request: Failed to apply patch)
+2026-03-24T13:30:30.0990172Z Stored 0 missing tool(s), 0 missing data item(s), and 0 noop message(s) for footer generation
+2026-03-24T13:30:30.0995968Z 📝 Safe output summaries written to step summary
+2026-03-24T13:30:30.0997015Z 
+2026-03-24T13:30:30.0997378Z === Processing Summary ===
+2026-03-24T13:30:30.0998676Z Total messages: 2
+2026-03-24T13:30:30.0999439Z Successful: 0
+2026-03-24T13:30:30.1000146Z Failed: 1
+2026-03-24T13:30:30.1006903Z Cancelled (code push failed): 1
+2026-03-24T13:30:30.1007892Z Temporary IDs registered: 0
+2026-03-24T13:30:30.1010334Z Synthetic updates: 0
+2026-03-24T13:30:30.1017796Z ##[warning]1 message(s) failed to process
+2026-03-24T13:30:30.1025317Z ##[error]1 safe output(s) failed:
+  - create_pull_request: Failed to apply patch
+2026-03-24T13:30:30.1040293Z ##[warning]1 message(s) were cancelled because a code push operation failed
+2026-03-24T13:30:30.1047121Z Exported temporary ID map with 0 mapping(s)
+2026-03-24T13:30:30.1050927Z Exported 1 code push failure(s)
+2026-03-24T13:30:30.1052607Z Safe Output Handler Manager completed
+2026-03-24T13:30:30.1581482Z ##[group]Run actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f
+2026-03-24T13:30:30.1583021Z with:
+2026-03-24T13:30:30.1583745Z   name: safe-output-items
+2026-03-24T13:30:30.1584644Z   path: /tmp/safe-output-items.jsonl
+2026-03-24T13:30:30.1590410Z   if-no-files-found: warn
+2026-03-24T13:30:30.1591894Z   compression-level: 6
+2026-03-24T13:30:30.1592847Z   overwrite: false
+2026-03-24T13:30:30.1593643Z   include-hidden-files: false
+2026-03-24T13:30:30.1597834Z   archive: true
+2026-03-24T13:30:30.1599214Z env:
+2026-03-24T13:30:30.1602354Z   GH_AW_CALLER_WORKFLOW_ID: iamnbutler/crdt/daily-perf-improver
+2026-03-24T13:30:30.1604396Z   GH_AW_ENGINE_ID: claude
+2026-03-24T13:30:30.1605790Z   GH_AW_WORKFLOW_ID: daily-perf-improver
+2026-03-24T13:30:30.1608664Z   GH_AW_WORKFLOW_NAME: Daily Perf Improver
+2026-03-24T13:30:30.1617696Z   GH_AW_WORKFLOW_SOURCE: githubnext/agentics/workflows/daily-perf-improver.md@4957663821dbb3260348084fa2f1659701950fef
+2026-03-24T13:30:30.1631026Z   GH_AW_WORKFLOW_SOURCE_URL: https://github.com/githubnext/agentics/tree/4957663821dbb3260348084fa2f1659701950fef/workflows/daily-perf-improver.md
+2026-03-24T13:30:30.1637329Z   GH_AW_AGENT_OUTPUT: /tmp/gh-aw/agent_output.json
+2026-03-24T13:30:30.1655190Z ##[endgroup]
+2026-03-24T13:30:30.6263056Z With the provided path, there will be 1 file uploaded
+2026-03-24T13:30:30.6280593Z Artifact name is valid!
+2026-03-24T13:30:30.6289131Z Root directory input is valid!
+2026-03-24T13:30:30.8399593Z Uploading artifact: safe-output-items.zip
+2026-03-24T13:30:30.8500196Z Beginning upload of artifact content to blob storage
+2026-03-24T13:30:31.0771016Z Uploaded bytes 162
+2026-03-24T13:30:31.1429730Z Finished uploading artifact content to blob storage!
+2026-03-24T13:30:31.1432992Z SHA256 digest of uploaded artifact is 84ded680e8bc11b34c8b591a19cf94debbb4e32ce649fd774a5d81e334e4d0f0
+2026-03-24T13:30:31.1466976Z Finalizing artifact upload
+2026-03-24T13:30:31.3783472Z Artifact safe-output-items successfully finalized. Artifact ID 6080884718
+2026-03-24T13:30:31.3786004Z Artifact safe-output-items has been successfully uploaded! Final size is 162 bytes. Artifact ID is 6080884718
+2026-03-24T13:30:31.3806923Z Artifact download URL: https://github.com/iamnbutler/crdt/actions/runs/23490833303/artifacts/6080884718
+2026-03-24T13:30:31.4224959Z Post job cleanup.
+2026-03-24T13:30:31.5868709Z [command]/usr/bin/git version
+2026-03-24T13:30:31.5918433Z git version 2.53.0
+2026-03-24T13:30:31.5985637Z Copying '/home/runner/.gitconfig' to '/home/runner/work/_temp/7d62abed-ad26-406d-97d6-06c232f2e44d/.gitconfig'
+2026-03-24T13:30:31.6005042Z Temporarily overriding HOME='/home/runner/work/_temp/7d62abed-ad26-406d-97d6-06c232f2e44d' before making global git config changes
+2026-03-24T13:30:31.6013091Z Adding repository directory to the temporary git global config as a safe directory
+2026-03-24T13:30:31.6021804Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/crdt/crdt
+2026-03-24T13:30:31.6102432Z Removing SSH command configuration
+2026-03-24T13:30:31.6113594Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-03-24T13:30:31.6204353Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-03-24T13:30:31.6578994Z Removing HTTP extra header
+2026-03-24T13:30:31.6586952Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-03-24T13:30:31.6631759Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-03-24T13:30:31.6926285Z Removing includeIf entries pointing to credentials config files
+2026-03-24T13:30:31.6929232Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-03-24T13:30:31.6969750Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-03-24T13:30:31.7460735Z Evaluate and set job outputs
+2026-03-24T13:30:31.7474863Z Set output 'code_push_failure_count'
+2026-03-24T13:30:31.7478250Z Set output 'code_push_failure_errors'
+2026-03-24T13:30:31.7480083Z Set output 'create_discussion_error_count'
+2026-03-24T13:30:31.7481620Z Set output 'process_safe_outputs_processed_count'
+2026-03-24T13:30:31.7483195Z Set output 'process_safe_outputs_temporary_id_map'
+2026-03-24T13:30:31.7485179Z Cleaning up orphan processes

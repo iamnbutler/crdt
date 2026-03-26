@@ -711,6 +711,37 @@ export class TextBuffer {
       this.recordImplicitOp(opId, "insert");
     }
 
+    // Fastest path: inserting at end of document with no splits needed
+    // Skip when there are live snapshots (mutations would corrupt them)
+    const totalVisibleLen = this.fragments.summary().visibleLen;
+    if (offset === totalVisibleLen && !this.fragments.isEmpty() && this._liveSnapshots === 0) {
+      // Get the last fragment to compute locator
+      const lastIdx = this.fragments.length() - 1;
+      const lastFrag = this.fragments.get(lastIdx);
+
+      if (lastFrag) {
+        const locator = locatorBetween(lastFrag.locator, MAX_LOCATOR);
+        const newFrag = createFragment(opId, 0, locator, text, true);
+
+        // O(log n) in-place push (avoids O(n) shallowClone)
+        this.fragments.pushMut(newFrag);
+        this.addToFragmentIndex(opId);
+
+        return {
+          type: "insert",
+          id: opId,
+          text,
+          after: {
+            insertionId: lastFrag.insertionId,
+            offset: lastFrag.insertionOffset + lastFrag.length,
+          },
+          before: { insertionId: MAX_OPERATION_ID, offset: 0 },
+          version: cloneVersionVector(this._version),
+          locator,
+        };
+      }
+    }
+
     // Fast path: use cursor-based seeking for boundary inserts (no splits)
     // Skip fast path when there are live snapshots (mutations would corrupt them)
     if (this._liveSnapshots === 0 && !this.fragments.isEmpty()) {

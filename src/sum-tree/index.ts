@@ -871,6 +871,271 @@ export class SumTree<T extends Summarizable<S>, S> {
     return newTree;
   }
 
+  // ---------------------------------------------------------------------------
+  // Dimension-based operations (O(log n) using summary seeking)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Find leaf position by dimension value.
+   * Returns path and the local offset within the leaf item.
+   * This enables O(log n) operations based on summary dimensions.
+   */
+  findByDimension<D>(
+    dimension: Dimension<S, D>,
+    target: D,
+    bias: SeekBias = "right",
+  ): { path: Array<{ nodeId: NodeId; indexInNode: number }>; localOffset: D } | undefined {
+    if (this.isEmpty()) {
+      return undefined;
+    }
+
+    const path: Array<{ nodeId: NodeId; indexInNode: number }> = [];
+    let current = this._root;
+    let accumulatedPos = dimension.zero();
+
+    while (true) {
+      if (this.arena.isLeaf(current)) {
+        const data = this.arena.getItem(current);
+        const items = data?.items ?? [];
+
+        for (let i = 0; i < items.length; i++) {
+          const item = items[i];
+          if (item === undefined) continue;
+
+          const itemSummary = item.summary();
+          const itemMeasure = dimension.measure(itemSummary);
+          const nextPos = dimension.add(accumulatedPos, itemMeasure);
+
+          const cmp = dimension.compare(nextPos, target);
+          if (cmp > 0 || (cmp === 0 && bias === "left")) {
+            // Found it - target is within this item
+            path.push({ nodeId: current, indexInNode: i });
+            // localOffset is how far into this item the target is
+            // We compute: target - accumulatedPos (but dimensions may not support subtraction)
+            // For numeric dimensions, this is: target - accumulatedPos
+            return { path, localOffset: this.subtractDimension(dimension, target, accumulatedPos) };
+          }
+
+          accumulatedPos = nextPos;
+        }
+
+        // Target is past all items in this leaf - return last position
+        path.push({ nodeId: current, indexInNode: items.length });
+        return { path, localOffset: dimension.zero() };
+      }
+
+      // Internal node - find the child containing the target
+      const children = this.arena.getChildren(current);
+      let found = false;
+
+      for (let i = 0; i < children.length; i++) {
+        const childId = children[i];
+        if (childId === undefined) continue;
+
+        const childSummary = this.summaries.get(childId);
+        if (childSummary === undefined) continue;
+
+        const childMeasure = dimension.measure(childSummary);
+        const nextPos = dimension.add(accumulatedPos, childMeasure);
+
+        const cmp = dimension.compare(nextPos, target);
+        if (cmp > 0 || (cmp === 0 && bias === "left")) {
+          // Target is in this child
+          path.push({ nodeId: current, indexInNode: i });
+          current = childId;
+          found = true;
+          break;
+        }
+
+        accumulatedPos = nextPos;
+      }
+
+      if (!found) {
+        // Target is past all children
+        const lastChild = children[children.length - 1];
+        if (lastChild !== undefined) {
+          path.push({ nodeId: current, indexInNode: children.length - 1 });
+          current = lastChild;
+        } else {
+          break;
+        }
+      }
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Subtract two dimension values. For numeric dimensions this is simple subtraction.
+   * This helper exists because Dimension doesn't have a subtract operation.
+   */
+  private subtractDimension<D>(_dimension: Dimension<S, D>, a: D, b: D): D {
+    // For numeric dimensions, we can compute a - b
+    // This is a simplification - for complex dimensions we'd need explicit subtract
+    if (typeof a === "number" && typeof b === "number") {
+      return (a - b) as D;
+    }
+    // For non-numeric, return the target (approximate - caller must handle)
+    return a;
+  }
+
+  /**
+   * Insert an item at a position determined by dimension value.
+   * Returns a new tree (path copying), leaving the original unchanged.
+   *
+   * @param dimension The dimension to use for seeking
+   * @param target The target position in the dimension
+   * @param item The item to insert
+   * @param bias Where to insert relative to target ("left" = before, "right" = after)
+   */
+  insertByDimension<D>(
+    dimension: Dimension<S, D>,
+    target: D,
+    item: T,
+    bias: SeekBias = "right",
+  ): SumTree<T, S> {
+    const result = this.findByDimension(dimension, target, bias);
+    if (result === undefined) {
+      // Empty tree - insert as first item
+      return this.push(item);
+    }
+
+    const newTree = this.shallowClone();
+    const clonedPath = newTree.clonePath(result.path);
+
+    const leafEntry = clonedPath[clonedPath.length - 1];
+    if (leafEntry === undefined) {
+      return newTree;
+    }
+
+    const leafData = newTree.arena.getItem(leafEntry.nodeId);
+    const items = leafData?.items ?? [];
+    items.splice(leafEntry.indexInNode, 0, item);
+
+    newTree.arena.setItem(leafEntry.nodeId, { items });
+    newTree.arena.setCount(leafEntry.nodeId, items.length);
+
+    if (items.length > newTree.branchingFactor) {
+      newTree.splitAndPropagate(clonedPath);
+    } else {
+      newTree.updateSummariesUp(clonedPath);
+    }
+
+    return newTree;
+  }
+
+  /**
+   * Edit an item at a position determined by dimension value.
+   * Returns a new tree with the item transformed by the edit function.
+   *
+   * @param dimension The dimension to use for seeking
+   * @param target The target position in the dimension
+   * @param edit Function that receives (item, localOffset) and returns the replacement item(s)
+   * @param bias Where to find item relative to target
+   */
+  editByDimension<D>(
+    dimension: Dimension<S, D>,
+    target: D,
+    edit: (item: T, localOffset: D) => T | T[],
+    bias: SeekBias = "right",
+  ): SumTree<T, S> {
+    const result = this.findByDimension(dimension, target, bias);
+    if (result === undefined) {
+      return this; // Empty tree, nothing to edit
+    }
+
+    const newTree = this.shallowClone();
+    const clonedPath = newTree.clonePath(result.path);
+
+    const leafEntry = clonedPath[clonedPath.length - 1];
+    if (leafEntry === undefined) {
+      return newTree;
+    }
+
+    const leafData = newTree.arena.getItem(leafEntry.nodeId);
+    const items = leafData?.items ?? [];
+    const oldItem = items[leafEntry.indexInNode];
+
+    if (oldItem === undefined) {
+      return newTree;
+    }
+
+    // Apply edit function
+    const edited = edit(oldItem, result.localOffset);
+    const newItems = Array.isArray(edited) ? edited : [edited];
+
+    // Replace the item with edited result
+    items.splice(leafEntry.indexInNode, 1, ...newItems);
+
+    newTree.arena.setItem(leafEntry.nodeId, { items });
+    newTree.arena.setCount(leafEntry.nodeId, items.length);
+
+    // Handle overflow if edit expanded to multiple items
+    if (items.length > newTree.branchingFactor) {
+      newTree.splitAndPropagate(clonedPath);
+    } else {
+      newTree.updateSummariesUp(clonedPath);
+    }
+
+    return newTree;
+  }
+
+  /**
+   * Delete an item at a position determined by dimension value.
+   * Returns a new tree (path copying), leaving the original unchanged.
+   *
+   * @param dimension The dimension to use for seeking
+   * @param target The target position in the dimension
+   * @param bias Where to find item relative to target
+   */
+  deleteByDimension<D>(
+    dimension: Dimension<S, D>,
+    target: D,
+    bias: SeekBias = "right",
+  ): SumTree<T, S> {
+    const result = this.findByDimension(dimension, target, bias);
+    if (result === undefined) {
+      return this; // Empty tree or not found
+    }
+
+    const leafEntry = result.path[result.path.length - 1];
+    if (leafEntry === undefined) {
+      return this;
+    }
+
+    // Check if we're past the end (indexInNode === items.length means past-end position)
+    const leafData = this.arena.getItem(leafEntry.nodeId);
+    const items = leafData?.items ?? [];
+    if (leafEntry.indexInNode >= items.length) {
+      return this; // Nothing to delete at past-end position
+    }
+
+    const newTree = this.shallowClone();
+    const clonedPath = newTree.clonePath(result.path);
+
+    const clonedLeafEntry = clonedPath[clonedPath.length - 1];
+    if (clonedLeafEntry === undefined) {
+      return newTree;
+    }
+
+    const clonedLeafData = newTree.arena.getItem(clonedLeafEntry.nodeId);
+    const clonedItems = clonedLeafData?.items ?? [];
+    clonedItems.splice(clonedLeafEntry.indexInNode, 1);
+
+    newTree.arena.setItem(clonedLeafEntry.nodeId, { items: clonedItems });
+    newTree.arena.setCount(clonedLeafEntry.nodeId, clonedItems.length);
+
+    // Check for underflow and merge if needed
+    const minItems = Math.floor(newTree.branchingFactor / 2);
+    if (clonedItems.length < minItems && clonedPath.length > 1) {
+      newTree.mergeOrRedistribute(clonedPath);
+    } else {
+      newTree.updateSummariesUp(clonedPath);
+    }
+
+    return newTree;
+  }
+
   /**
    * Replace item at index with multiple items, mutating in place.
    * O(log n) - single traversal down, single rebalance up.
@@ -1308,8 +1573,16 @@ export class SumTree<T extends Summarizable<S>, S> {
 
   /**
    * Get the number of items in the tree.
+   * O(1) if summaryOps.getItemCount is defined, O(n) otherwise.
    */
   length(): number {
+    const getItemCount = this.summaryOps.getItemCount;
+    if (getItemCount !== undefined) {
+      const summary = this.summaries.get(this._root);
+      if (summary !== undefined) {
+        return getItemCount(summary);
+      }
+    }
     return this.countItems(this._root);
   }
 
@@ -1571,6 +1844,7 @@ export class SumTree<T extends Summarizable<S>, S> {
     const path: Array<{ nodeId: NodeId; indexInNode: number }> = [];
     let remaining = index;
     let current = this._root;
+    const getItemCount = this.summaryOps.getItemCount;
 
     while (true) {
       if (this.arena.isLeaf(current)) {
@@ -1589,7 +1863,14 @@ export class SumTree<T extends Summarizable<S>, S> {
         const childId = children[i];
         if (childId === undefined) continue;
 
-        const childCount = this.countItems(childId);
+        // O(1) via summary if getItemCount is available, O(n) otherwise
+        let childCount: number;
+        if (getItemCount !== undefined) {
+          const summary = this.summaries.get(childId);
+          childCount = summary !== undefined ? getItemCount(summary) : this.countItems(childId);
+        } else {
+          childCount = this.countItems(childId);
+        }
 
         if (remaining < childCount || i === children.length - 1) {
           path.push({ nodeId: current, indexInNode: i });
