@@ -26,23 +26,32 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Check for new benchmark data
+      - name: Check for changes
         id: check
         run: |
           git fetch origin benchmark-data --tags
-          CURRENT=$(git rev-parse origin/benchmark-data)
+
+          # Check benchmark data
+          BENCH_CURRENT=$(git rev-parse origin/benchmark-data)
           if git rev-parse pages-deployed >/dev/null 2>&1; then
-            DEPLOYED=$(git rev-parse pages-deployed)
+            BENCH_DEPLOYED=$(git rev-parse pages-deployed)
           else
-            DEPLOYED="none"
+            BENCH_DEPLOYED="none"
           fi
-          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
-          echo "deployed=$DEPLOYED" >> "$GITHUB_OUTPUT"
-          if [ "$CURRENT" = "$DEPLOYED" ]; then
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "::notice::No new benchmark data since last deploy — skipping."
-          else
+          echo "bench_current=$BENCH_CURRENT" >> "$GITHUB_OUTPUT"
+
+          # Check if template changed (compare to parent commit)
+          TEMPLATE_CHANGED="false"
+          if git diff --name-only HEAD~1 HEAD 2>/dev/null | grep -q "^docs/bench/"; then
+            TEMPLATE_CHANGED="true"
+          fi
+
+          # Deploy if benchmark data changed OR template changed OR manual trigger
+          if [ "$BENCH_CURRENT" != "$BENCH_DEPLOYED" ] || [ "$TEMPLATE_CHANGED" = "true" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "skip=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::No changes since last deploy — skipping."
           fi
 
       - name: Assemble Pages artifact
@@ -66,5 +75,5 @@ jobs:
       - name: Update deployed marker
         if: steps.check.outputs.skip != 'true'
         run: |
-          git tag -f pages-deployed ${{ steps.check.outputs.current }}
+          git tag -f pages-deployed ${{ steps.check.outputs.bench_current }}
           git push -f origin pages-deployed
