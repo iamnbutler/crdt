@@ -51,9 +51,7 @@ const snapshotRegistry = new FinalizationRegistry<SnapshotRegistryHeld>((held) =
   // Snapshot was GC'd without explicit release() - log warning
   const age = Date.now() - held.createdAt;
   console.warn(
-    `[TextBufferSnapshot] Leaked snapshot from epoch ${held.epoch} ` +
-      `was GC'd after ${age}ms without release(). ` +
-      `Call snapshot.release() when done to enable memory reclamation.`,
+    `[TextBufferSnapshot] Leaked snapshot from epoch ${held.epoch} was GC'd after ${age}ms without release(). Call snapshot.release() when done to enable memory reclamation.`,
   );
   // Still call the release callback so the epoch can be freed
   if (held.onRelease !== null) {

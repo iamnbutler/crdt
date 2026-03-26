@@ -591,6 +591,67 @@ export class Cursor<T extends Summarizable<S>, S, D> {
 
     return index;
   }
+
+  /**
+   * Get the cumulative position BEFORE the current item.
+   * This is the sum of all item measures from the start up to (but not including)
+   * the current item.
+   */
+  startPosition(): D {
+    return this._position;
+  }
+
+  /**
+   * Peek at the previous item without moving the cursor.
+   * Returns undefined if at the beginning.
+   */
+  peekPrev(): T | undefined {
+    if (this.stack.length === 0) {
+      return undefined;
+    }
+
+    // Save state
+    const savedStack = this.stack.map((e) => ({ ...e }));
+    const savedPosition = this._position;
+    const savedAtEnd = this._atEnd;
+
+    // Move to previous
+    const moved = this.prev();
+    const prevItem = moved ? this.item() : undefined;
+
+    // Restore state
+    this.stack = savedStack;
+    this._position = savedPosition;
+    this._atEnd = savedAtEnd;
+
+    return prevItem;
+  }
+
+  /**
+   * Peek at the next item without moving the cursor.
+   * Returns undefined if at the end or on the last item.
+   */
+  peekNext(): T | undefined {
+    if (this._atEnd) {
+      return undefined;
+    }
+
+    // Save state
+    const savedStack = this.stack.map((e) => ({ ...e }));
+    const savedPosition = this._position;
+    const savedAtEnd = this._atEnd;
+
+    // Move to next
+    const moved = this.next();
+    const nextItem = moved ? this.item() : undefined;
+
+    // Restore state
+    this.stack = savedStack;
+    this._position = savedPosition;
+    this._atEnd = savedAtEnd;
+
+    return nextItem;
+  }
 }
 
 /**
@@ -1076,6 +1137,423 @@ export class SumTree<T extends Summarizable<S>, S> {
   }
 
   /**
+   * Replace item at index with multiple items, mutating in place.
+   * O(log n) - single traversal down, single rebalance up.
+   *
+   * @param index The index of the item to replace
+   * @param items The items to insert in place of the removed item
+   */
+  replaceAtMut(index: number, items: T[]): void {
+    if (index < 0 || index >= this.length()) {
+      throw new Error(`Index ${index} out of bounds`);
+    }
+
+    // Edge case: empty items = remove
+    if (items.length === 0) {
+      // Use removeAt logic but in-place
+      const path = this.findLeafForIndex(index);
+      if (path.length === 0) return;
+
+      const leafEntry = path[path.length - 1];
+      if (leafEntry === undefined) return;
+
+      const leafData = this.arena.getItem(leafEntry.nodeId);
+      const leafItems = leafData?.items ?? [];
+      leafItems.splice(leafEntry.indexInNode, 1);
+
+      this.arena.setItem(leafEntry.nodeId, { items: leafItems });
+      this.arena.setCount(leafEntry.nodeId, leafItems.length);
+
+      const minItems = Math.floor(this.branchingFactor / 2);
+      if (leafItems.length < minItems && path.length > 1) {
+        this.mergeOrRedistribute(path);
+      } else {
+        this.updateSummariesUp(path);
+      }
+      return;
+    }
+
+    const path = this.findLeafForIndex(index);
+    if (path.length === 0) return;
+
+    const leafEntry = path[path.length - 1];
+    if (leafEntry === undefined) return;
+
+    const leafData = this.arena.getItem(leafEntry.nodeId);
+    const leafItems = leafData?.items ?? [];
+
+    // Replace 1 item with N items
+    leafItems.splice(leafEntry.indexInNode, 1, ...items);
+
+    this.arena.setItem(leafEntry.nodeId, { items: leafItems });
+    this.arena.setCount(leafEntry.nodeId, leafItems.length);
+
+    // Check for overflow and split if needed
+    if (leafItems.length > this.branchingFactor) {
+      this.splitAndPropagate(path);
+    } else {
+      this.updateSummariesUp(path);
+    }
+  }
+
+  /**
+   * Replace item at index with multiple items.
+   * Returns a new tree (path copying), leaving the original unchanged.
+   * O(log n) - single traversal down, single rebalance up.
+   *
+   * @param index The index of the item to replace
+   * @param items The items to insert in place of the removed item
+   */
+  replaceAt(index: number, items: T[]): SumTree<T, S> {
+    if (index < 0 || index >= this.length()) {
+      throw new Error(`Index ${index} out of bounds`);
+    }
+
+    // Edge case: empty items = remove
+    if (items.length === 0) {
+      return this.removeAt(index);
+    }
+
+    const newTree = this.shallowClone();
+    const path = newTree.findLeafForIndex(index);
+    if (path.length === 0) {
+      return newTree;
+    }
+
+    // Clone the path (path copying)
+    const clonedPath = newTree.clonePath(path);
+
+    const leafEntry = clonedPath[clonedPath.length - 1];
+    if (leafEntry === undefined) {
+      return newTree;
+    }
+
+    const leafData = newTree.arena.getItem(leafEntry.nodeId);
+    const leafItems = leafData?.items ?? [];
+
+    // Replace 1 item with N items
+    leafItems.splice(leafEntry.indexInNode, 1, ...items);
+
+    newTree.arena.setItem(leafEntry.nodeId, { items: leafItems });
+    newTree.arena.setCount(leafEntry.nodeId, leafItems.length);
+
+    // Check for overflow and split if needed
+    if (leafItems.length > newTree.branchingFactor) {
+      newTree.splitAndPropagate(clonedPath);
+    } else {
+      newTree.updateSummariesUp(clonedPath);
+    }
+
+    return newTree;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Dimension-based operations (O(log n) using summary seeking)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Find leaf position by dimension value.
+   * Returns path and the local offset within the leaf item.
+   * This enables O(log n) operations based on summary dimensions.
+   */
+  findByDimension<D>(
+    dimension: Dimension<S, D>,
+    target: D,
+    bias: SeekBias = "right",
+  ): { path: Array<{ nodeId: NodeId; indexInNode: number }>; localOffset: D } | undefined {
+    if (this.isEmpty()) {
+      return undefined;
+    }
+
+    const path: Array<{ nodeId: NodeId; indexInNode: number }> = [];
+    let current = this._root;
+    let accumulatedPos = dimension.zero();
+
+    while (true) {
+      if (this.arena.isLeaf(current)) {
+        const data = this.arena.getItem(current);
+        const items = data?.items ?? [];
+
+        for (let i = 0; i < items.length; i++) {
+          const item = items[i];
+          if (item === undefined) continue;
+
+          const itemSummary = item.summary();
+          const itemMeasure = dimension.measure(itemSummary);
+          const nextPos = dimension.add(accumulatedPos, itemMeasure);
+
+          const cmp = dimension.compare(nextPos, target);
+          if (cmp > 0 || (cmp === 0 && bias === "left")) {
+            // Found it - target is within this item
+            path.push({ nodeId: current, indexInNode: i });
+            // localOffset is how far into this item the target is
+            // We compute: target - accumulatedPos (but dimensions may not support subtraction)
+            // For numeric dimensions, this is: target - accumulatedPos
+            return { path, localOffset: this.subtractDimension(dimension, target, accumulatedPos) };
+          }
+
+          accumulatedPos = nextPos;
+        }
+
+        // Target is past all items in this leaf - return last position
+        path.push({ nodeId: current, indexInNode: items.length });
+        return { path, localOffset: dimension.zero() };
+      }
+
+      // Internal node - find the child containing the target
+      const children = this.arena.getChildren(current);
+      let found = false;
+
+      for (let i = 0; i < children.length; i++) {
+        const childId = children[i];
+        if (childId === undefined) continue;
+
+        const childSummary = this.summaries.get(childId);
+        if (childSummary === undefined) continue;
+
+        const childMeasure = dimension.measure(childSummary);
+        const nextPos = dimension.add(accumulatedPos, childMeasure);
+
+        const cmp = dimension.compare(nextPos, target);
+        if (cmp > 0 || (cmp === 0 && bias === "left")) {
+          // Target is in this child
+          path.push({ nodeId: current, indexInNode: i });
+          current = childId;
+          found = true;
+          break;
+        }
+
+        accumulatedPos = nextPos;
+      }
+
+      if (!found) {
+        // Target is past all children
+        const lastChild = children[children.length - 1];
+        if (lastChild !== undefined) {
+          path.push({ nodeId: current, indexInNode: children.length - 1 });
+          current = lastChild;
+        } else {
+          break;
+        }
+      }
+    }
+
+    return undefined;
+  }
+
+  /**
+   * Subtract two dimension values. For numeric dimensions this is simple subtraction.
+   * This helper exists because Dimension doesn't have a subtract operation.
+   */
+  private subtractDimension<D>(_dimension: Dimension<S, D>, a: D, b: D): D {
+    // For numeric dimensions, we can compute a - b
+    // This is a simplification - for complex dimensions we'd need explicit subtract
+    if (typeof a === "number" && typeof b === "number") {
+      return (a - b) as D;
+    }
+    // For non-numeric, return the target (approximate - caller must handle)
+    return a;
+  }
+
+  /**
+   * Insert an item at a position determined by dimension value.
+   * Returns a new tree (path copying), leaving the original unchanged.
+   *
+   * @param dimension The dimension to use for seeking
+   * @param target The target position in the dimension
+   * @param item The item to insert
+   * @param bias Where to insert relative to target ("left" = before, "right" = after)
+   */
+  insertByDimension<D>(
+    dimension: Dimension<S, D>,
+    target: D,
+    item: T,
+    bias: SeekBias = "right",
+  ): SumTree<T, S> {
+    const result = this.findByDimension(dimension, target, bias);
+    if (result === undefined) {
+      // Empty tree - insert as first item
+      return this.push(item);
+    }
+
+    const newTree = this.shallowClone();
+    const clonedPath = newTree.clonePath(result.path);
+
+    const leafEntry = clonedPath[clonedPath.length - 1];
+    if (leafEntry === undefined) {
+      return newTree;
+    }
+
+    const leafData = newTree.arena.getItem(leafEntry.nodeId);
+    const items = leafData?.items ?? [];
+    items.splice(leafEntry.indexInNode, 0, item);
+
+    newTree.arena.setItem(leafEntry.nodeId, { items });
+    newTree.arena.setCount(leafEntry.nodeId, items.length);
+
+    if (items.length > newTree.branchingFactor) {
+      newTree.splitAndPropagate(clonedPath);
+    } else {
+      newTree.updateSummariesUp(clonedPath);
+    }
+
+    return newTree;
+  }
+
+  /**
+   * Edit an item at a position determined by dimension value.
+   * Returns a new tree with the item transformed by the edit function.
+   *
+   * @param dimension The dimension to use for seeking
+   * @param target The target position in the dimension
+   * @param edit Function that receives (item, localOffset) and returns the replacement item(s)
+   * @param bias Where to find item relative to target
+   */
+  editByDimension<D>(
+    dimension: Dimension<S, D>,
+    target: D,
+    edit: (item: T, localOffset: D) => T | T[],
+    bias: SeekBias = "right",
+  ): SumTree<T, S> {
+    const result = this.findByDimension(dimension, target, bias);
+    if (result === undefined) {
+      return this; // Empty tree, nothing to edit
+    }
+
+    const newTree = this.shallowClone();
+    const clonedPath = newTree.clonePath(result.path);
+
+    const leafEntry = clonedPath[clonedPath.length - 1];
+    if (leafEntry === undefined) {
+      return newTree;
+    }
+
+    const leafData = newTree.arena.getItem(leafEntry.nodeId);
+    const items = leafData?.items ?? [];
+    const oldItem = items[leafEntry.indexInNode];
+
+    if (oldItem === undefined) {
+      return newTree;
+    }
+
+    // Apply edit function
+    const edited = edit(oldItem, result.localOffset);
+    const newItems = Array.isArray(edited) ? edited : [edited];
+
+    // Replace the item with edited result
+    items.splice(leafEntry.indexInNode, 1, ...newItems);
+
+    newTree.arena.setItem(leafEntry.nodeId, { items });
+    newTree.arena.setCount(leafEntry.nodeId, items.length);
+
+    // Handle overflow if edit expanded to multiple items
+    if (items.length > newTree.branchingFactor) {
+      newTree.splitAndPropagate(clonedPath);
+    } else {
+      newTree.updateSummariesUp(clonedPath);
+    }
+
+    return newTree;
+  }
+
+  /**
+   * Delete an item at a position determined by dimension value.
+   * Returns a new tree (path copying), leaving the original unchanged.
+   *
+   * @param dimension The dimension to use for seeking
+   * @param target The target position in the dimension
+   * @param bias Where to find item relative to target
+   */
+  deleteByDimension<D>(
+    dimension: Dimension<S, D>,
+    target: D,
+    bias: SeekBias = "right",
+  ): SumTree<T, S> {
+    const result = this.findByDimension(dimension, target, bias);
+    if (result === undefined) {
+      return this; // Empty tree or not found
+    }
+
+    const leafEntry = result.path[result.path.length - 1];
+    if (leafEntry === undefined) {
+      return this;
+    }
+
+    // Check if we're past the end (indexInNode === items.length means past-end position)
+    const leafData = this.arena.getItem(leafEntry.nodeId);
+    const items = leafData?.items ?? [];
+    if (leafEntry.indexInNode >= items.length) {
+      return this; // Nothing to delete at past-end position
+    }
+
+    const newTree = this.shallowClone();
+    const clonedPath = newTree.clonePath(result.path);
+
+    const clonedLeafEntry = clonedPath[clonedPath.length - 1];
+    if (clonedLeafEntry === undefined) {
+      return newTree;
+    }
+
+    const clonedLeafData = newTree.arena.getItem(clonedLeafEntry.nodeId);
+    const clonedItems = clonedLeafData?.items ?? [];
+    clonedItems.splice(clonedLeafEntry.indexInNode, 1);
+
+    newTree.arena.setItem(clonedLeafEntry.nodeId, { items: clonedItems });
+    newTree.arena.setCount(clonedLeafEntry.nodeId, clonedItems.length);
+
+    // Check for underflow and merge if needed
+    const minItems = Math.floor(newTree.branchingFactor / 2);
+    if (clonedItems.length < minItems && clonedPath.length > 1) {
+      newTree.mergeOrRedistribute(clonedPath);
+    } else {
+      newTree.updateSummariesUp(clonedPath);
+    }
+
+    return newTree;
+  }
+
+  /**
+   * Edit an item at the given index in place, mutating the tree.
+   * The editor function receives the current item and should return the new item.
+   * Summaries are updated in O(log n) along the path.
+   *
+   * @param index The 0-based index of the item to edit
+   * @param editor Function that transforms the item
+   */
+  editAtIndex(index: number, editor: (item: T) => T): void {
+    if (index < 0 || index >= this.length()) {
+      throw new Error(`Index ${index} out of bounds`);
+    }
+
+    const path = this.findLeafForIndex(index);
+    if (path.length === 0) {
+      return;
+    }
+
+    const leafEntry = path[path.length - 1];
+    if (leafEntry === undefined) {
+      return;
+    }
+
+    const leafData = this.arena.getItem(leafEntry.nodeId);
+    const items = leafData?.items ?? [];
+    const oldItem = items[leafEntry.indexInNode];
+    if (oldItem === undefined) {
+      return;
+    }
+
+    // Apply the edit
+    const newItem = editor(oldItem);
+    items[leafEntry.indexInNode] = newItem;
+
+    // Update the leaf data
+    this.arena.setItem(leafEntry.nodeId, { items });
+
+    // Update summaries up the path
+    this.updateSummariesUp(path);
+  }
+
+  /**
    * Get item at index.
    */
   get(index: number): T | undefined {
@@ -1486,16 +1964,16 @@ export class SumTree<T extends Summarizable<S>, S> {
         continue;
       }
 
-      // Need to split
-      const [leftId, rightId] = this.splitNode(nodeId);
+      // Need to split - may produce multiple nodes if very overflowed
+      const newNodeIds = this.splitNodeIntoChunks(nodeId);
 
       if (i === 0) {
         // Splitting root - create new root
-        this._root = this.createInternal([leftId, rightId]);
+        this._root = this.createInternal(newNodeIds);
         return;
       }
 
-      // Insert right node into parent
+      // Replace original node with all new nodes in parent
       const parentEntry = path[i - 1];
       if (parentEntry === undefined) {
         i--;
@@ -1503,8 +1981,8 @@ export class SumTree<T extends Summarizable<S>, S> {
       }
 
       const parentChildren = this.arena.getChildren(parentEntry.nodeId);
-      parentChildren[parentEntry.indexInNode] = leftId;
-      parentChildren.splice(parentEntry.indexInNode + 1, 0, rightId);
+      // Remove old node and insert all new nodes
+      parentChildren.splice(parentEntry.indexInNode, 1, ...newNodeIds);
       this.arena.setChildren(parentEntry.nodeId, parentChildren);
 
       i--;
@@ -1513,30 +1991,45 @@ export class SumTree<T extends Summarizable<S>, S> {
     this.updateSummariesUp(path);
   }
 
-  private splitNode(nodeId: NodeId): [NodeId, NodeId] {
-    const mid = Math.floor(this.branchingFactor / 2);
+  /**
+   * Split an oversized node into multiple valid-sized nodes.
+   * Handles cases where a node has more than 2x branchingFactor items
+   * (e.g., from replaceAt with many items).
+   */
+  private splitNodeIntoChunks(nodeId: NodeId): NodeId[] {
+    const maxItems = this.branchingFactor;
+    const targetSize = Math.floor(maxItems / 2) + 1; // Target ~half full for balance
 
     if (this.arena.isLeaf(nodeId)) {
       const data = this.arena.getItem(nodeId);
       const items = data?.items ?? [];
 
-      const leftItems = items.slice(0, mid);
-      const rightItems = items.slice(mid);
+      if (items.length <= maxItems) {
+        return [nodeId]; // No split needed
+      }
 
-      const leftId = this.createLeaf(leftItems);
-      const rightId = this.createLeaf(rightItems);
-
-      return [leftId, rightId];
+      // Split into chunks of targetSize
+      const chunks: NodeId[] = [];
+      for (let start = 0; start < items.length; start += targetSize) {
+        const chunkItems = items.slice(start, start + targetSize);
+        chunks.push(this.createLeaf(chunkItems));
+      }
+      return chunks;
     }
 
+    // Internal node
     const children = this.arena.getChildren(nodeId);
-    const leftChildren = children.slice(0, mid);
-    const rightChildren = children.slice(mid);
 
-    const leftId = this.createInternal(leftChildren);
-    const rightId = this.createInternal(rightChildren);
+    if (children.length <= maxItems) {
+      return [nodeId]; // No split needed
+    }
 
-    return [leftId, rightId];
+    const chunks: NodeId[] = [];
+    for (let start = 0; start < children.length; start += targetSize) {
+      const chunkChildren = children.slice(start, start + targetSize);
+      chunks.push(this.createInternal(chunkChildren));
+    }
+    return chunks;
   }
 
   private mergeOrRedistribute(path: Array<{ nodeId: NodeId; indexInNode: number }>): void {

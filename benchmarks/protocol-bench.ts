@@ -257,8 +257,6 @@ if (!isCI) {
   if (serializeTime < 50) {
     console.log("\n\u2713 Target met: serialize 1M lines in <50ms");
   } else {
-    console.log(
-      "\n\u2717 Target NOT met: serialize 1M lines took " + serializeTime.toFixed(2) + "ms",
-    );
+    console.log(`\n\u2717 Target NOT met: serialize 1M lines took ${serializeTime.toFixed(2)}ms`);
   }
 }

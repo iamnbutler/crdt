@@ -172,6 +172,70 @@ describe("SumTree", () => {
       expect(tree3.toArray().map((i) => i.value)).toEqual([1, 2, 3]);
       expect(tree4.toArray().map((i) => i.value)).toEqual([1, 3]);
     });
+
+    it("replaceAt replaces single item with multiple items", () => {
+      let tree = new SumTree<CountItem, CountSummary>(countSummaryOps);
+      tree = tree.push(new CountItem(1));
+      tree = tree.push(new CountItem(2));
+      tree = tree.push(new CountItem(3));
+
+      const modified = tree.replaceAt(1, [new CountItem(10), new CountItem(20), new CountItem(30)]);
+
+      expect(tree.toArray().map((i) => i.value)).toEqual([1, 2, 3]);
+      expect(modified.toArray().map((i) => i.value)).toEqual([1, 10, 20, 30, 3]);
+    });
+
+    it("replaceAt with single item acts like edit", () => {
+      let tree = new SumTree<CountItem, CountSummary>(countSummaryOps);
+      tree = tree.push(new CountItem(1));
+      tree = tree.push(new CountItem(2));
+      tree = tree.push(new CountItem(3));
+
+      const modified = tree.replaceAt(1, [new CountItem(99)]);
+
+      expect(modified.toArray().map((i) => i.value)).toEqual([1, 99, 3]);
+    });
+
+    it("replaceAt with empty array acts like removeAt", () => {
+      let tree = new SumTree<CountItem, CountSummary>(countSummaryOps);
+      tree = tree.push(new CountItem(1));
+      tree = tree.push(new CountItem(2));
+      tree = tree.push(new CountItem(3));
+
+      const modified = tree.replaceAt(1, []);
+
+      expect(modified.toArray().map((i) => i.value)).toEqual([1, 3]);
+    });
+
+    it("replaceAt throws on out of bounds index", () => {
+      let tree = new SumTree<CountItem, CountSummary>(countSummaryOps);
+      tree = tree.push(new CountItem(1));
+
+      expect(() => tree.replaceAt(-1, [new CountItem(2)])).toThrow();
+      expect(() => tree.replaceAt(5, [new CountItem(2)])).toThrow();
+    });
+
+    it("replaceAtMut mutates in place", () => {
+      let tree = new SumTree<CountItem, CountSummary>(countSummaryOps);
+      tree = tree.push(new CountItem(1));
+      tree = tree.push(new CountItem(2));
+      tree = tree.push(new CountItem(3));
+
+      tree.replaceAtMut(1, [new CountItem(10), new CountItem(20)]);
+
+      expect(tree.toArray().map((i) => i.value)).toEqual([1, 10, 20, 3]);
+    });
+
+    it("replaceAtMut with empty array removes item", () => {
+      let tree = new SumTree<CountItem, CountSummary>(countSummaryOps);
+      tree = tree.push(new CountItem(1));
+      tree = tree.push(new CountItem(2));
+      tree = tree.push(new CountItem(3));
+
+      tree.replaceAtMut(1, []);
+
+      expect(tree.toArray().map((i) => i.value)).toEqual([1, 3]);
+    });
   });
 
   describe("B-tree structure", () => {
@@ -185,6 +249,53 @@ describe("SumTree", () => {
 
       expect(tree.length()).toBe(20);
       expect(tree.toArray().map((i) => i.value)).toEqual([...Array(20).keys()]);
+
+      const invariants = tree.checkInvariants();
+      expect(invariants.valid).toBe(true);
+    });
+
+    it("replaceAt handles node splitting when replacing with many items", () => {
+      // Use small branching factor to force splits
+      let tree = new SumTree<CountItem, CountSummary>(countSummaryOps, 4);
+
+      // Start with 3 items
+      tree = tree.push(new CountItem(1));
+      tree = tree.push(new CountItem(2));
+      tree = tree.push(new CountItem(3));
+
+      // Replace middle item with 10 items - will trigger multiple splits
+      const replacements = [];
+      for (let i = 0; i < 10; i++) {
+        replacements.push(new CountItem(100 + i));
+      }
+      tree = tree.replaceAt(1, replacements);
+
+      expect(tree.length()).toBe(12);
+      expect(tree.toArray().map((i) => i.value)).toEqual([
+        1, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 3,
+      ]);
+
+      const invariants = tree.checkInvariants();
+      expect(invariants.valid).toBe(true);
+    });
+
+    it("replaceAtMut handles node splitting when replacing with many items", () => {
+      let tree = new SumTree<CountItem, CountSummary>(countSummaryOps, 4);
+
+      tree = tree.push(new CountItem(1));
+      tree = tree.push(new CountItem(2));
+      tree = tree.push(new CountItem(3));
+
+      const replacements = [];
+      for (let i = 0; i < 10; i++) {
+        replacements.push(new CountItem(100 + i));
+      }
+      tree.replaceAtMut(1, replacements);
+
+      expect(tree.length()).toBe(12);
+      expect(tree.toArray().map((i) => i.value)).toEqual([
+        1, 100, 101, 102, 103, 104, 105, 106, 107, 108, 109, 3,
+      ]);
 
       const invariants = tree.checkInvariants();
       expect(invariants.valid).toBe(true);
@@ -422,6 +533,143 @@ describe("SumTree", () => {
 
       const item = cursor.item();
       expect(item?.text).toBe("defgh\n");
+    });
+
+    it("startPosition returns cumulative position before current item", () => {
+      const chunks = [new TextChunk("abc"), new TextChunk("def"), new TextChunk("ghi")];
+      const tree = SumTree.fromItems(chunks, textSummaryOps);
+
+      const cursor = tree.cursor(utf16Dimension);
+      cursor.seekForward(4, "right"); // Seek to "def"
+
+      // Start position should be 3 (length of "abc")
+      expect(cursor.startPosition()).toBe(3);
+      expect(cursor.item()?.text).toBe("def");
+    });
+
+    it("peekPrev returns previous item without moving cursor", () => {
+      const chunks = [new TextChunk("abc"), new TextChunk("def"), new TextChunk("ghi")];
+      const tree = SumTree.fromItems(chunks, textSummaryOps);
+
+      const cursor = tree.cursor(utf16Dimension);
+      cursor.seekForward(4, "right"); // Seek to "def"
+
+      const prevItem = cursor.peekPrev();
+      expect(prevItem?.text).toBe("abc");
+
+      // Cursor should still be at "def"
+      expect(cursor.item()?.text).toBe("def");
+      expect(cursor.startPosition()).toBe(3);
+    });
+
+    it("peekNext returns next item without moving cursor", () => {
+      const chunks = [new TextChunk("abc"), new TextChunk("def"), new TextChunk("ghi")];
+      const tree = SumTree.fromItems(chunks, textSummaryOps);
+
+      const cursor = tree.cursor(utf16Dimension);
+      cursor.seekForward(4, "right"); // Seek to "def"
+
+      const nextItem = cursor.peekNext();
+      expect(nextItem?.text).toBe("ghi");
+
+      // Cursor should still be at "def"
+      expect(cursor.item()?.text).toBe("def");
+      expect(cursor.startPosition()).toBe(3);
+    });
+
+    it("peekPrev returns undefined at beginning", () => {
+      const chunks = [new TextChunk("abc"), new TextChunk("def")];
+      const tree = SumTree.fromItems(chunks, textSummaryOps);
+
+      const cursor = tree.cursor(utf16Dimension);
+      cursor.reset();
+
+      expect(cursor.peekPrev()).toBeUndefined();
+    });
+
+    it("peekNext returns undefined at end", () => {
+      const chunks = [new TextChunk("abc"), new TextChunk("def")];
+      const tree = SumTree.fromItems(chunks, textSummaryOps);
+
+      const cursor = tree.cursor(utf16Dimension);
+      cursor.seekForward(4, "right"); // Seek to "def"
+      cursor.next(); // Move past "def"
+
+      expect(cursor.peekNext()).toBeUndefined();
+    });
+  });
+
+  describe("dimension-based operations", () => {
+    it("inserts by dimension", () => {
+      const chunks = [new TextChunk("abc"), new TextChunk("ghi")];
+      let tree = SumTree.fromItems(chunks, textSummaryOps);
+
+      // Insert "def" at UTF-16 position 3 (between "abc" and "ghi")
+      tree = tree.insertByDimension(utf16Dimension, 3, new TextChunk("def"), "right");
+
+      expect(tree.length()).toBe(3);
+      expect(tree.get(0)?.text).toBe("abc");
+      expect(tree.get(1)?.text).toBe("def");
+      expect(tree.get(2)?.text).toBe("ghi");
+    });
+
+    it("edits by dimension", () => {
+      const chunks = [new TextChunk("abc"), new TextChunk("def"), new TextChunk("ghi")];
+      let tree = SumTree.fromItems(chunks, textSummaryOps);
+
+      // Edit item at UTF-16 position 4 (inside "def")
+      tree = tree.editByDimension(utf16Dimension, 4, () => new TextChunk("DEF"), "right");
+
+      expect(tree.length()).toBe(3);
+      expect(tree.get(1)?.text).toBe("DEF");
+    });
+
+    it("deletes by dimension", () => {
+      const chunks = [new TextChunk("abc"), new TextChunk("def"), new TextChunk("ghi")];
+      let tree = SumTree.fromItems(chunks, textSummaryOps);
+
+      // Delete item at UTF-16 position 4 (inside "def")
+      tree = tree.deleteByDimension(utf16Dimension, 4, "right");
+
+      expect(tree.length()).toBe(2);
+      expect(tree.get(0)?.text).toBe("abc");
+      expect(tree.get(1)?.text).toBe("ghi");
+    });
+
+    it("delete by dimension returns original tree for empty tree", () => {
+      const tree = new SumTree<TextChunk, TextSummary>(textSummaryOps);
+      const result = tree.deleteByDimension(utf16Dimension, 0, "right");
+
+      expect(result).toBe(tree); // Same reference
+      expect(result.isEmpty()).toBe(true);
+    });
+
+    it("delete by dimension maintains invariants", () => {
+      const chunks = Array.from({ length: 100 }, (_, i) => new CountItem(i));
+      let tree = SumTree.fromItems(chunks, countSummaryOps, 4);
+
+      // Delete items at various positions
+      tree = tree.deleteByDimension(countDimension, 50, "right"); // Middle
+      tree = tree.deleteByDimension(countDimension, 0, "right"); // Start
+      tree = tree.deleteByDimension(countDimension, 95, "right"); // Near end
+
+      expect(tree.length()).toBe(97);
+      const invariants = tree.checkInvariants();
+      expect(invariants.valid).toBe(true);
+    });
+
+    it("delete by dimension handles underflow correctly", () => {
+      const chunks = Array.from({ length: 10 }, (_, i) => new CountItem(i));
+      let tree = SumTree.fromItems(chunks, countSummaryOps, 4);
+
+      // Delete enough items to trigger underflow
+      for (let i = 0; i < 7; i++) {
+        tree = tree.deleteByDimension(countDimension, 0, "right");
+      }
+
+      expect(tree.length()).toBe(3);
+      const invariants = tree.checkInvariants();
+      expect(invariants.valid).toBe(true);
     });
   });
 

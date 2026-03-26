@@ -52,7 +52,7 @@ function randomText(rng: () => number, maxLen = 10): string {
  * Perform a random insert or delete on `buffer` and return the Operation.
  * Returns null only when an undo was attempted and there was nothing to undo.
  */
-function randomOp(buffer: TextBuffer, rng: () => number): Operation | null {
+function _randomOp(buffer: TextBuffer, rng: () => number): Operation | null {
   const len = buffer.length;
   const r = rng();
 
@@ -108,9 +108,12 @@ function shuffle<T>(arr: T[], rng: () => number): T[] {
   const a = [...arr];
   for (let i = a.length - 1; i > 0; i--) {
     const j = Math.floor(rng() * (i + 1));
-    const tmp = a[i]!;
-    a[i] = a[j]!;
-    a[j] = tmp;
+    const tmp = a[i];
+    const swapVal = a[j];
+    if (tmp !== undefined && swapVal !== undefined) {
+      a[i] = swapVal;
+      a[j] = tmp;
+    }
   }
   return a;
 }
