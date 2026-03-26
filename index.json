@@ -1,6 +1,13 @@
 {
   "runs": [
     {
+      "sha": "82b42787d0a6e3ed18b490ce6c3d0438b57c16e4",
+      "shortSha": "82b4278",
+      "timestamp": "2026-03-26T15:53:21.655Z",
+      "branch": "fix/pages-trigger",
+      "subject": "fix: handle missing pages-deployed tag properly"
+    },
+    {
       "sha": "12cf0a7ea094a916847884f57930685e31352c44",
       "shortSha": "12cf0a7",
       "timestamp": "2026-03-26T14:07:42.899Z",
