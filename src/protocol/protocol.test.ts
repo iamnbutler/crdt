@@ -26,9 +26,14 @@ import {
   serializeOperations,
   serializeSnapshot,
 } from "./serialization.js";
-import { getSnapshotText, snapshotsEqual } from "./state-sync.js";
+import { getSnapshotText, requiresFullSync, snapshotsEqual } from "./state-sync.js";
 import { type SerializedFragment, type StateSnapshot, ValidationError } from "./types.js";
-import { type ValidationContext, isCausallyReady, validateOperation } from "./validation.js";
+import {
+  type ValidationContext,
+  isCausallyReady,
+  validateOperation,
+  validateOperationStrict,
+} from "./validation.js";
 
 // ---------------------------------------------------------------------------
 // Serialization Tests
@@ -953,6 +958,250 @@ describe("Convergence", () => {
     buf2.applyRemote(op1); // Should apply, then op2 should flush
 
     expect(buf2.getText()).toBe("Hello World");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// requiresFullSync Tests
+// ---------------------------------------------------------------------------
+
+describe("requiresFullSync", () => {
+  test("returns false for empty version vectors", () => {
+    const local = createVersionVector();
+    const remote = createVersionVector();
+    expect(requiresFullSync(local, remote)).toBe(false);
+  });
+
+  test("returns false when local and remote are identical", () => {
+    const local = createVersionVector();
+    observeVersion(local, replicaId(1), 10);
+    observeVersion(local, replicaId(2), 5);
+    const remote = cloneVersionVector(local);
+    expect(requiresFullSync(local, remote)).toBe(false);
+  });
+
+  test("returns true when remote has a replica local does not know about", () => {
+    const local = createVersionVector();
+    observeVersion(local, replicaId(1), 10);
+    const remote = createVersionVector();
+    observeVersion(remote, replicaId(1), 10);
+    observeVersion(remote, replicaId(2), 1); // new replica
+    expect(requiresFullSync(local, remote)).toBe(true);
+  });
+
+  test("returns false when version gap is exactly 1000", () => {
+    const local = createVersionVector();
+    observeVersion(local, replicaId(1), 0);
+    const remote = createVersionVector();
+    observeVersion(remote, replicaId(1), 1000);
+    expect(requiresFullSync(local, remote)).toBe(false);
+  });
+
+  test("returns true when version gap exceeds 1000", () => {
+    const local = createVersionVector();
+    observeVersion(local, replicaId(1), 0);
+    const remote = createVersionVector();
+    observeVersion(remote, replicaId(1), 1001);
+    expect(requiresFullSync(local, remote)).toBe(true);
+  });
+
+  test("returns false when local is ahead of remote", () => {
+    const local = createVersionVector();
+    observeVersion(local, replicaId(1), 2000);
+    const remote = createVersionVector();
+    observeVersion(remote, replicaId(1), 100);
+    expect(requiresFullSync(local, remote)).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// validateOperationStrict Tests
+// ---------------------------------------------------------------------------
+
+describe("validateOperationStrict", () => {
+  test("accepts structurally valid and causally ready operation", () => {
+    const op: InsertOperation = {
+      type: "insert",
+      id: { replicaId: replicaId(1), counter: 0 },
+      text: "Hello",
+      after: { insertionId: { replicaId: replicaId(0), counter: 0 }, offset: 0 },
+      before: { insertionId: { replicaId: replicaId(0xffffffff), counter: 0xffffffff }, offset: 0 },
+      version: new Map([[replicaId(1), 0]]),
+      locator: MIN_LOCATOR,
+    };
+
+    const context: ValidationContext = {
+      replicaCounters: new Map(),
+      localVersion: createVersionVector(),
+      fragmentExists: () => true,
+    };
+
+    const result = validateOperationStrict(op, context);
+    expect(result.valid).toBe(true);
+    expect(result.error).toBe(ValidationError.None);
+  });
+
+  test("rejects structurally valid but causally unready operation", () => {
+    // Operation from replica 2 that requires replica 1's counter 5
+    const op: InsertOperation = {
+      type: "insert",
+      id: { replicaId: replicaId(2), counter: 0 },
+      text: "Hello",
+      after: { insertionId: { replicaId: replicaId(0), counter: 0 }, offset: 0 },
+      before: { insertionId: { replicaId: replicaId(0xffffffff), counter: 0xffffffff }, offset: 0 },
+      version: new Map([
+        [replicaId(1), 5],
+        [replicaId(2), 0],
+      ]),
+      locator: MIN_LOCATOR,
+    };
+
+    const context: ValidationContext = {
+      replicaCounters: new Map(),
+      localVersion: createVersionVector(), // local hasn't seen replica 1's operations
+      fragmentExists: () => true,
+    };
+
+    const result = validateOperationStrict(op, context);
+    expect(result.valid).toBe(false);
+    expect(result.error).toBe(ValidationError.InconsistentVersion);
+  });
+
+  test("propagates structural validation errors before checking causal readiness", () => {
+    const op: InsertOperation = {
+      type: "insert",
+      id: { replicaId: replicaId(1), counter: 0 },
+      text: "Hello",
+      after: { insertionId: { replicaId: replicaId(0), counter: 0 }, offset: 0 },
+      before: { insertionId: { replicaId: replicaId(0xffffffff), counter: 0xffffffff }, offset: 0 },
+      version: new Map([[replicaId(1), 0]]),
+      locator: MIN_LOCATOR,
+    };
+
+    const context: ValidationContext = {
+      expectedSender: replicaId(99), // wrong sender
+      replicaCounters: new Map(),
+      localVersion: createVersionVector(),
+      fragmentExists: () => true,
+    };
+
+    const result = validateOperationStrict(op, context);
+    expect(result.valid).toBe(false);
+    expect(result.error).toBe(ValidationError.InvalidReplicaId);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Additional validateOperation edge cases
+// ---------------------------------------------------------------------------
+
+describe("validateOperation edge cases", () => {
+  test("rejects insert referencing missing non-sentinel after fragment", () => {
+    const op: InsertOperation = {
+      type: "insert",
+      id: { replicaId: replicaId(1), counter: 1 },
+      text: "x",
+      // non-sentinel after (replicaId 1, not the sentinel replicaId 0)
+      after: { insertionId: { replicaId: replicaId(1), counter: 0 }, offset: 0 },
+      before: { insertionId: { replicaId: replicaId(0xffffffff), counter: 0xffffffff }, offset: 0 },
+      version: new Map([[replicaId(1), 1]]),
+      locator: MIN_LOCATOR,
+    };
+
+    const context: ValidationContext = {
+      replicaCounters: new Map(),
+      localVersion: createVersionVector(),
+      fragmentExists: () => false,
+    };
+
+    const result = validateOperation(op, context);
+    expect(result.valid).toBe(false);
+    expect(result.error).toBe(ValidationError.UnknownReference);
+  });
+
+  test("rejects insert referencing missing non-sentinel before fragment", () => {
+    const op: InsertOperation = {
+      type: "insert",
+      id: { replicaId: replicaId(1), counter: 1 },
+      text: "x",
+      after: { insertionId: { replicaId: replicaId(0), counter: 0 }, offset: 0 },
+      // non-sentinel before (replicaId 1, not the sentinel 0xffffffff)
+      before: { insertionId: { replicaId: replicaId(1), counter: 0 }, offset: 0 },
+      version: new Map([[replicaId(1), 1]]),
+      locator: MIN_LOCATOR,
+    };
+
+    const context: ValidationContext = {
+      replicaCounters: new Map(),
+      localVersion: createVersionVector(),
+      fragmentExists: () => false,
+    };
+
+    const result = validateOperation(op, context);
+    expect(result.valid).toBe(false);
+    expect(result.error).toBe(ValidationError.UnknownReference);
+  });
+
+  test("rejects undo operation with negative count", () => {
+    const op: UndoOperation = {
+      type: "undo",
+      id: { replicaId: replicaId(1), counter: 5 },
+      transactionId: transactionId(1),
+      counts: [{ operationId: { replicaId: replicaId(1), counter: 0 }, count: -1 }],
+      version: new Map([[replicaId(1), 5]]),
+    };
+
+    const context: ValidationContext = {
+      replicaCounters: new Map(),
+      localVersion: createVersionVector(),
+      fragmentExists: () => true,
+    };
+
+    const result = validateOperation(op, context);
+    expect(result.valid).toBe(false);
+    expect(result.error).toBe(ValidationError.InconsistentVersion);
+  });
+
+  test("accepts undo operation with zero count", () => {
+    const op: UndoOperation = {
+      type: "undo",
+      id: { replicaId: replicaId(1), counter: 5 },
+      transactionId: transactionId(1),
+      counts: [{ operationId: { replicaId: replicaId(1), counter: 0 }, count: 0 }],
+      version: new Map([[replicaId(1), 5]]),
+    };
+
+    const context: ValidationContext = {
+      replicaCounters: new Map(),
+      localVersion: createVersionVector(),
+      fragmentExists: () => true,
+    };
+
+    const result = validateOperation(op, context);
+    expect(result.valid).toBe(true);
+  });
+
+  test("rejects operation with inconsistent version vector", () => {
+    // counter=5 but version vector says only counter=3 for this replica
+    const op: InsertOperation = {
+      type: "insert",
+      id: { replicaId: replicaId(1), counter: 5 },
+      text: "x",
+      after: { insertionId: { replicaId: replicaId(0), counter: 0 }, offset: 0 },
+      before: { insertionId: { replicaId: replicaId(0xffffffff), counter: 0xffffffff }, offset: 0 },
+      version: new Map([[replicaId(1), 3]]), // claims only 3 but counter is 5
+      locator: MIN_LOCATOR,
+    };
+
+    const context: ValidationContext = {
+      replicaCounters: new Map(),
+      localVersion: createVersionVector(),
+      fragmentExists: () => true,
+    };
+
+    const result = validateOperation(op, context);
+    expect(result.valid).toBe(false);
+    expect(result.error).toBe(ValidationError.InconsistentVersion);
   });
 });
 
