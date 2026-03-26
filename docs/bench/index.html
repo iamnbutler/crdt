@@ -20,9 +20,9 @@ td:first-child, th:first-child { text-align: left; }
 .pos { color: #060; }
 .neg { color: #900; }
 .muted { color: #888; }
-canvas { max-height: 180px; margin: 4px 0; }
+canvas { display: block; }
 #loading { font-style: italic; color: #666; }
-.chart-wrap { margin: 4px 0 10px; }
+.chart-wrap { margin: 4px 0 10px; height: 180px; position: relative; }
 .run-tbl tr:hover { background: #f5f5f0; }
 a { color: #333; }
 </style>
@@ -199,9 +199,11 @@ function renderChart(canvas, benchNames, benchMap, paired) {
     type: "line",
     data: { labels, datasets },
     options: {
-      animation: false,
+      animation: { duration: 0 },
+      transitions: { active: { animation: { duration: 0 } } },
       responsive: true,
       maintainAspectRatio: false,
+      resizeDelay: 100,
       plugins: {
         legend: { position: "bottom", labels: { font: { size: 9, family: "Menlo, monospace" }, boxWidth: 12, padding: 6 } },
         tooltip: {
@@ -215,6 +217,7 @@ function renderChart(canvas, benchNames, benchMap, paired) {
       scales: {
         x: { ticks: { font: { size: 9, family: "monospace" }, maxRotation: 45 }, grid: { color: "#ddd" } },
         y: {
+          beginAtZero: false,
           ticks: {
             font: { size: 9, family: "monospace" },
             callback: (v) => fmt(v),
