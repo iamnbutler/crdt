@@ -679,6 +679,51 @@ export class SumTree<T extends Summarizable<S>, S> {
   }
 
   /**
+   * Push an item to the end of the tree, mutating in place.
+   * O(log n) - finds rightmost leaf and inserts directly.
+   */
+  pushMut(item: T): void {
+    this.insertAtMut(this.length(), item);
+  }
+
+  /**
+   * Insert an item at the given index, mutating in place.
+   * O(log n) - finds the leaf and inserts directly without path copying.
+   */
+  insertAtMut(index: number, item: T): void {
+    // Find the leaf and position for insertion
+    const path = this.findLeafForIndex(index);
+    if (path.length === 0) {
+      // Empty tree, create root leaf
+      const items = [item];
+      this._root = this.createLeaf(items);
+      return;
+    }
+
+    // Insert into the leaf (no cloning needed for mutation)
+    const leafEntry = path[path.length - 1];
+    if (leafEntry === undefined) {
+      return;
+    }
+
+    const leafData = this.arena.getItem(leafEntry.nodeId);
+    const items = leafData?.items ?? [];
+    items.splice(leafEntry.indexInNode, 0, item);
+
+    // Update leaf
+    this.arena.setItem(leafEntry.nodeId, { items });
+    this.arena.setCount(leafEntry.nodeId, items.length);
+
+    // Check for overflow and split if needed
+    if (items.length > this.branchingFactor) {
+      this.splitAndPropagate(path);
+    } else {
+      // Just update summaries up the path
+      this.updateSummariesUp(path);
+    }
+  }
+
+  /**
    * Insert an item at the given index.
    * Returns a new tree (path copying), leaving the original unchanged.
    */
@@ -863,7 +908,7 @@ export class SumTree<T extends Summarizable<S>, S> {
    * Subtract two dimension values. For numeric dimensions this is simple subtraction.
    * This helper exists because Dimension doesn't have a subtract operation.
    */
-  private subtractDimension<D>(dimension: Dimension<S, D>, a: D, b: D): D {
+  private subtractDimension<D>(_dimension: Dimension<S, D>, a: D, b: D): D {
     // For numeric dimensions, we can compute a - b
     // This is a simplification - for complex dimensions we'd need explicit subtract
     if (typeof a === "number" && typeof b === "number") {
@@ -1050,8 +1095,16 @@ export class SumTree<T extends Summarizable<S>, S> {
 
   /**
    * Get the number of items in the tree.
+   * O(1) if summaryOps.getItemCount is defined, O(n) otherwise.
    */
   length(): number {
+    const getItemCount = this.summaryOps.getItemCount;
+    if (getItemCount !== undefined) {
+      const summary = this.summaries.get(this._root);
+      if (summary !== undefined) {
+        return getItemCount(summary);
+      }
+    }
     return this.countItems(this._root);
   }
 
@@ -1313,6 +1366,7 @@ export class SumTree<T extends Summarizable<S>, S> {
     const path: Array<{ nodeId: NodeId; indexInNode: number }> = [];
     let remaining = index;
     let current = this._root;
+    const getItemCount = this.summaryOps.getItemCount;
 
     while (true) {
       if (this.arena.isLeaf(current)) {
@@ -1331,7 +1385,14 @@ export class SumTree<T extends Summarizable<S>, S> {
         const childId = children[i];
         if (childId === undefined) continue;
 
-        const childCount = this.countItems(childId);
+        // O(1) via summary if getItemCount is available, O(n) otherwise
+        let childCount: number;
+        if (getItemCount !== undefined) {
+          const summary = this.summaries.get(childId);
+          childCount = summary !== undefined ? getItemCount(summary) : this.countItems(childId);
+        } else {
+          childCount = this.countItems(childId);
+        }
 
         if (remaining < childCount || i === children.length - 1) {
           path.push({ nodeId: current, indexInNode: i });

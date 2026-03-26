@@ -742,38 +742,45 @@ export class TextBuffer {
       }
     }
 
-    // Standard path for other cases
-    const frags = this.fragmentsArray();
+    // Try cursor-based fast path first (O(log² n)) when no live snapshots
+    // Cursor seek is O(log n), findTreeInsertIndex is O(log² n)
+    if (this._liveSnapshots === 0) {
+      const fastResult = this.tryFastInsertPosition(offset);
+      if (fastResult !== null) {
+        const { leftLocator, rightLocator, afterRef, beforeRef } = fastResult;
+        const locator = locatorBetween(leftLocator, rightLocator);
+        const newFrag = createFragment(opId, 0, locator, text, true);
 
-    // Find the position to insert: seek to the visible offset
+        // O(log² n) insertion: binary search on locator + tree insertion
+        const insertIndex = this.findTreeInsertIndex(newFrag);
+        this.fragments = this.fragments.insertAt(insertIndex, newFrag);
+        this.addToFragmentIndex(opId);
+
+        return {
+          type: "insert",
+          id: opId,
+          text,
+          after: afterRef,
+          before: beforeRef,
+          version: cloneVersionVector(this._version),
+          locator,
+        };
+      }
+    }
+
+    // Fallback: array-based approach for splits or live snapshots (O(n))
+    const frags = this.fragmentsArray();
     const { leftLocator, rightLocator, insertLocator, afterRef, beforeRef, splitInfo } =
       this.findInsertPosition(frags, offset);
 
-    // Use explicit insertLocator if provided (for split cases), otherwise compute via locatorBetween
     const locator = insertLocator ?? locatorBetween(leftLocator, rightLocator);
-
-    // Create the new fragment
     const newFrag = createFragment(opId, 0, locator, text, true);
 
-    // Apply changes using direct tree operations when possible
-    // Note: When there are live snapshots, we must use setFragments to create
-    // a new tree with a separate arena, since insertAt shares the arena and
-    // GC could incorrectly free nodes still referenced by snapshots.
-    if (splitInfo !== undefined || this._liveSnapshots > 0) {
-      // Split case or live snapshots: use array-based approach (O(n))
-      this.insertFragmentByLocator(frags, newFrag);
-      // Must sort after splits: split parts get new locators that may need to
-      // interleave with other fragments (e.g., [...,8] must come after [...,4,10])
-      if (splitInfo !== undefined) {
-        sortFragments(frags);
-      }
-      this.setFragments(frags);
-    } else {
-      // No split and no snapshots: use direct tree insertion (O(log n))
-      const insertIdx = this.findTreeInsertIndex(newFrag);
-      this.fragments = this.fragments.insertAt(insertIdx, newFrag);
-      this.addToFragmentIndex(opId);
+    this.insertFragmentByLocator(frags, newFrag);
+    if (splitInfo !== undefined) {
+      sortFragments(frags);
     }
+    this.setFragments(frags);
 
     return {
       type: "insert",
@@ -796,6 +803,137 @@ export class TextBuffer {
       this._fragmentIds.set(id.replicaId, counters);
     }
     counters.add(id.counter);
+  }
+
+  /**
+   * Try to find insert position using cursor-based O(log n) approach.
+   * Returns null if a split is needed (requires fallback to array-based approach).
+   * Only returns locators and refs - use findTreeInsertIndex for the actual index.
+   */
+  private tryFastInsertPosition(offset: number): {
+    leftLocator: Locator;
+    rightLocator: Locator;
+    afterRef: { insertionId: OperationId; offset: number };
+    beforeRef: { insertionId: OperationId; offset: number };
+  } | null {
+    if (this.fragments.isEmpty()) {
+      return {
+        leftLocator: MIN_LOCATOR,
+        rightLocator: MAX_LOCATOR,
+        afterRef: { insertionId: MIN_OPERATION_ID, offset: 0 },
+        beforeRef: { insertionId: MAX_OPERATION_ID, offset: 0 },
+      };
+    }
+
+    const cursor = this.fragments.cursor(visibleLenDimension);
+    cursor.reset();
+
+    // Seek to target offset
+    const found = cursor.seekForward(offset, "right");
+    if (!found && !cursor.atEnd) {
+      return null; // Unexpected state, fall back
+    }
+
+    const currentFrag = cursor.item();
+    const currentPos = cursor.position;
+
+    // Case 1: At end of document
+    if (cursor.atEnd || currentFrag === undefined) {
+      // Get last fragment via prev()
+      cursor.prev();
+      const lastFrag = cursor.item();
+      if (lastFrag !== undefined) {
+        return {
+          leftLocator: lastFrag.locator,
+          rightLocator: MAX_LOCATOR,
+          afterRef: {
+            insertionId: lastFrag.insertionId,
+            offset: lastFrag.insertionOffset + lastFrag.length,
+          },
+          beforeRef: { insertionId: MAX_OPERATION_ID, offset: 0 },
+        };
+      }
+      return {
+        leftLocator: MIN_LOCATOR,
+        rightLocator: MAX_LOCATOR,
+        afterRef: { insertionId: MIN_OPERATION_ID, offset: 0 },
+        beforeRef: { insertionId: MAX_OPERATION_ID, offset: 0 },
+      };
+    }
+
+    // Calculate local offset within the current fragment
+    const localOffset = offset - currentPos;
+
+    // Case 2: At fragment boundary (no split needed)
+    if (localOffset === 0) {
+      // Insert before current fragment - get prev for left locator
+      let leftLocator = MIN_LOCATOR;
+      let afterRef: { insertionId: OperationId; offset: number } = {
+        insertionId: MIN_OPERATION_ID,
+        offset: 0,
+      };
+
+      // Save current position, go back, get prev, restore
+      if (cursor.prev()) {
+        const prevFrag = cursor.item();
+        if (prevFrag !== undefined) {
+          leftLocator = prevFrag.locator;
+          afterRef = {
+            insertionId: prevFrag.insertionId,
+            offset: prevFrag.insertionOffset + prevFrag.length,
+          };
+        }
+      }
+
+      return {
+        leftLocator,
+        rightLocator: currentFrag.locator,
+        afterRef,
+        beforeRef: {
+          insertionId: currentFrag.insertionId,
+          offset: currentFrag.insertionOffset,
+        },
+      };
+    }
+
+    // Case 3: At end of visible fragment (after consuming all visible content)
+    if (currentFrag.visible && localOffset === currentFrag.length) {
+      // Insert after current fragment - get next for right locator
+      let rightLocator = MAX_LOCATOR;
+      let beforeRef: { insertionId: OperationId; offset: number } = {
+        insertionId: MAX_OPERATION_ID,
+        offset: 0,
+      };
+
+      if (cursor.next()) {
+        const nextFrag = cursor.item();
+        if (nextFrag !== undefined) {
+          rightLocator = nextFrag.locator;
+          beforeRef = {
+            insertionId: nextFrag.insertionId,
+            offset: nextFrag.insertionOffset,
+          };
+        }
+      }
+
+      return {
+        leftLocator: currentFrag.locator,
+        rightLocator,
+        afterRef: {
+          insertionId: currentFrag.insertionId,
+          offset: currentFrag.insertionOffset + currentFrag.length,
+        },
+        beforeRef,
+      };
+    }
+
+    // Case 4: Inside a visible fragment - need to split (return null for fallback)
+    if (currentFrag.visible && localOffset > 0 && localOffset < currentFrag.length) {
+      return null;
+    }
+
+    // Unexpected case, fall back
+    return null;
   }
 
   private findInsertPosition(
@@ -849,8 +987,8 @@ export class TextBuffer {
               afterRef:
                 i > 0 && frags[i - 1] !== undefined
                   ? {
-                      insertionId: frags[i - 1]!.insertionId,
-                      offset: frags[i - 1]!.insertionOffset + frags[i - 1]!.length,
+                      insertionId: frags[i - 1]?.insertionId,
+                      offset: frags[i - 1]?.insertionOffset + frags[i - 1]?.length,
                     }
                   : { insertionId: MIN_OPERATION_ID, offset: 0 },
               beforeRef: {
