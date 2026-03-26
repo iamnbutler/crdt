@@ -591,6 +591,67 @@ export class Cursor<T extends Summarizable<S>, S, D> {
 
     return index;
   }
+
+  /**
+   * Get the cumulative position BEFORE the current item.
+   * This is the sum of all item measures from the start up to (but not including)
+   * the current item.
+   */
+  startPosition(): D {
+    return this._position;
+  }
+
+  /**
+   * Peek at the previous item without moving the cursor.
+   * Returns undefined if at the beginning.
+   */
+  peekPrev(): T | undefined {
+    if (this.stack.length === 0) {
+      return undefined;
+    }
+
+    // Save state
+    const savedStack = this.stack.map((e) => ({ ...e }));
+    const savedPosition = this._position;
+    const savedAtEnd = this._atEnd;
+
+    // Move to previous
+    const moved = this.prev();
+    const prevItem = moved ? this.item() : undefined;
+
+    // Restore state
+    this.stack = savedStack;
+    this._position = savedPosition;
+    this._atEnd = savedAtEnd;
+
+    return prevItem;
+  }
+
+  /**
+   * Peek at the next item without moving the cursor.
+   * Returns undefined if at the end or on the last item.
+   */
+  peekNext(): T | undefined {
+    if (this._atEnd) {
+      return undefined;
+    }
+
+    // Save state
+    const savedStack = this.stack.map((e) => ({ ...e }));
+    const savedPosition = this._position;
+    const savedAtEnd = this._atEnd;
+
+    // Move to next
+    const moved = this.next();
+    const nextItem = moved ? this.item() : undefined;
+
+    // Restore state
+    this.stack = savedStack;
+    this._position = savedPosition;
+    this._atEnd = savedAtEnd;
+
+    return nextItem;
+  }
 }
 
 /**
@@ -803,6 +864,117 @@ export class SumTree<T extends Summarizable<S>, S> {
     const minItems = Math.floor(newTree.branchingFactor / 2);
     if (items.length < minItems && clonedPath.length > 1) {
       newTree.mergeOrRedistribute(clonedPath);
+    } else {
+      newTree.updateSummariesUp(clonedPath);
+    }
+
+    return newTree;
+  }
+
+  /**
+   * Replace item at index with multiple items, mutating in place.
+   * O(log n) - single traversal down, single rebalance up.
+   *
+   * @param index The index of the item to replace
+   * @param items The items to insert in place of the removed item
+   */
+  replaceAtMut(index: number, items: T[]): void {
+    if (index < 0 || index >= this.length()) {
+      throw new Error(`Index ${index} out of bounds`);
+    }
+
+    // Edge case: empty items = remove
+    if (items.length === 0) {
+      // Use removeAt logic but in-place
+      const path = this.findLeafForIndex(index);
+      if (path.length === 0) return;
+
+      const leafEntry = path[path.length - 1];
+      if (leafEntry === undefined) return;
+
+      const leafData = this.arena.getItem(leafEntry.nodeId);
+      const leafItems = leafData?.items ?? [];
+      leafItems.splice(leafEntry.indexInNode, 1);
+
+      this.arena.setItem(leafEntry.nodeId, { items: leafItems });
+      this.arena.setCount(leafEntry.nodeId, leafItems.length);
+
+      const minItems = Math.floor(this.branchingFactor / 2);
+      if (leafItems.length < minItems && path.length > 1) {
+        this.mergeOrRedistribute(path);
+      } else {
+        this.updateSummariesUp(path);
+      }
+      return;
+    }
+
+    const path = this.findLeafForIndex(index);
+    if (path.length === 0) return;
+
+    const leafEntry = path[path.length - 1];
+    if (leafEntry === undefined) return;
+
+    const leafData = this.arena.getItem(leafEntry.nodeId);
+    const leafItems = leafData?.items ?? [];
+
+    // Replace 1 item with N items
+    leafItems.splice(leafEntry.indexInNode, 1, ...items);
+
+    this.arena.setItem(leafEntry.nodeId, { items: leafItems });
+    this.arena.setCount(leafEntry.nodeId, leafItems.length);
+
+    // Check for overflow and split if needed
+    if (leafItems.length > this.branchingFactor) {
+      this.splitAndPropagate(path);
+    } else {
+      this.updateSummariesUp(path);
+    }
+  }
+
+  /**
+   * Replace item at index with multiple items.
+   * Returns a new tree (path copying), leaving the original unchanged.
+   * O(log n) - single traversal down, single rebalance up.
+   *
+   * @param index The index of the item to replace
+   * @param items The items to insert in place of the removed item
+   */
+  replaceAt(index: number, items: T[]): SumTree<T, S> {
+    if (index < 0 || index >= this.length()) {
+      throw new Error(`Index ${index} out of bounds`);
+    }
+
+    // Edge case: empty items = remove
+    if (items.length === 0) {
+      return this.removeAt(index);
+    }
+
+    const newTree = this.shallowClone();
+    const path = newTree.findLeafForIndex(index);
+    if (path.length === 0) {
+      return newTree;
+    }
+
+    // Clone the path (path copying)
+    const clonedPath = newTree.clonePath(path);
+
+    const leafEntry = clonedPath[clonedPath.length - 1];
+    if (leafEntry === undefined) {
+      return newTree;
+    }
+
+    const leafData = newTree.arena.getItem(leafEntry.nodeId);
+    const leafItems = leafData?.items ?? [];
+
+    // Replace 1 item with N items
+    leafItems.splice(leafEntry.indexInNode, 1, ...items);
+
+    newTree.arena.setItem(leafEntry.nodeId, { items: leafItems });
+    newTree.arena.setCount(leafEntry.nodeId, leafItems.length);
+
+    // Check for overflow and split if needed
+    if (leafItems.length > newTree.branchingFactor) {
+      newTree.splitAndPropagate(clonedPath);
     } else {
       newTree.updateSummariesUp(clonedPath);
     }
@@ -1511,16 +1683,16 @@ export class SumTree<T extends Summarizable<S>, S> {
         continue;
       }
 
-      // Need to split
-      const [leftId, rightId] = this.splitNode(nodeId);
+      // Need to split - may produce multiple nodes if very overflowed
+      const newNodeIds = this.splitNodeIntoChunks(nodeId);
 
       if (i === 0) {
         // Splitting root - create new root
-        this._root = this.createInternal([leftId, rightId]);
+        this._root = this.createInternal(newNodeIds);
         return;
       }
 
-      // Insert right node into parent
+      // Replace original node with all new nodes in parent
       const parentEntry = path[i - 1];
       if (parentEntry === undefined) {
         i--;
@@ -1528,8 +1700,8 @@ export class SumTree<T extends Summarizable<S>, S> {
       }
 
       const parentChildren = this.arena.getChildren(parentEntry.nodeId);
-      parentChildren[parentEntry.indexInNode] = leftId;
-      parentChildren.splice(parentEntry.indexInNode + 1, 0, rightId);
+      // Remove old node and insert all new nodes
+      parentChildren.splice(parentEntry.indexInNode, 1, ...newNodeIds);
       this.arena.setChildren(parentEntry.nodeId, parentChildren);
 
       i--;
@@ -1538,30 +1710,45 @@ export class SumTree<T extends Summarizable<S>, S> {
     this.updateSummariesUp(path);
   }
 
-  private splitNode(nodeId: NodeId): [NodeId, NodeId] {
-    const mid = Math.floor(this.branchingFactor / 2);
+  /**
+   * Split an oversized node into multiple valid-sized nodes.
+   * Handles cases where a node has more than 2x branchingFactor items
+   * (e.g., from replaceAt with many items).
+   */
+  private splitNodeIntoChunks(nodeId: NodeId): NodeId[] {
+    const maxItems = this.branchingFactor;
+    const targetSize = Math.floor(maxItems / 2) + 1; // Target ~half full for balance
 
     if (this.arena.isLeaf(nodeId)) {
       const data = this.arena.getItem(nodeId);
       const items = data?.items ?? [];
 
-      const leftItems = items.slice(0, mid);
-      const rightItems = items.slice(mid);
+      if (items.length <= maxItems) {
+        return [nodeId]; // No split needed
+      }
 
-      const leftId = this.createLeaf(leftItems);
-      const rightId = this.createLeaf(rightItems);
-
-      return [leftId, rightId];
+      // Split into chunks of targetSize
+      const chunks: NodeId[] = [];
+      for (let start = 0; start < items.length; start += targetSize) {
+        const chunkItems = items.slice(start, start + targetSize);
+        chunks.push(this.createLeaf(chunkItems));
+      }
+      return chunks;
     }
 
+    // Internal node
     const children = this.arena.getChildren(nodeId);
-    const leftChildren = children.slice(0, mid);
-    const rightChildren = children.slice(mid);
 
-    const leftId = this.createInternal(leftChildren);
-    const rightId = this.createInternal(rightChildren);
+    if (children.length <= maxItems) {
+      return [nodeId]; // No split needed
+    }
 
-    return [leftId, rightId];
+    const chunks: NodeId[] = [];
+    for (let start = 0; start < children.length; start += targetSize) {
+      const chunkChildren = children.slice(start, start + targetSize);
+      chunks.push(this.createInternal(chunkChildren));
+    }
+    return chunks;
   }
 
   private mergeOrRedistribute(path: Array<{ nodeId: NodeId; indexInNode: number }>): void {
