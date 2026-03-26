@@ -336,19 +336,7 @@ describe("CRDT Property: Undo Correctness", () => {
   }
 
   // 5b. Undo/redo round-trip preserves intermediate states
-  // Known failing seeds due to locator scheme limitation: when locatorBetween produces
-  // a child locator of the left fragment, and that fragment is later split, the child
-  // can end up between the split parts. This causes intermediate undo states to have
-  // incorrect ordering. A proper fix requires refactoring the locator scheme.
-  // See: https://github.com/iamnbutler/crdt/issues/TBD
-  const KNOWN_FAILING_SEEDS = new Set([157, 186, 246, 258, 320, 363, 381, 438, 439, 487, 496]);
   for (let seed = 0; seed < ITERATIONS; seed++) {
-    if (KNOWN_FAILING_SEEDS.has(seed)) {
-      test.skip(`undo then redo preserves states (seed=${seed})`, () => {
-        // Skipped due to known locator scheme limitation
-      });
-      continue;
-    }
     test(`undo then redo preserves states (seed=${seed})`, () => {
       const rng = createRng(seed);
       const numOps = 5 + Math.floor(rng() * 11); // 5..15
