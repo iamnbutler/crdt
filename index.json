@@ -1,3 +1,11 @@
 {
-  "runs": []
+  "runs": [
+    {
+      "sha": "18ba1d6777007f6dbaded3d57facca8e74944f0c",
+      "shortSha": "18ba1d6",
+      "timestamp": "2026-03-26T01:02:13.198Z",
+      "branch": "main",
+      "subject": "perf: O(log n) insert and delete for boundary cases (#124)"
+    }
+  ]
 }
