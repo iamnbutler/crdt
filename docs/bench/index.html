@@ -1,0 +1,245 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>@iamnbutler/crdt — Benchmarks</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font: 11px/1.4 "Times New Roman", Georgia, serif; color: #111; max-width: 960px; margin: 0 auto; padding: 12px; }
+h1 { font-size: 14px; font-weight: bold; border-bottom: 1px solid #000; padding-bottom: 2px; margin-bottom: 6px; }
+h2 { font-size: 12px; font-weight: bold; margin: 10px 0 4px; }
+h3 { font-size: 11px; font-weight: bold; margin: 8px 0 2px; }
+code, .mono { font-family: "SF Mono", "Menlo", "Consolas", monospace; font-size: 10px; }
+table { border-collapse: collapse; width: 100%; margin: 4px 0 8px; font-size: 10px; }
+th, td { border: 1px solid #999; padding: 1px 4px; text-align: right; font-family: "Menlo", monospace; font-size: 10px; }
+th { background: #eee; font-weight: bold; text-align: center; }
+td:first-child, th:first-child { text-align: left; }
+.ctx { font-size: 10px; color: #555; margin-bottom: 8px; }
+.err { color: #900; }
+.pos { color: #060; }
+.neg { color: #900; }
+.muted { color: #888; }
+canvas { max-height: 180px; margin: 4px 0; }
+#loading { font-style: italic; color: #666; }
+.chart-wrap { margin: 4px 0 10px; }
+.run-tbl tr:hover { background: #f5f5f0; }
+a { color: #333; }
+</style>
+</head>
+<body>
+<h1>@iamnbutler/crdt — Benchmark History</h1>
+<div id="loading">Loading benchmark data…</div>
+<div id="root" style="display:none"></div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
+<script>
+"use strict";
+
+const MAX_RUNS = 50; // limit fetched results
+const COLORS = ["#111","#666","#999","#c33","#36c","#093","#c90","#909"];
+
+async function main() {
+  const loading = document.getElementById("loading");
+  const root = document.getElementById("root");
+
+  let index;
+  try {
+    const r = await fetch("./index.json");
+    if (!r.ok) throw new Error(`${r.status}`);
+    index = await r.json();
+  } catch (e) {
+    loading.innerHTML = `<span class="err">Failed to load index.json — is benchmark-data deployed? (${e.message})</span>`;
+    return;
+  }
+
+  if (!index.runs || index.runs.length === 0) {
+    loading.textContent = "No benchmark runs recorded yet.";
+    return;
+  }
+
+  const runs = index.runs.slice(0, MAX_RUNS);
+
+  // Fetch all results in parallel
+  const results = await Promise.all(
+    runs.map(async (run) => {
+      try {
+        const r = await fetch(`./results/${run.sha}.json`);
+        if (!r.ok) return null;
+        return await r.json();
+      } catch { return null; }
+    })
+  );
+
+  // Pair runs with their loaded results, filter failures, reverse for chronological order
+  const paired = runs
+    .map((run, i) => ({ meta: run, data: results[i] }))
+    .filter(p => p.data && p.data.results && !p.data.results.raw)
+    .reverse();
+
+  if (paired.length === 0) {
+    loading.textContent = "No parseable benchmark results found.";
+    return;
+  }
+
+  loading.style.display = "none";
+  root.style.display = "block";
+
+  // Context from latest run
+  const latest = paired[paired.length - 1].data.results;
+  const ctx = latest.context;
+  root.innerHTML = `<div class="ctx">${paired.length} runs · ${ctx.runtime} ${ctx.version} · ${ctx.arch} · ${ctx.cpu.name}</div>`;
+
+  // Run history table
+  root.innerHTML += `<h2>Runs</h2>`;
+  root.innerHTML += renderRunTable(paired);
+
+  // Collect all unique benchmark names across all runs
+  const benchMap = collectBenchmarks(paired);
+
+  // Group benchmarks by layout group
+  const groups = groupByLayout(latest.layout, benchMap);
+
+  for (const [groupName, benchNames] of groups) {
+    root.innerHTML += `<h2>${groupName || "Ungrouped"}</h2>`;
+    root.innerHTML += `<div class="chart-wrap"><canvas id="chart-${css(groupName)}"></canvas></div>`;
+    root.innerHTML += renderStatsTable(benchNames, benchMap, paired);
+  }
+
+  // Render charts after DOM is updated
+  for (const [groupName, benchNames] of groups) {
+    renderChart(
+      document.getElementById(`chart-${css(groupName)}`),
+      benchNames, benchMap, paired
+    );
+  }
+}
+
+function renderRunTable(paired) {
+  let h = `<table class="run-tbl"><tr><th>#</th><th>SHA</th><th>Date</th><th>Branch</th><th>Subject</th></tr>`;
+  for (let i = paired.length - 1; i >= 0; i--) {
+    const m = paired[i].meta;
+    const d = m.timestamp.slice(0, 10);
+    const subj = esc(m.subject.length > 60 ? m.subject.slice(0, 57) + "…" : m.subject);
+    h += `<tr><td>${paired.length - i}</td><td class="mono">${m.shortSha}</td><td>${d}</td><td class="mono">${esc(m.branch)}</td><td style="text-align:left">${subj}</td></tr>`;
+  }
+  return h + `</table>`;
+}
+
+function collectBenchmarks(paired) {
+  // benchMap: name -> { group, data: [{sha, stats}] }
+  const map = new Map();
+  for (const p of paired) {
+    const res = p.data.results;
+    for (const b of res.benchmarks) {
+      for (const r of b.runs) {
+        const key = r.name;
+        if (!map.has(key)) map.set(key, { group: b.group, alias: b.alias, data: [] });
+        map.get(key).data.push({ sha: p.meta.shortSha, timestamp: p.meta.timestamp, stats: r.stats });
+      }
+    }
+  }
+  return map;
+}
+
+function groupByLayout(layout, benchMap) {
+  const groups = new Map();
+  for (const [name, info] of benchMap) {
+    const groupName = layout[info.group]?.name || "Ungrouped";
+    if (!groups.has(groupName)) groups.set(groupName, []);
+    groups.get(groupName).push(name);
+  }
+  return groups;
+}
+
+function renderStatsTable(benchNames, benchMap, paired) {
+  let h = `<table><tr><th style="text-align:left">Benchmark</th><th>avg</th><th>p50</th><th>p99</th><th>min</th><th>max</th><th>Δ avg</th></tr>`;
+  for (const name of benchNames) {
+    const info = benchMap.get(name);
+    const pts = info.data;
+    if (pts.length === 0) continue;
+    const last = pts[pts.length - 1].stats;
+    let delta = "";
+    if (pts.length >= 2) {
+      const prev = pts[pts.length - 2].stats;
+      const pct = ((last.avg - prev.avg) / prev.avg * 100);
+      const cls = pct > 5 ? "neg" : pct < -5 ? "pos" : "muted";
+      delta = `<span class="${cls}">${pct > 0 ? "+" : ""}${pct.toFixed(1)}%</span>`;
+    }
+    h += `<tr><td style="text-align:left">${esc(name)}</td><td>${fmt(last.avg)}</td><td>${fmt(last.p50)}</td><td>${fmt(last.p99)}</td><td>${fmt(last.min)}</td><td>${fmt(last.max)}</td><td>${delta}</td></tr>`;
+  }
+  return h + `</table>`;
+}
+
+function renderChart(canvas, benchNames, benchMap, paired) {
+  if (!canvas) return;
+  const labels = paired.map(p => p.meta.shortSha);
+  const datasets = benchNames.map((name, i) => {
+    const info = benchMap.get(name);
+    // Build data array aligned to paired runs by sha
+    const shaToStats = new Map(info.data.map(d => [d.sha, d.stats]));
+    const data = paired.map(p => {
+      const s = shaToStats.get(p.meta.shortSha);
+      return s ? s.avg : null;
+    });
+    return {
+      label: name,
+      data,
+      borderColor: COLORS[i % COLORS.length],
+      backgroundColor: "transparent",
+      borderWidth: 1.2,
+      pointRadius: 2,
+      pointHoverRadius: 3,
+      tension: 0.1,
+      spanGaps: true,
+    };
+  });
+
+  new Chart(canvas, {
+    type: "line",
+    data: { labels, datasets },
+    options: {
+      animation: false,
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { position: "bottom", labels: { font: { size: 9, family: "Menlo, monospace" }, boxWidth: 12, padding: 6 } },
+        tooltip: {
+          titleFont: { size: 10, family: "monospace" },
+          bodyFont: { size: 10, family: "monospace" },
+          callbacks: {
+            label: (ctx) => `${ctx.dataset.label}: ${fmt(ctx.parsed.y)}`,
+          },
+        },
+      },
+      scales: {
+        x: { ticks: { font: { size: 9, family: "monospace" }, maxRotation: 45 }, grid: { color: "#ddd" } },
+        y: {
+          ticks: {
+            font: { size: 9, family: "monospace" },
+            callback: (v) => fmt(v),
+          },
+          grid: { color: "#ddd" },
+          title: { display: true, text: "avg (ns)", font: { size: 9 } },
+        },
+      },
+    },
+  });
+}
+
+// Format nanosecond values to human-readable
+function fmt(ns) {
+  if (ns == null) return "—";
+  if (ns < 1e3) return ns.toFixed(1) + " ns";
+  if (ns < 1e6) return (ns / 1e3).toFixed(1) + " µs";
+  if (ns < 1e9) return (ns / 1e6).toFixed(1) + " ms";
+  return (ns / 1e9).toFixed(2) + " s";
+}
+
+function esc(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
+function css(s) { return (s || "ungrouped").replace(/[^a-zA-Z0-9]/g, "-").toLowerCase(); }
+
+main();
+</script>
+</body>
+</html>
