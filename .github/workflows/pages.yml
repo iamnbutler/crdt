@@ -10,7 +10,6 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
-  contents: write
   pages: write
   id-token: write
 
@@ -23,57 +22,18 @@ jobs:
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
-
-      - name: Check for changes
-        id: check
-        run: |
-          git fetch origin benchmark-data --tags
-
-          # Check benchmark data
-          BENCH_CURRENT=$(git rev-parse origin/benchmark-data)
-          if git rev-parse pages-deployed >/dev/null 2>&1; then
-            BENCH_DEPLOYED=$(git rev-parse pages-deployed)
-          else
-            BENCH_DEPLOYED="none"
-          fi
-          echo "bench_current=$BENCH_CURRENT" >> "$GITHUB_OUTPUT"
-
-          # Check if template changed (compare to parent commit)
-          TEMPLATE_CHANGED="false"
-          if git diff --name-only HEAD~1 HEAD 2>/dev/null | grep -q "^docs/bench/"; then
-            TEMPLATE_CHANGED="true"
-          fi
-
-          # Deploy if benchmark data changed OR template changed OR manual trigger
-          if [ "$BENCH_CURRENT" != "$BENCH_DEPLOYED" ] || [ "$TEMPLATE_CHANGED" = "true" ] || [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "skip=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "skip=true" >> "$GITHUB_OUTPUT"
-            echo "::notice::No changes since last deploy — skipping."
-          fi
 
       - name: Assemble Pages artifact
-        if: steps.check.outputs.skip != 'true'
         run: |
           git fetch origin benchmark-data
           git worktree add _site benchmark-data
           cp docs/bench/index.html _site/index.html
 
       - name: Upload Pages artifact
-        if: steps.check.outputs.skip != 'true'
         uses: actions/upload-pages-artifact@v3
         with:
           path: _site
 
       - name: Deploy to GitHub Pages
-        if: steps.check.outputs.skip != 'true'
         id: deploy
         uses: actions/deploy-pages@v4
-
-      - name: Update deployed marker
-        if: steps.check.outputs.skip != 'true'
-        run: |
-          git tag -f pages-deployed ${{ steps.check.outputs.bench_current }}
-          git push -f origin pages-deployed
