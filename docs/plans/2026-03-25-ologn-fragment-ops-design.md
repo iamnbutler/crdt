@@ -170,24 +170,25 @@ if (needsAfterSplit) {
 
 ## Implementation Phases
 
-### Phase 1: SumTree Primitives
+### Phase 1: SumTree Primitives ✅
 
 **Files:** `src/sum-tree/index.ts`, `src/sum-tree/index.test.ts`
 
-- [ ] `replaceAt(index: number, items: T[]): SumTree<T, S>`
-- [ ] `replaceAtMut(index: number, items: T[]): void`
-- [ ] Tests: empty items, single item, multiple items, index bounds
+- [x] `replaceAt(index: number, items: T[]): SumTree<T, S>`
+- [x] `replaceAtMut(index: number, items: T[]): void`
+- [x] Tests: empty items, single item, multiple items, index bounds
+- [x] Fixed `splitNodeIntoChunks` to handle arbitrary item counts (>2x branching factor)
 
-### Phase 2: Cursor Helpers
+### Phase 2: Cursor Helpers ✅
 
 **Files:** `src/sum-tree/index.ts`
 
-- [ ] `cursor.startPosition(): D` — cumulative value before current item
-- [ ] `cursor.peekPrev(): T | undefined` — adjacent fragment access
-- [ ] `cursor.peekNext(): T | undefined`
-- [ ] Verify `itemIndex()` works after `seekTo()`
+- [x] `cursor.startPosition(): D` — cumulative value before current item
+- [x] `cursor.peekPrev(): T | undefined` — adjacent fragment access
+- [x] `cursor.peekNext(): T | undefined`
+- [x] Verify `itemIndex()` works after `seekTo()`
 
-### Phase 3: Local Insert Rewrite
+### Phase 3: Local Insert Rewrite 🚧
 
 **Files:** `src/text/text-buffer.ts`
 
@@ -197,6 +198,12 @@ if (needsAfterSplit) {
 - [ ] Remove `fragmentsArray()` from insert path
 
 **Benchmark checkpoint:** Expect 10-50x improvement on editing trace
+
+**⚠️ BLOCKER:** Inserting split fragments individually at Locator positions causes incorrect ordering. When a fragment is split into [left, newFrag, right] and each is inserted at its Locator-sorted position, the resulting text ordering is wrong. This appears to be related to how child Locators from previous splits interact with new splits.
+
+The naive approach of `replaceAtMut(fragIndex, [left, newFrag, right])` doesn't work because there may be OTHER fragments with Locators that need to interleave with the new fragments. But inserting each at `findTreeInsertIndex()` position also fails.
+
+**Investigation needed:** Understanding the exact Locator ordering semantics when multiple splits have occurred at the same parent Locator.
 
 ### Phase 4: Delete Rewrite
 
