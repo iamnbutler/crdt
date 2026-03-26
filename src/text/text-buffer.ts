@@ -1101,14 +1101,17 @@ export class TextBuffer {
     }
 
     // Try fast O(log n) path when delete boundaries align with fragment boundaries
-    const fastResult = this.tryDeleteFast(start, end, opId);
-    if (fastResult !== null) {
-      return {
-        type: "delete",
-        id: opId,
-        ranges: fastResult.ranges,
-        version: cloneVersionVector(this._version),
-      };
+    // Skip fast path when there are live snapshots (mutations would corrupt them)
+    if (this._liveSnapshots === 0) {
+      const fastResult = this.tryDeleteFast(start, end, opId);
+      if (fastResult !== null) {
+        return {
+          type: "delete",
+          id: opId,
+          ranges: fastResult.ranges,
+          version: cloneVersionVector(this._version),
+        };
+      }
     }
 
     // Fall back to O(n) path when splits are required
