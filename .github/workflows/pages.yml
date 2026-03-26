@@ -31,7 +31,11 @@ jobs:
         run: |
           git fetch origin benchmark-data --tags
           CURRENT=$(git rev-parse origin/benchmark-data)
-          DEPLOYED=$(git rev-parse pages-deployed 2>/dev/null || echo "none")
+          if git rev-parse pages-deployed >/dev/null 2>&1; then
+            DEPLOYED=$(git rev-parse pages-deployed)
+          else
+            DEPLOYED="none"
+          fi
           echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
           echo "deployed=$DEPLOYED" >> "$GITHUB_OUTPUT"
           if [ "$CURRENT" = "$DEPLOYED" ]; then
