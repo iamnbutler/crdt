@@ -1,6 +1,13 @@
 {
   "runs": [
     {
+      "sha": "a3eae768f278222e7de873ee5e22d466c62500b4",
+      "shortSha": "a3eae76",
+      "timestamp": "2026-03-26T01:30:03.682Z",
+      "branch": "feat/benchmark-recording",
+      "subject": "feat: add benchmark recording script for historical tracking"
+    },
+    {
       "sha": "18ba1d6777007f6dbaded3d57facca8e74944f0c",
       "shortSha": "18ba1d6",
       "timestamp": "2026-03-26T01:02:13.198Z",
