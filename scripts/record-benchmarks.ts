@@ -17,13 +17,55 @@ import { join } from "node:path";
 const BRANCH = "benchmark-data";
 const RESULTS_DIR = "results";
 
+// Slim types for the extracted benchmark data we actually store
+interface SlimStats {
+  min: number;
+  max: number;
+  avg: number;
+  p50: number;
+  p75: number;
+  p99: number;
+  p999: number;
+  ticks: number;
+}
+
+interface SlimRun {
+  name: string;
+  args: Record<string, unknown>;
+  stats: SlimStats;
+}
+
+interface SlimBenchmark {
+  alias: string;
+  group: number;
+  baseline: boolean;
+  runs: SlimRun[];
+}
+
+interface SlimContext {
+  arch: string;
+  runtime: string;
+  version: string;
+  cpu: { name: string; freq: number };
+}
+
+interface SlimLayout {
+  name: string | null;
+}
+
+interface SlimResults {
+  layout: SlimLayout[];
+  benchmarks: SlimBenchmark[];
+  context: SlimContext;
+}
+
 interface BenchmarkRun {
   sha: string;
   shortSha: string;
   timestamp: string;
   branch: string;
   subject: string;
-  results: unknown;
+  results: SlimResults | { raw: string };
 }
 
 interface Index {
@@ -34,6 +76,91 @@ interface Index {
     branch: string;
     subject: string;
   }>;
+}
+
+/**
+ * Extracts only the metrics needed for historical tracking from the full
+ * mitata JSON output. Drops samples arrays, debug strings, heap data,
+ * CPU counters, and noop baselines — shrinking ~86 MB down to ~1-30 KB.
+ */
+function extractBenchmarkData(raw: unknown): SlimResults | { raw: string } {
+  if (
+    raw === null ||
+    typeof raw !== "object" ||
+    !("benchmarks" in raw) ||
+    !("context" in raw) ||
+    !("layout" in raw)
+  ) {
+    return { raw: JSON.stringify(raw) };
+  }
+
+  const obj = raw;
+  const layoutArr = Array.isArray(obj.layout) ? obj.layout : [];
+  const benchArr = Array.isArray(obj.benchmarks) ? obj.benchmarks : [];
+  const ctx = obj.context !== null && typeof obj.context === "object" ? obj.context : undefined;
+
+  if (!ctx || !("arch" in ctx) || !("runtime" in ctx) || !("version" in ctx) || !("cpu" in ctx)) {
+    return { raw: JSON.stringify(raw) };
+  }
+
+  const cpuObj = ctx.cpu !== null && typeof ctx.cpu === "object" ? ctx.cpu : undefined;
+  if (!cpuObj || !("name" in cpuObj) || !("freq" in cpuObj)) {
+    return { raw: JSON.stringify(raw) };
+  }
+
+  return {
+    layout: layoutArr.map((l: { name?: string | null }) => ({
+      name: l.name ?? null,
+    })),
+    benchmarks: benchArr.map(
+      (b: {
+        alias: string;
+        group: number;
+        baseline: boolean;
+        runs: Array<{
+          name: string;
+          args: Record<string, unknown>;
+          stats: {
+            min: number;
+            max: number;
+            avg: number;
+            p50: number;
+            p75: number;
+            p99: number;
+            p999: number;
+            ticks: number;
+          };
+        }>;
+      }) => ({
+        alias: b.alias,
+        group: b.group,
+        baseline: b.baseline,
+        runs: b.runs.map((r) => ({
+          name: r.name,
+          args: r.args,
+          stats: {
+            min: r.stats.min,
+            max: r.stats.max,
+            avg: r.stats.avg,
+            p50: r.stats.p50,
+            p75: r.stats.p75,
+            p99: r.stats.p99,
+            p999: r.stats.p999,
+            ticks: r.stats.ticks,
+          },
+        })),
+      }),
+    ),
+    context: {
+      arch: String(ctx.arch),
+      runtime: String(ctx.runtime),
+      version: String(ctx.version),
+      cpu: {
+        name: String(cpuObj.name),
+        freq: Number(cpuObj.freq),
+      },
+    },
+  };
 }
 
 function exec(
@@ -57,7 +184,7 @@ function getGitInfo() {
   return { sha, shortSha, branch, subject };
 }
 
-function runBenchmarks(): unknown {
+function runBenchmarks(): SlimResults | { raw: string } {
   console.log("Running benchmarks...\n");
 
   // Use comparison benchmark - write to temp file to avoid buffer truncation
@@ -73,14 +200,13 @@ function runBenchmarks(): unknown {
   if (jsonStart !== -1) {
     const jsonStr = output.slice(jsonStart);
     try {
-      return JSON.parse(jsonStr);
+      const fullResults: unknown = JSON.parse(jsonStr);
+      return extractBenchmarkData(fullResults);
     } catch {
-      // If parsing fails, store raw
       return { raw: output };
     }
   }
 
-  // If no JSON found, return raw output
   return { raw: output };
 }
 
