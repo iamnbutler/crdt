@@ -303,6 +303,13 @@ async function main() {
 
     if (shouldPush) {
       console.log(`\nPushing to origin/${BRANCH}...`);
+      // Fetch and rebase to handle concurrent runs
+      try {
+        exec(`git fetch origin ${BRANCH}`, { cwd: worktree });
+        exec(`git rebase origin/${BRANCH}`, { cwd: worktree });
+      } catch {
+        // Remote branch may not exist yet
+      }
       exec(`git push origin ${BRANCH}`, { cwd: worktree });
     } else {
       console.log("\nResults committed locally. Run with --push to push to remote.");
