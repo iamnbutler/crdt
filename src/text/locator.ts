@@ -32,15 +32,16 @@ export const MAX_LOCATOR: Locator = { levels: [MAX_VALUE] };
  * Returns <0 if a < b, 0 if a === b, >0 if a > b.
  */
 export function compareLocators(a: Locator, b: Locator): number {
-  const minLen = Math.min(a.levels.length, b.levels.length);
+  const aLevels = a.levels;
+  const bLevels = b.levels;
+  const aLen = aLevels.length;
+  const bLen = bLevels.length;
+  const minLen = aLen < bLen ? aLen : bLen;
   for (let i = 0; i < minLen; i++) {
-    const aLevel = a.levels[i];
-    const bLevel = b.levels[i];
-    if (aLevel !== undefined && bLevel !== undefined && aLevel !== bLevel) {
-      return aLevel - bLevel;
-    }
+    const diff = (aLevels[i] as number) - (bLevels[i] as number);
+    if (diff !== 0) return diff;
   }
-  return a.levels.length - b.levels.length;
+  return aLen - bLen;
 }
 
 /**
