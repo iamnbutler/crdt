@@ -1,4 +1,4 @@
-import type { BenchInfo, PairedRun, Results, RunMeta } from "./types";
+import type { BenchInfo, PairedRun, Results } from "./types";
 import { esc, fmt } from "./utils";
 
 const LIBS = ["@iamnbutler/crdt", "Loro", "Yjs", "Automerge"];
@@ -9,7 +9,7 @@ export function groupBenchmarks(res: Results): Map<string | null, BenchInfo[]> {
     for (const r of b.runs) {
       const groupName = res.layout[b.group]?.name || null;
       if (!groups.has(groupName)) groups.set(groupName, []);
-      groups.get(groupName)!.push({ name: r.name, stats: r.stats, group: b.group });
+      groups.get(groupName)?.push({ name: r.name, stats: r.stats, group: b.group });
     }
   }
   return groups;
@@ -45,7 +45,7 @@ export function renderOverview(latest: PairedRun): string {
     const shortName = t.replace(/-/g, " ").replace("editing trace replay", "trace replay");
     html += `<th>${shortName}</th>`;
   }
-  html += `</tr>`;
+  html += "</tr>";
 
   for (const lib of LIBS) {
     html += `<tr><td style="text-align:left"><b>${lib.replace("@iamnbutler/", "")}</b></td>`;
@@ -56,9 +56,9 @@ export function renderOverview(latest: PairedRun): string {
       const isBest = val === best;
       html += `<td class="${isBest ? "best" : ""}">${val ? fmt(val) : "—"}</td>`;
     }
-    html += `</tr>`;
+    html += "</tr>";
   }
-  return html + `</table>`;
+  return `${html}</table>`;
 }
 
 export function renderLatestComparison(latest: PairedRun, paired: PairedRun[]): string {
@@ -98,13 +98,15 @@ export function renderLatestComparison(latest: PairedRun, paired: PairedRun[]): 
         <td>${delta}</td>
       </tr>`;
     }
-    html += `</table>`;
+    html += "</table>";
   }
   return html;
 }
 
 export function renderSparkline(data: (number | null)[], w: number, h: number): string {
-  const valid = data.map((v, i) => (v !== null ? { i, v } : null)).filter((p): p is { i: number; v: number } => p !== null);
+  const valid = data
+    .map((v, i) => (v !== null ? { i, v } : null))
+    .filter((p): p is { i: number; v: number } => p !== null);
   if (valid.length < 2) return "—";
 
   const min = Math.min(...valid.map((p) => p.v));
@@ -137,7 +139,8 @@ export function renderHistory(paired: PairedRun[]): string {
   for (const [groupName, benches] of groups) {
     if (!groupName) continue;
     html += `<h3>${groupName}<span class="hint">smaller is better</span></h3>`;
-    html += `<table><tr><th>Benchmark</th><th>trend</th><th>min</th><th>max</th><th>current</th></tr>`;
+    html +=
+      "<table><tr><th>Benchmark</th><th>trend</th><th>min</th><th>max</th><th>current</th></tr>";
 
     for (const b of benches) {
       const history: (number | null)[] = [];
@@ -161,22 +164,26 @@ export function renderHistory(paired: PairedRun[]): string {
         <td><b>${fmt(current)}</b></td>
       </tr>`;
     }
-    html += `</table>`;
+    html += "</table>";
   }
   return html;
 }
 
 export function renderRunTable(paired: PairedRun[]): string {
-  let html = `<table><tr><th>#</th><th>SHA</th><th>Date</th><th>Branch</th><th>Subject</th></tr>`;
+  let html = "<table><tr><th>#</th><th>SHA</th><th>Date</th><th>Branch</th><th>Subject</th></tr>";
   for (let i = paired.length - 1; i >= 0; i--) {
     const m = paired[i].meta;
-    const subj = m.subject.length > 50 ? m.subject.slice(0, 47) + "..." : m.subject;
+    const subj = m.subject.length > 50 ? `${m.subject.slice(0, 47)}...` : m.subject;
     html += `<tr class="run-row"><td>${paired.length - i}</td><td>${m.shortSha}</td><td>${m.timestamp.slice(0, 10)}</td><td>${esc(m.branch)}</td><td style="text-align:left">${esc(subj)}</td></tr>`;
   }
-  return html + `</table>`;
+  return `${html}</table>`;
 }
 
-export function renderMethodology(ctx: { cpu: { name: string }; runtime: string; version: string }): string {
+export function renderMethodology(ctx: {
+  cpu: { name: string };
+  runtime: string;
+  version: string;
+}): string {
   return `<div class="notes">
     <p><strong>Methodology:</strong> Each benchmark runs multiple iterations until stable. Times shown are averages.</p>
     <p><strong>Libraries:</strong> @iamnbutler/crdt (this project), Loro, Yjs, Automerge — all latest versions at time of run.</p>

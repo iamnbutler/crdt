@@ -750,7 +750,8 @@ export class TextBuffer {
         // Boundary insert: no split needed, use O(log n) operations
         // Use insertLocator if provided, otherwise fall back to locatorBetween
         const locator =
-          fastResult.insertLocator ?? locatorBetween(fastResult.leftLocator, fastResult.rightLocator);
+          fastResult.insertLocator ??
+          locatorBetween(fastResult.leftLocator, fastResult.rightLocator);
         const newFrag = createFragment(opId, 0, locator, text, true);
 
         // O(log² n) to find index + O(log n) to insert
@@ -1125,7 +1126,8 @@ export class TextBuffer {
         };
         const candidateCmp = compareLocators(candidateInsertLocator, currentFrag.locator);
         // Check if candidate is a prefix of rightLocator
-        const isPrefix = candidateInsertLocator.levels.length < currentFrag.locator.levels.length &&
+        const isPrefix =
+          candidateInsertLocator.levels.length < currentFrag.locator.levels.length &&
           candidateInsertLocator.levels.every((v, idx) => v === currentFrag.locator.levels[idx]);
         // Only use the candidate if it's strictly less AND not a prefix
         insertLocator = candidateCmp < 0 && !isPrefix ? candidateInsertLocator : undefined;
@@ -1163,9 +1165,8 @@ export class TextBuffer {
       const candidateInsertLocator: Locator = {
         levels: [...currentFrag.baseLocator.levels, 2 * k - 1],
       };
-      const candidateCmp = rightLocator !== MAX_LOCATOR
-        ? compareLocators(candidateInsertLocator, rightLocator)
-        : -1;
+      const candidateCmp =
+        rightLocator !== MAX_LOCATOR ? compareLocators(candidateInsertLocator, rightLocator) : -1;
       const insertLocator = candidateCmp < 0 ? candidateInsertLocator : undefined;
 
       return {

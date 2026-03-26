@@ -1,4 +1,3 @@
-import type { Index, PairedRun, RunData } from "./types";
 import {
   renderHistory,
   renderLatestComparison,
@@ -6,10 +5,12 @@ import {
   renderOverview,
   renderRunTable,
 } from "./components";
+import type { Index, PairedRun, RunData } from "./types";
 
 async function main(): Promise<void> {
-  const loading = document.getElementById("loading")!;
-  const root = document.getElementById("root")!;
+  const loading = document.getElementById("loading");
+  const root = document.getElementById("root");
+  if (!loading || !root) return;
 
   let index: Index;
   try {
@@ -34,12 +35,12 @@ async function main(): Promise<void> {
       } catch {
         return null;
       }
-    })
+    }),
   );
 
   const paired: PairedRun[] = index.runs
     .slice(0, 30)
-    .map((run, i) => ({ meta: run, data: results[i]! }))
+    .map((run, i) => ({ meta: run, data: results[i] ?? null }))
     .filter((p): p is PairedRun => p.data?.results != null && !p.data.results.raw)
     .reverse();
 
@@ -63,10 +64,10 @@ async function main(): Promise<void> {
   html += `<h2>Latest Run (${latest.meta.shortSha})</h2>`;
   html += renderLatestComparison(latest, paired);
 
-  html += `<h2>History</h2>`;
+  html += "<h2>History</h2>";
   html += renderHistory(paired);
 
-  html += `<h2>Runs</h2>`;
+  html += "<h2>Runs</h2>";
   html += renderRunTable(paired);
 
   root.innerHTML = html;
