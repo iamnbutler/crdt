@@ -6,38 +6,39 @@
 <title>@iamnbutler/crdt — Benchmarks</title>
 <style>
 * { margin: 0; padding: 0; box-sizing: border-box; }
-body { font: 11px/1.4 "Times New Roman", Georgia, serif; color: #111; max-width: 960px; margin: 0 auto; padding: 12px; }
-h1 { font-size: 14px; font-weight: bold; border-bottom: 1px solid #000; padding-bottom: 2px; margin-bottom: 6px; }
-h2 { font-size: 12px; font-weight: bold; margin: 10px 0 4px; }
-h3 { font-size: 11px; font-weight: bold; margin: 8px 0 2px; }
-code, .mono { font-family: "SF Mono", "Menlo", "Consolas", monospace; font-size: 10px; }
-table { border-collapse: collapse; width: 100%; margin: 4px 0 8px; font-size: 10px; }
-th, td { border: 1px solid #999; padding: 1px 4px; text-align: right; font-family: "Menlo", monospace; font-size: 10px; }
-th { background: #eee; font-weight: bold; text-align: center; }
+body { font: 12px/1.5 ui-monospace, "SF Mono", Menlo, monospace; color: #111; max-width: 900px; margin: 0 auto; padding: 16px; }
+h1 { font-size: 14px; font-weight: bold; margin-bottom: 4px; }
+h2 { font-size: 13px; font-weight: bold; margin: 24px 0 8px; border-bottom: 1px solid #ccc; padding-bottom: 4px; }
+h3 { font-size: 12px; font-weight: bold; margin: 16px 0 6px; }
+.meta { color: #666; font-size: 11px; margin-bottom: 16px; }
+table { border-collapse: collapse; width: 100%; margin: 8px 0; font-size: 11px; }
+th, td { border: 1px solid #ddd; padding: 4px 8px; text-align: right; }
+th { background: #f5f5f5; font-weight: 600; }
 td:first-child, th:first-child { text-align: left; }
-.ctx { font-size: 10px; color: #555; margin-bottom: 8px; }
-.err { color: #900; }
-.pos { color: #060; }
-.neg { color: #900; }
-.muted { color: #888; }
-canvas { display: block; }
-#loading { font-style: italic; color: #666; }
-.chart-wrap { margin: 4px 0 10px; height: 180px; position: relative; }
-.run-tbl tr:hover { background: #f5f5f0; }
-a { color: #333; }
+.pos { color: #080; }
+.neg { color: #c00; }
+.bar-cell { width: 200px; }
+.bar-wrap { background: #eee; height: 14px; position: relative; }
+.bar { height: 100%; }
+.bar-you { background: #333; }
+.bar-other { background: #999; }
+.bar-label { position: absolute; right: 4px; top: 0; font-size: 10px; line-height: 14px; color: #666; }
+.sparkline { display: block; }
+.spark-line { fill: none; stroke: #333; stroke-width: 1.5; }
+.spark-dot { fill: #333; }
+#loading { color: #666; }
+.err { color: #c00; }
+.latest-section { background: #fafafa; padding: 12px; margin: 8px 0 16px; border: 1px solid #eee; }
+.run-row:hover { background: #f8f8f8; }
 </style>
 </head>
 <body>
 <h1>@iamnbutler/crdt — Benchmark History</h1>
-<div id="loading">Loading benchmark data…</div>
+<div id="loading">Loading...</div>
 <div id="root" style="display:none"></div>
 
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
 <script>
 "use strict";
-
-const MAX_RUNS = 50; // limit fetched results
-const COLORS = ["#111","#666","#999","#c33","#36c","#093","#c90","#909"];
 
 async function main() {
   const loading = document.getElementById("loading");
@@ -46,201 +47,212 @@ async function main() {
   let index;
   try {
     const r = await fetch("./index.json");
-    if (!r.ok) throw new Error(`${r.status}`);
+    if (!r.ok) throw new Error(r.status);
     index = await r.json();
   } catch (e) {
-    loading.innerHTML = `<span class="err">Failed to load index.json — is benchmark-data deployed? (${e.message})</span>`;
+    loading.innerHTML = '<span class="err">Failed to load index.json</span>';
     return;
   }
 
-  if (!index.runs || index.runs.length === 0) {
-    loading.textContent = "No benchmark runs recorded yet.";
+  if (!index.runs?.length) {
+    loading.textContent = "No runs yet.";
     return;
   }
 
-  const runs = index.runs.slice(0, MAX_RUNS);
-
-  // Fetch all results in parallel
+  // Fetch results
   const results = await Promise.all(
-    runs.map(async (run) => {
+    index.runs.slice(0, 30).map(async (run) => {
       try {
         const r = await fetch(`./results/${run.sha}.json`);
-        if (!r.ok) return null;
-        return await r.json();
+        return r.ok ? await r.json() : null;
       } catch { return null; }
     })
   );
 
-  // Pair runs with their loaded results, filter failures, reverse for chronological order
-  const paired = runs
+  const paired = index.runs
+    .slice(0, 30)
     .map((run, i) => ({ meta: run, data: results[i] }))
-    .filter(p => p.data && p.data.results && !p.data.results.raw)
-    .reverse();
+    .filter(p => p.data?.results && !p.data.results.raw)
+    .reverse(); // chronological
 
-  if (paired.length === 0) {
-    loading.textContent = "No parseable benchmark results found.";
+  if (!paired.length) {
+    loading.textContent = "No parseable results.";
     return;
   }
 
   loading.style.display = "none";
   root.style.display = "block";
 
-  // Context from latest run
+  const latest = paired[paired.length - 1];
+  const ctx = latest.data.results.context;
+
+  let html = `<div class="meta">${paired.length} runs · ${ctx.runtime} ${ctx.version} · ${ctx.arch} · ${ctx.cpu.name}</div>`;
+
+  // Latest run comparison (like mitata output)
+  html += `<h2>Latest Run (${latest.meta.shortSha})</h2>`;
+  html += renderLatestComparison(latest, paired);
+
+  // Historical charts
+  html += `<h2>History</h2>`;
+  html += renderHistory(paired);
+
+  // Run table at bottom
+  html += `<h2>Runs</h2>`;
+  html += renderRunTable(paired);
+
+  root.innerHTML = html;
+}
+
+function renderLatestComparison(latest, paired) {
+  const res = latest.data.results;
+  const groups = groupBenchmarks(res);
+  let html = '';
+
+  for (const [groupName, benches] of groups) {
+    if (!groupName) continue;
+    html += `<h3>${groupName}</h3>`;
+    html += `<table><tr><th>Benchmark</th><th>avg</th><th>p50</th><th>p99</th><th class="bar-cell">comparison</th><th>vs prev</th></tr>`;
+
+    // Find max avg in group for scaling bars
+    const maxAvg = Math.max(...benches.map(b => b.stats.avg));
+
+    for (const b of benches) {
+      const s = b.stats;
+      const barPct = (s.avg / maxAvg * 100).toFixed(1);
+      const isYours = b.name.includes('@iamnbutler');
+
+      // Delta vs previous run
+      let delta = '';
+      if (paired.length >= 2) {
+        const prev = paired[paired.length - 2];
+        const prevBench = findBench(prev.data.results, b.name);
+        if (prevBench) {
+          const pct = ((s.avg - prevBench.stats.avg) / prevBench.stats.avg * 100);
+          const cls = pct > 5 ? 'neg' : pct < -5 ? 'pos' : '';
+          delta = `<span class="${cls}">${pct > 0 ? '+' : ''}${pct.toFixed(1)}%</span>`;
+        }
+      }
+
+      html += `<tr>
+        <td>${esc(b.name)}</td>
+        <td><b>${fmt(s.avg)}</b></td>
+        <td>${fmt(s.p50)}</td>
+        <td>${fmt(s.p99)}</td>
+        <td class="bar-cell"><div class="bar-wrap"><div class="bar ${isYours ? 'bar-you' : 'bar-other'}" style="width:${barPct}%"></div><span class="bar-label">${fmt(s.avg)}</span></div></td>
+        <td>${delta}</td>
+      </tr>`;
+    }
+    html += `</table>`;
+  }
+  return html;
+}
+
+function renderHistory(paired) {
+  if (paired.length < 2) return '<p>Need more runs for history.</p>';
+
   const latest = paired[paired.length - 1].data.results;
-  const ctx = latest.context;
-  root.innerHTML = `<div class="ctx">${paired.length} runs · ${ctx.runtime} ${ctx.version} · ${ctx.arch} · ${ctx.cpu.name}</div>`;
+  const groups = groupBenchmarks(latest);
+  let html = '';
 
-  // Run history table
-  root.innerHTML += `<h2>Runs</h2>`;
-  root.innerHTML += renderRunTable(paired);
+  for (const [groupName, benches] of groups) {
+    if (!groupName) continue;
+    html += `<h3>${groupName}</h3>`;
+    html += `<table><tr><th>Benchmark</th><th>trend</th><th>min</th><th>max</th><th>current</th></tr>`;
 
-  // Collect all unique benchmark names across all runs
-  const benchMap = collectBenchmarks(paired);
+    for (const b of benches) {
+      // Collect history for this benchmark
+      const history = [];
+      for (const p of paired) {
+        const found = findBench(p.data.results, b.name);
+        history.push(found ? found.stats.avg : null);
+      }
 
-  // Group benchmarks by layout group
-  const groups = groupByLayout(latest.layout, benchMap);
+      const valid = history.filter(v => v !== null);
+      if (valid.length === 0) continue;
 
-  for (const [groupName, benchNames] of groups) {
-    root.innerHTML += `<h2>${groupName || "Ungrouped"}</h2>`;
-    root.innerHTML += `<div class="chart-wrap"><canvas id="chart-${css(groupName)}"></canvas></div>`;
-    root.innerHTML += renderStatsTable(benchNames, benchMap, paired);
+      const min = Math.min(...valid);
+      const max = Math.max(...valid);
+      const current = history[history.length - 1];
+
+      html += `<tr>
+        <td>${esc(b.name)}</td>
+        <td>${renderSparkline(history, 120, 20)}</td>
+        <td>${fmt(min)}</td>
+        <td>${fmt(max)}</td>
+        <td><b>${fmt(current)}</b></td>
+      </tr>`;
+    }
+    html += `</table>`;
   }
+  return html;
+}
 
-  // Render charts after DOM is updated
-  for (const [groupName, benchNames] of groups) {
-    renderChart(
-      document.getElementById(`chart-${css(groupName)}`),
-      benchNames, benchMap, paired
-    );
-  }
+function renderSparkline(data, w, h) {
+  const valid = data.map((v, i) => v !== null ? { i, v } : null).filter(Boolean);
+  if (valid.length < 2) return '—';
+
+  const min = Math.min(...valid.map(p => p.v));
+  const max = Math.max(...valid.map(p => p.v));
+  const range = max - min || 1;
+
+  const points = valid.map(p => {
+    const x = (p.i / (data.length - 1)) * w;
+    const y = h - ((p.v - min) / range) * (h - 4) - 2;
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+
+  const last = valid[valid.length - 1];
+  const lastX = (last.i / (data.length - 1)) * w;
+  const lastY = h - ((last.v - min) / range) * (h - 4) - 2;
+
+  return `<svg class="sparkline" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
+    <polyline class="spark-line" points="${points.join(' ')}"/>
+    <circle class="spark-dot" cx="${lastX.toFixed(1)}" cy="${lastY.toFixed(1)}" r="2"/>
+  </svg>`;
 }
 
 function renderRunTable(paired) {
-  let h = `<table class="run-tbl"><tr><th>#</th><th>SHA</th><th>Date</th><th>Branch</th><th>Subject</th></tr>`;
+  let html = `<table><tr><th>#</th><th>SHA</th><th>Date</th><th>Branch</th><th>Subject</th></tr>`;
   for (let i = paired.length - 1; i >= 0; i--) {
     const m = paired[i].meta;
-    const d = m.timestamp.slice(0, 10);
-    const subj = esc(m.subject.length > 60 ? m.subject.slice(0, 57) + "…" : m.subject);
-    h += `<tr><td>${paired.length - i}</td><td class="mono">${m.shortSha}</td><td>${d}</td><td class="mono">${esc(m.branch)}</td><td style="text-align:left">${subj}</td></tr>`;
+    const subj = m.subject.length > 50 ? m.subject.slice(0, 47) + '...' : m.subject;
+    html += `<tr class="run-row"><td>${paired.length - i}</td><td>${m.shortSha}</td><td>${m.timestamp.slice(0, 10)}</td><td>${esc(m.branch)}</td><td style="text-align:left">${esc(subj)}</td></tr>`;
   }
-  return h + `</table>`;
+  return html + `</table>`;
 }
 
-function collectBenchmarks(paired) {
-  // benchMap: name -> { group, data: [{sha, stats}] }
-  const map = new Map();
-  for (const p of paired) {
-    const res = p.data.results;
-    for (const b of res.benchmarks) {
-      for (const r of b.runs) {
-        const key = r.name;
-        if (!map.has(key)) map.set(key, { group: b.group, alias: b.alias, data: [] });
-        map.get(key).data.push({ sha: p.meta.shortSha, timestamp: p.meta.timestamp, stats: r.stats });
-      }
-    }
-  }
-  return map;
-}
-
-function groupByLayout(layout, benchMap) {
+function groupBenchmarks(res) {
   const groups = new Map();
-  for (const [name, info] of benchMap) {
-    const groupName = layout[info.group]?.name || "Ungrouped";
-    if (!groups.has(groupName)) groups.set(groupName, []);
-    groups.get(groupName).push(name);
+  for (const b of res.benchmarks) {
+    for (const r of b.runs) {
+      const groupName = res.layout[b.group]?.name || null;
+      if (!groups.has(groupName)) groups.set(groupName, []);
+      groups.get(groupName).push({ name: r.name, stats: r.stats, group: b.group });
+    }
   }
   return groups;
 }
 
-function renderStatsTable(benchNames, benchMap, paired) {
-  let h = `<table><tr><th style="text-align:left">Benchmark</th><th>avg</th><th>p50</th><th>p99</th><th>min</th><th>max</th><th>Δ avg</th></tr>`;
-  for (const name of benchNames) {
-    const info = benchMap.get(name);
-    const pts = info.data;
-    if (pts.length === 0) continue;
-    const last = pts[pts.length - 1].stats;
-    let delta = "";
-    if (pts.length >= 2) {
-      const prev = pts[pts.length - 2].stats;
-      const pct = ((last.avg - prev.avg) / prev.avg * 100);
-      const cls = pct > 5 ? "neg" : pct < -5 ? "pos" : "muted";
-      delta = `<span class="${cls}">${pct > 0 ? "+" : ""}${pct.toFixed(1)}%</span>`;
+function findBench(res, name) {
+  for (const b of res.benchmarks) {
+    for (const r of b.runs) {
+      if (r.name === name) return { name: r.name, stats: r.stats };
     }
-    h += `<tr><td style="text-align:left">${esc(name)}</td><td>${fmt(last.avg)}</td><td>${fmt(last.p50)}</td><td>${fmt(last.p99)}</td><td>${fmt(last.min)}</td><td>${fmt(last.max)}</td><td>${delta}</td></tr>`;
   }
-  return h + `</table>`;
+  return null;
 }
 
-function renderChart(canvas, benchNames, benchMap, paired) {
-  if (!canvas) return;
-  const labels = paired.map(p => p.meta.shortSha);
-  const datasets = benchNames.map((name, i) => {
-    const info = benchMap.get(name);
-    // Build data array aligned to paired runs by sha
-    const shaToStats = new Map(info.data.map(d => [d.sha, d.stats]));
-    const data = paired.map(p => {
-      const s = shaToStats.get(p.meta.shortSha);
-      return s ? s.avg : null;
-    });
-    return {
-      label: name,
-      data,
-      borderColor: COLORS[i % COLORS.length],
-      backgroundColor: "transparent",
-      borderWidth: 1.2,
-      pointRadius: 2,
-      pointHoverRadius: 3,
-      tension: 0.1,
-      spanGaps: true,
-    };
-  });
-
-  new Chart(canvas, {
-    type: "line",
-    data: { labels, datasets },
-    options: {
-      animation: { duration: 0 },
-      transitions: { active: { animation: { duration: 0 } } },
-      responsive: true,
-      maintainAspectRatio: false,
-      resizeDelay: 100,
-      plugins: {
-        legend: { position: "bottom", labels: { font: { size: 9, family: "Menlo, monospace" }, boxWidth: 12, padding: 6 } },
-        tooltip: {
-          titleFont: { size: 10, family: "monospace" },
-          bodyFont: { size: 10, family: "monospace" },
-          callbacks: {
-            label: (ctx) => `${ctx.dataset.label}: ${fmt(ctx.parsed.y)}`,
-          },
-        },
-      },
-      scales: {
-        x: { ticks: { font: { size: 9, family: "monospace" }, maxRotation: 45 }, grid: { color: "#ddd" } },
-        y: {
-          beginAtZero: false,
-          ticks: {
-            font: { size: 9, family: "monospace" },
-            callback: (v) => fmt(v),
-          },
-          grid: { color: "#ddd" },
-          title: { display: true, text: "avg (ns)", font: { size: 9 } },
-        },
-      },
-    },
-  });
-}
-
-// Format nanosecond values to human-readable
 function fmt(ns) {
-  if (ns == null) return "—";
-  if (ns < 1e3) return ns.toFixed(1) + " ns";
-  if (ns < 1e6) return (ns / 1e3).toFixed(1) + " µs";
-  if (ns < 1e9) return (ns / 1e6).toFixed(1) + " ms";
-  return (ns / 1e9).toFixed(2) + " s";
+  if (ns == null) return '—';
+  if (ns < 1e3) return ns.toFixed(1) + ' ns';
+  if (ns < 1e6) return (ns / 1e3).toFixed(1) + ' µs';
+  if (ns < 1e9) return (ns / 1e6).toFixed(1) + ' ms';
+  return (ns / 1e9).toFixed(2) + ' s';
 }
 
-function esc(s) { const d = document.createElement("div"); d.textContent = s; return d.innerHTML; }
-function css(s) { return (s || "ungrouped").replace(/[^a-zA-Z0-9]/g, "-").toLowerCase(); }
+function esc(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
 
 main();
 </script>
