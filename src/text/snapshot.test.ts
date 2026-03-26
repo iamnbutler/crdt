@@ -2,9 +2,8 @@
  * Tests for O(1) snapshot isolation and epoch-based reclamation.
  */
 
-import { describe, expect, test, beforeEach, afterEach, mock } from "bun:test";
+import { describe, expect, test } from "bun:test";
 import { TextBuffer } from "./text-buffer.js";
-import { TextBufferSnapshot } from "./snapshot.js";
 
 describe("TextBufferSnapshot", () => {
   describe("O(1) snapshot creation", () => {
@@ -203,7 +202,7 @@ describe("TextBufferSnapshot", () => {
   describe("garbage collection", () => {
     test("collectGarbage() frees unreachable nodes", () => {
       const buffer = TextBuffer.fromString("initial content");
-      const utilBefore = buffer.arenaUtilization();
+      const _utilBefore = buffer.arenaUtilization();
 
       // Create and release many snapshots with mutations
       for (let i = 0; i < 10; i++) {

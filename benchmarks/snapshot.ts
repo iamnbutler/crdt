@@ -9,7 +9,6 @@
 import { bench, group, run, summary } from "mitata";
 import { TextBuffer } from "../src/text/text-buffer.js";
 import { generateSyntheticDocument } from "./synthetic.js";
-import type { DocumentSize } from "./synthetic.js";
 
 const isCI = process.argv.includes("--ci");
 

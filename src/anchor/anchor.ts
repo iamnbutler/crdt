@@ -214,7 +214,6 @@ export function deserializeAnchor(str: string): Anchor | null {
   return {
     insertionId: { replicaId, localSeq },
     offset,
-    // biome-ignore lint/plugin/no-type-assertion: expect: bias validated as 0|1 by guard above
     bias: bias as Bias,
   };
 }

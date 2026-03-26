@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { TextBuffer } from "./text-buffer.js";
-import { replicaId, type Operation } from "./types.js";
+import { type Operation, replicaId } from "./types.js";
 
 describe("insert performance - final targets", () => {
   test("10K sequential inserts under 100ms (issue #33 target)", () => {
