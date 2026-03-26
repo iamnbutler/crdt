@@ -1,0 +1,68 @@
+name: Benchmarks
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Git ref to benchmark (default: main)'
+        required: false
+        default: 'main'
+      force:
+        description: 'Record even if already recorded today'
+        type: boolean
+        default: false
+
+concurrency:
+  group: benchmarks
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+
+jobs:
+  record:
+    name: Record
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.ref || github.ref }}
+          fetch-depth: 0
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Check if already recorded today
+        id: check
+        run: |
+          TODAY=$(date -u +%Y-%m-%d)
+          echo "date=$TODAY" >> "$GITHUB_OUTPUT"
+
+          # Check if any benchmark was recorded today
+          if git fetch origin benchmark-data 2>/dev/null && \
+             git show origin/benchmark-data:index.json 2>/dev/null | grep -q "\"timestamp\": \"$TODAY"; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::Benchmarks already recorded for $TODAY — skipping. Use force=true to override."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Install dependencies
+        if: steps.check.outputs.skip != 'true' || inputs.force
+        run: bun install --frozen-lockfile
+
+      - name: Download editing trace
+        if: steps.check.outputs.skip != 'true' || inputs.force
+        run: bun run fixtures:download
+
+      - name: Record benchmarks
+        if: steps.check.outputs.skip != 'true' || inputs.force
+        run: bun run bench:record --push
