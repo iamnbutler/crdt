@@ -1,6 +1,13 @@
 {
   "runs": [
     {
+      "sha": "12cf0a7ea094a916847884f57930685e31352c44",
+      "shortSha": "12cf0a7",
+      "timestamp": "2026-03-26T14:07:42.899Z",
+      "branch": "chore/remove-workflow-logs",
+      "subject": "chore: remove accidentally committed workflow logs"
+    },
+    {
       "sha": "a3eae768f278222e7de873ee5e22d466c62500b4",
       "shortSha": "a3eae76",
       "timestamp": "2026-03-26T01:30:03.682Z",
