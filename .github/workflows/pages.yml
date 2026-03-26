@@ -3,8 +3,6 @@ name: Pages
 on:
   push:
     branches: [main]
-    paths:
-      - 'docs/bench/**'
   workflow_dispatch:
 
 concurrency:
@@ -12,6 +10,7 @@ concurrency:
   cancel-in-progress: true
 
 permissions:
+  contents: write
   pages: write
   id-token: write
 
@@ -24,18 +23,44 @@ jobs:
       url: ${{ steps.deploy.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for new benchmark data
+        id: check
+        run: |
+          git fetch origin benchmark-data --tags
+          CURRENT=$(git rev-parse origin/benchmark-data)
+          DEPLOYED=$(git rev-parse pages-deployed 2>/dev/null || echo "none")
+          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
+          echo "deployed=$DEPLOYED" >> "$GITHUB_OUTPUT"
+          if [ "$CURRENT" = "$DEPLOYED" ]; then
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+            echo "::notice::No new benchmark data since last deploy — skipping."
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Assemble Pages artifact
+        if: steps.check.outputs.skip != 'true'
         run: |
           git fetch origin benchmark-data
           git worktree add _site benchmark-data
           cp docs/bench/index.html _site/index.html
 
       - name: Upload Pages artifact
+        if: steps.check.outputs.skip != 'true'
         uses: actions/upload-pages-artifact@v3
         with:
           path: _site
 
       - name: Deploy to GitHub Pages
+        if: steps.check.outputs.skip != 'true'
         id: deploy
         uses: actions/deploy-pages@v4
+
+      - name: Update deployed marker
+        if: steps.check.outputs.skip != 'true'
+        run: |
+          git tag -f pages-deployed ${{ steps.check.outputs.current }}
+          git push -f origin pages-deployed
