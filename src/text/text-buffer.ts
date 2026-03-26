@@ -836,20 +836,20 @@ export class TextBuffer {
           if (localOffset === 0) {
             const leftLocator = i > 0 ? (frags[i - 1]?.locator ?? MIN_LOCATOR) : MIN_LOCATOR;
             const rightLocator = frag.locator;
+            const prevFrag = i > 0 ? frags[i - 1] : undefined;
+            const afterRef =
+              prevFrag !== undefined
+                ? {
+                    insertionId: prevFrag.insertionId,
+                    offset: prevFrag.insertionOffset + prevFrag.length,
+                  }
+                : { insertionId: MIN_OPERATION_ID, offset: 0 };
 
             return {
               leftLocator,
               rightLocator,
               insertIndex: i,
-              afterRef: (() => {
-                const prevFrag = i > 0 ? frags[i - 1] : undefined;
-                return prevFrag !== undefined
-                  ? {
-                      insertionId: prevFrag.insertionId,
-                      offset: prevFrag.insertionOffset + prevFrag.length,
-                    }
-                  : { insertionId: MIN_OPERATION_ID, offset: 0 };
-              })(),
+              afterRef,
               beforeRef: {
                 insertionId: frag.insertionId,
                 offset: frag.insertionOffset,
@@ -897,6 +897,11 @@ export class TextBuffer {
           const leftLocator = frag.locator;
           const rightLocator =
             i + 1 < frags.length ? (frags[i + 1]?.locator ?? MAX_LOCATOR) : MAX_LOCATOR;
+          const nextFrag = frags[i + 1];
+          const beforeRef =
+            nextFrag !== undefined
+              ? { insertionId: nextFrag.insertionId, offset: nextFrag.insertionOffset }
+              : { insertionId: MAX_OPERATION_ID, offset: 0 };
 
           return {
             leftLocator,
@@ -906,16 +911,7 @@ export class TextBuffer {
               insertionId: frag.insertionId,
               offset: frag.insertionOffset + frag.length,
             },
-            beforeRef: (() => {
-              const nextFrag = frags[i + 1];
-              if (nextFrag !== undefined) {
-                return {
-                  insertionId: nextFrag.insertionId,
-                  offset: nextFrag.insertionOffset,
-                };
-              }
-              return { insertionId: MAX_OPERATION_ID, offset: 0 };
-            })(),
+            beforeRef,
           };
         }
       }
