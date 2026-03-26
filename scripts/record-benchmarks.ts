@@ -211,8 +211,24 @@ function runBenchmarks(): SlimResults | { raw: string } {
 }
 
 function ensureOrphanBranch(worktree: string) {
-  // Check if branch exists
+  // Fetch remote branch first to ensure we have latest
   try {
+    exec(`git fetch origin ${BRANCH}`);
+  } catch {
+    // Remote branch may not exist yet
+  }
+
+  // Check if branch exists (locally or from fetch)
+  try {
+    // Try remote-tracking branch first (most up-to-date)
+    try {
+      exec(`git rev-parse --verify origin/${BRANCH}`);
+      exec(`git worktree add "${worktree}" origin/${BRANCH}`);
+      exec(`git checkout -B ${BRANCH}`, { cwd: worktree });
+      return;
+    } catch {
+      // Fall back to local branch
+    }
     exec(`git rev-parse --verify ${BRANCH}`);
     // Branch exists, clone it to worktree
     exec(`git worktree add "${worktree}" ${BRANCH}`);
