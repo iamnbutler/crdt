@@ -86,11 +86,12 @@ export class BinaryWriter {
    * Uses 7 bits per byte, MSB indicates continuation.
    */
   writeVarUint(value: number): void {
-    while (value >= 0x80) {
-      this.writeU8((value & 0x7f) | 0x80);
-      value >>>= 7;
+    let v = value;
+    while (v >= 0x80) {
+      this.writeU8((v & 0x7f) | 0x80);
+      v >>>= 7;
     }
-    this.writeU8(value);
+    this.writeU8(v);
   }
 
   /**

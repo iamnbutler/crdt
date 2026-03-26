@@ -841,13 +841,15 @@ export class TextBuffer {
               leftLocator,
               rightLocator,
               insertIndex: i,
-              afterRef:
-                i > 0 && frags[i - 1] !== undefined
+              afterRef: (() => {
+                const prevFrag = i > 0 ? frags[i - 1] : undefined;
+                return prevFrag !== undefined
                   ? {
-                      insertionId: frags[i - 1]!.insertionId,
-                      offset: frags[i - 1]!.insertionOffset + frags[i - 1]!.length,
+                      insertionId: prevFrag.insertionId,
+                      offset: prevFrag.insertionOffset + prevFrag.length,
                     }
-                  : { insertionId: MIN_OPERATION_ID, offset: 0 },
+                  : { insertionId: MIN_OPERATION_ID, offset: 0 };
+              })(),
               beforeRef: {
                 insertionId: frag.insertionId,
                 offset: frag.insertionOffset,
@@ -941,9 +943,7 @@ export class TextBuffer {
    * Returns null if a split would be required (must use O(n) array path).
    * Only handles boundary inserts (at fragment start or end).
    */
-  private tryFindInsertPositionFast(
-    offset: number,
-  ): {
+  private tryFindInsertPositionFast(offset: number): {
     leftLocator: Locator;
     rightLocator: Locator;
     afterRef: { insertionId: OperationId; offset: number };
@@ -1166,11 +1166,7 @@ export class TextBuffer {
   /**
    * Slow O(n) delete path for cases requiring splits.
    */
-  private deleteInternalSlow(
-    start: number,
-    end: number,
-    opId: OperationId,
-  ): DeleteOperation {
+  private deleteInternalSlow(start: number, end: number, opId: OperationId): DeleteOperation {
     const frags = this.fragmentsArray();
     const newFrags: Fragment[] = [];
     const ranges: Array<{ insertionId: OperationId; offset: number; length: number }> = [];

@@ -908,7 +908,7 @@ export class SumTree<T extends Summarizable<S>, S> {
    * Subtract two dimension values. For numeric dimensions this is simple subtraction.
    * This helper exists because Dimension doesn't have a subtract operation.
    */
-  private subtractDimension<D>(dimension: Dimension<S, D>, a: D, b: D): D {
+  private subtractDimension<D>(_dimension: Dimension<S, D>, a: D, b: D): D {
     // For numeric dimensions, we can compute a - b
     // This is a simplification - for complex dimensions we'd need explicit subtract
     if (typeof a === "number" && typeof b === "number") {
