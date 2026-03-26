@@ -301,6 +301,38 @@ describe("SumTree", () => {
       expect(invariants.valid).toBe(true);
     });
 
+    it("redistributes items correctly when underflowing node has right sibling", () => {
+      // Regression test: redistributeNodes leaf case was using total.reverse() which
+      // scrambled item order when the sibling is to the right (node is leftmost).
+      // BF=4, so redistribution triggers when combined count > 4 (i.e., sibling has 4 items).
+      let tree = new SumTree<CountItem, CountSummary>(countSummaryOps, 4);
+
+      // Build: push 0..6 → after splits, leftmost leaf has [0,1,2], right leaf has [3,4,5,6]
+      for (let i = 0; i < 7; i++) {
+        tree = tree.push(new CountItem(i));
+      }
+
+      // Remove from leftmost leaf until underflow triggers redistribution with right sibling
+      tree = tree.removeAt(0); // leftmost: [1,2], right: [3,4,5,6]
+      tree = tree.removeAt(0); // leftmost: [2] (underflow) + right: [3,4,5,6] (4 items → redistribute)
+
+      expect(tree.length()).toBe(5);
+      expect(tree.toArray().map((i) => i.value)).toEqual([2, 3, 4, 5, 6]);
+      expect(tree.checkInvariants().valid).toBe(true);
+
+      // Also test mutable path via replaceAtMut(index, [])
+      let tree2 = new SumTree<CountItem, CountSummary>(countSummaryOps, 4);
+      for (let i = 0; i < 7; i++) {
+        tree2 = tree2.push(new CountItem(i));
+      }
+      tree2.replaceAtMut(0, []);
+      tree2.replaceAtMut(0, []);
+
+      expect(tree2.length()).toBe(5);
+      expect(tree2.toArray().map((i) => i.value)).toEqual([2, 3, 4, 5, 6]);
+      expect(tree2.checkInvariants().valid).toBe(true);
+    });
+
     it("handles node merging on delete with small branching factor", () => {
       let tree = new SumTree<CountItem, CountSummary>(countSummaryOps, 4);
 
