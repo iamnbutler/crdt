@@ -47,14 +47,19 @@ export function compareLocators(a: Locator, b: Locator): number {
  * Produce a Locator M between `left` and `right` such that left < M < right.
  *
  * Algorithm:
- * 1. Find first index where left and right differ.
- * 2. If there's room between them (gap > 1), pick a midpoint.
- * 3. If not, extend to next level with a midpoint value.
+ * - At level 0 (top level): pick a midpoint if there's room
+ * - At level >= 1: compute the equivalent inside-insert slot
  *
- * IMPORTANT: This function returns EVEN values for the last level to avoid
- * collision with inside inserts, which use ODD values (2*k-1 scheme).
+ * The split/inside-insert scheme reserves:
+ * - Even values (0, 2, 4, ...) for split locators at offset k: 2*k
+ * - Odd values (1, 3, 5, ...) for inside-insert locators at offset k: 2*k-1
  *
- * Throws if left >= right or if MAX_DEPTH would be exceeded.
+ * When inserting between split fragments [L, 2*k] and [L, 2*m], the semantic
+ * position is "after offset k, before offset m" which is the inside-insert
+ * slot at offset k+1: [L, 2*(k+1)-1] = [L, 2*k+1].
+ *
+ * This ensures boundary inserts and inside-inserts at the "same position"
+ * get the same locator prefix, with tie-breaking by operation ID.
  */
 export function locatorBetween(left: Locator, right: Locator): Locator {
   const levels: number[] = [];
@@ -62,11 +67,6 @@ export function locatorBetween(left: Locator, right: Locator): Locator {
   // The effective max value for each level. The first level uses the shifted range.
   const maxForLevel = (depth: number): number => {
     return depth === 0 ? Math.floor(MAX_VALUE / 2 ** FIRST_LEVEL_SHIFT) : MAX_VALUE;
-  };
-
-  // Make value even (round down to nearest even number)
-  const makeEven = (n: number): number => {
-    return n % 2 === 0 ? n : n - 1;
   };
 
   const leftLen = left.levels.length;
@@ -80,53 +80,106 @@ export function locatorBetween(left: Locator, right: Locator): Locator {
     if (lv === rv) {
       // Same at this level, carry it forward and look deeper
       levels.push(lv);
+
+      // Special case: if left is now exhausted but right continues, we're
+      // trying to insert between a locator and its child. There's no integer
+      // room at this level. We need to go deeper from left with a value
+      // LESS than right's next level.
+      if (i + 1 === leftLen && i + 1 < rightLen) {
+        const rightNextVal = right.levels[i + 1] ?? 0;
+        if (rightNextVal > 0 && levels.length < MAX_DEPTH) {
+          // Insert value just below right's next level
+          levels.push(rightNextVal - 1);
+          if (levels.length < MAX_DEPTH) {
+            levels.push(MAX_VALUE - 1);
+          }
+          return { levels };
+        }
+        // rightNextVal is 0, need to go even deeper - continue the loop
+      }
       continue;
     }
 
-    // Try to find an EVEN midpoint between lv and rv to avoid collision with
-    // inside inserts (which use odd 2*k-1 values).
-    if (rv - lv > 1) {
-      // Compute midpoint, then round to nearest even number
+    // At level 0, we can safely pick a midpoint (no split/inside-insert collision)
+    if (i === 0 && rv - lv > 1) {
       const mid = lv + Math.floor((rv - lv) / 2);
-      const evenMid = mid % 2 === 0 ? mid : mid - 1;
-      if (evenMid > lv && evenMid < rv) {
-        levels.push(evenMid);
-        return { levels };
-      }
-      // Try the next even after midpoint
-      const nextEven = mid % 2 === 0 ? mid + 2 : mid + 1;
-      if (nextEven > lv && nextEven < rv) {
-        levels.push(nextEven);
-        return { levels };
-      }
-      // Gap too small for an even number, need to go deeper (fall through)
-    }
-
-    // rv - lv <= 1, or no even number fits
-    // We need to go deeper. Carry `lv` at this level and extend.
-    levels.push(lv);
-
-    // At the next level, left is "0" (just past lv) and right is MAX
-    // Find midpoint of the next level
-    const nextMax = maxForLevel(i + 1);
-    const nextLeft = i + 1 < leftLen ? (left.levels[i + 1] ?? 0) : 0;
-
-    if (levels.length >= MAX_DEPTH) {
-      // At max depth, just pick next value after nextLeft (make it even)
-      const next = nextLeft + 2; // +2 to ensure > nextLeft and even
-      levels.push(makeEven(next));
+      levels.push(mid);
       return { levels };
     }
 
-    const nextMid = nextLeft + Math.floor((nextMax - nextLeft) / 2);
-    levels.push(makeEven(nextMid) > nextLeft ? makeEven(nextMid) : nextMid);
+    // At level >= 1: go deeper to avoid collision with inside-inserts and splits.
+    //
+    // The split/inside-insert scheme reserves:
+    // - Even values (0, 2, 4, ...) for split locators at position k/2
+    // - Odd values (1, 3, 5, ...) for inside-insert locators at position (k+1)/2
+    //
+    // We must NOT use any value directly at this level (would collide).
+    // Strategy depends on whether right extends beyond this level:
+    //
+    // Case A: right extends (has more levels)
+    //   - Use rv as parent (same prefix as right up to level i)
+    //   - Go deeper with a value LESS than right's next level
+    //   - Example: between([.., 5, 0], [..., 5, 2, MAX-1]) → [..., 5, 2, MAX-2]
+    //
+    // Case B: right doesn't extend
+    //   - Use the rightmost even value < rv (or lv if no such even exists)
+    //   - Go deeper with MAX-1
+    //   - Example: between([.., 5, 0], [..., 5, 3]) → [..., 5, 2, MAX-1]
+    //
+    // Why this matters: when a fragment splits, children stay with their parent.
+    // Case A ensures we stay with the same parent as right.
+    // Case B ensures we stay with the rightmost split position before right.
+    const nextLevel = i + 1;
+    // Case A: right extends with a non-zero next value, and rv > lv
+    // This lets us become a sibling of right at the next level
+    const rightNextVal = nextLevel < rightLen ? (right.levels[nextLevel] ?? 0) : 0;
+    if (nextLevel < rightLen && rv > lv && rightNextVal > 0) {
+      // Use rv as parent, go just before right's next level value
+      levels.push(rv);
+      if (levels.length < MAX_DEPTH) {
+        levels.push(rightNextVal - 1);
+      }
+    } else {
+      // Case B: right doesn't extend OR rv == lv
+      // Use rightmost even < rv as parent
+      const evenBeforeRv = rv % 2 === 0 ? rv - 2 : rv - 1;
+      const parentValue = evenBeforeRv > lv ? evenBeforeRv : lv;
+      levels.push(parentValue);
+
+      if (levels.length < MAX_DEPTH) {
+        // Check if left extends beyond this level
+        const nextLeftIdx = levels.length;
+        if (nextLeftIdx < leftLen) {
+          // Left has more levels. We need to sort AFTER left.
+          // Copy left's remaining levels, then increment the last to go "just after"
+          for (let j = nextLeftIdx; j < leftLen && levels.length < MAX_DEPTH; j++) {
+            levels.push(left.levels[j] ?? 0);
+          }
+          if (levels.length < MAX_DEPTH) {
+            const lastIdx = levels.length - 1;
+            const lastVal = levels[lastIdx];
+            if (lastVal !== undefined && lastVal < MAX_VALUE) {
+              // Can safely increment
+              levels[lastIdx] = lastVal + 1;
+            } else if (levels.length < MAX_DEPTH) {
+              // Can't increment (at MAX_VALUE), go deeper
+              levels.push(MAX_VALUE - 1);
+            }
+          }
+        } else {
+          // Left doesn't extend here. Use a very large value to avoid
+          // collision with splits (which use small values 0, 2, 4, ...).
+          levels.push(MAX_VALUE - 1);
+        }
+      }
+    }
     return { levels };
   }
 
-  // Fallback: extend with an even midpoint at the next level
+  // Fallback: extend with a midpoint at the next level
   if (levels.length < MAX_DEPTH) {
     const nextMax = maxForLevel(levels.length);
-    levels.push(makeEven(Math.floor(nextMax / 2)));
+    levels.push(Math.floor(nextMax / 2));
   }
 
   return { levels };

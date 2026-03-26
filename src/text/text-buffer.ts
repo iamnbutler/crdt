@@ -748,7 +748,9 @@ export class TextBuffer {
       const fastResult = this.tryFindInsertPositionFast(offset);
       if (fastResult !== null) {
         // Boundary insert: no split needed, use O(log n) operations
-        const locator = locatorBetween(fastResult.leftLocator, fastResult.rightLocator);
+        // Use insertLocator if provided, otherwise fall back to locatorBetween
+        const locator =
+          fastResult.insertLocator ?? locatorBetween(fastResult.leftLocator, fastResult.rightLocator);
         const newFrag = createFragment(opId, 0, locator, text, true);
 
         // O(log² n) to find index + O(log n) to insert
@@ -863,7 +865,11 @@ export class TextBuffer {
           const localOffset = offset - visibleOffset;
 
           // If localOffset === 0, insert BEFORE this fragment (at boundary)
-          // Don't split — that would create a zero-length fragment and use 2*0-1 = -1
+          // This is the same position as "after the previous fragment".
+          //
+          // Compute the explicit insertLocator using the 2*k-1 scheme from
+          // the previous fragment's end position. This ensures consistency
+          // with inside-inserts and boundary inserts at the same position.
           if (localOffset === 0) {
             const leftLocator = i > 0 ? (frags[i - 1]?.locator ?? MIN_LOCATOR) : MIN_LOCATOR;
             const rightLocator = frag.locator;
@@ -876,9 +882,30 @@ export class TextBuffer {
                   }
                 : { insertionId: MIN_OPERATION_ID, offset: 0 };
 
+            // Compute insertLocator from the previous fragment's end position
+            // k = prev.insertionOffset + prev.length, locator = [prev.baseLocator, 2*k-1]
+            // If no previous fragment, use locatorBetween (this is the first position)
+            //
+            // IMPORTANT: Check for collision with rightLocator! If the computed
+            // insertLocator equals rightLocator (or is >= it), we must NOT use it.
+            // This happens when the current fragment is an inside-insert at the same slot.
+            let insertLocator: Locator | undefined = undefined;
+            if (prevFrag !== undefined) {
+              const candidateInsertLocator: Locator = {
+                levels: [
+                  ...prevFrag.baseLocator.levels,
+                  2 * (prevFrag.insertionOffset + prevFrag.length) - 1,
+                ],
+              };
+              const candidateCmp = compareLocators(candidateInsertLocator, rightLocator);
+              // Only use the candidate if it's strictly less than rightLocator
+              insertLocator = candidateCmp < 0 ? candidateInsertLocator : undefined;
+            }
+
             return {
               leftLocator,
               rightLocator,
+              ...(insertLocator !== undefined && { insertLocator }),
               insertIndex: i,
               afterRef,
               beforeRef: {
@@ -924,7 +951,20 @@ export class TextBuffer {
         visibleOffset += frag.length;
 
         if (visibleOffset === offset) {
-          // Insert right after this fragment
+          // Insert right after this fragment.
+          //
+          // The boundary after a fragment corresponds to inside-insert at
+          // k = insertionOffset + length, with locator [baseLocator, 2*k-1].
+          //
+          // However, if the next fragment already has this locator (same slot),
+          // we must NOT use it - that would make us sort AFTER the existing
+          // fragment due to operation ID tie-breaking. Instead, we use
+          // locatorBetween to find a locator that sorts BEFORE the next fragment.
+          const k = frag.insertionOffset + frag.length;
+          const candidateInsertLocator: Locator = {
+            levels: [...frag.baseLocator.levels, 2 * k - 1],
+          };
+
           const leftLocator = frag.locator;
           const rightLocator =
             i + 1 < frags.length ? (frags[i + 1]?.locator ?? MAX_LOCATOR) : MAX_LOCATOR;
@@ -934,9 +974,19 @@ export class TextBuffer {
               ? { insertionId: nextFrag.insertionId, offset: nextFrag.insertionOffset }
               : { insertionId: MAX_OPERATION_ID, offset: 0 };
 
+          // Check if candidateInsertLocator would collide with rightLocator.
+          // If they're equal (or candidate >= right), don't use the candidate.
+          // This happens when the next fragment is an inside-insert at the same slot.
+          const candidateCmp =
+            rightLocator !== MAX_LOCATOR
+              ? compareLocators(candidateInsertLocator, rightLocator)
+              : -1;
+          const insertLocator = candidateCmp < 0 ? candidateInsertLocator : undefined;
+
           return {
             leftLocator,
             rightLocator,
+            ...(insertLocator !== undefined && { insertLocator }),
             insertIndex: i + 1,
             afterRef: {
               insertionId: frag.insertionId,
@@ -950,9 +1000,20 @@ export class TextBuffer {
 
     // Insert at the end
     const lastFrag = frags[frags.length - 1];
+    // Compute insertLocator from the last fragment's end position
+    const insertLocator =
+      lastFrag !== undefined
+        ? {
+            levels: [
+              ...lastFrag.baseLocator.levels,
+              2 * (lastFrag.insertionOffset + lastFrag.length) - 1,
+            ],
+          }
+        : undefined;
     return {
       leftLocator: lastFrag !== undefined ? lastFrag.locator : MIN_LOCATOR,
       rightLocator: MAX_LOCATOR,
+      ...(insertLocator !== undefined && { insertLocator }),
       insertIndex: frags.length,
       afterRef:
         lastFrag !== undefined
@@ -973,6 +1034,7 @@ export class TextBuffer {
   private tryFindInsertPositionFast(offset: number): {
     leftLocator: Locator;
     rightLocator: Locator;
+    insertLocator?: Locator;
     afterRef: { insertionId: OperationId; offset: number };
     beforeRef: { insertionId: OperationId; offset: number };
   } | null {
@@ -983,12 +1045,16 @@ export class TextBuffer {
       const lastIdx = this.fragments.length() - 1;
       const lastFrag = this.fragments.get(lastIdx);
       if (lastFrag) {
+        const k = lastFrag.insertionOffset + lastFrag.length;
         return {
           leftLocator: lastFrag.locator,
           rightLocator: MAX_LOCATOR,
+          insertLocator: {
+            levels: [...lastFrag.baseLocator.levels, 2 * k - 1],
+          },
           afterRef: {
             insertionId: lastFrag.insertionId,
-            offset: lastFrag.insertionOffset + lastFrag.length,
+            offset: k,
           },
           beforeRef: { insertionId: MAX_OPERATION_ID, offset: 0 },
         };
@@ -1045,9 +1111,30 @@ export class TextBuffer {
           }
         : { insertionId: MIN_OPERATION_ID, offset: 0 };
 
+      // Compute insertLocator from previous fragment's end position (if any)
+      // IMPORTANT: Check for collision with rightLocator (currentFrag.locator)
+      // Also check if candidate is a PREFIX of rightLocator - if so, don't use it
+      // because there's no room between a locator and its immediate child.
+      let insertLocator: Locator | undefined = undefined;
+      if (prevFrag) {
+        const candidateInsertLocator: Locator = {
+          levels: [
+            ...prevFrag.baseLocator.levels,
+            2 * (prevFrag.insertionOffset + prevFrag.length) - 1,
+          ],
+        };
+        const candidateCmp = compareLocators(candidateInsertLocator, currentFrag.locator);
+        // Check if candidate is a prefix of rightLocator
+        const isPrefix = candidateInsertLocator.levels.length < currentFrag.locator.levels.length &&
+          candidateInsertLocator.levels.every((v, idx) => v === currentFrag.locator.levels[idx]);
+        // Only use the candidate if it's strictly less AND not a prefix
+        insertLocator = candidateCmp < 0 && !isPrefix ? candidateInsertLocator : undefined;
+      }
+
       return {
         leftLocator,
         rightLocator: currentFrag.locator,
+        ...(insertLocator !== undefined && { insertLocator }),
         afterRef,
         beforeRef: {
           insertionId: currentFrag.insertionId,
@@ -1070,12 +1157,24 @@ export class TextBuffer {
           }
         : { insertionId: MAX_OPERATION_ID, offset: 0 };
 
+      // Compute insertLocator from current fragment's end position
+      // IMPORTANT: Check for collision with rightLocator (nextFrag?.locator)
+      const k = currentFrag.insertionOffset + currentFrag.length;
+      const candidateInsertLocator: Locator = {
+        levels: [...currentFrag.baseLocator.levels, 2 * k - 1],
+      };
+      const candidateCmp = rightLocator !== MAX_LOCATOR
+        ? compareLocators(candidateInsertLocator, rightLocator)
+        : -1;
+      const insertLocator = candidateCmp < 0 ? candidateInsertLocator : undefined;
+
       return {
         leftLocator: currentFrag.locator,
         rightLocator,
+        ...(insertLocator !== undefined && { insertLocator }),
         afterRef: {
           insertionId: currentFrag.insertionId,
-          offset: currentFrag.insertionOffset + currentFrag.length,
+          offset: k,
         },
         beforeRef,
       };
@@ -1101,17 +1200,20 @@ export class TextBuffer {
     }
 
     // Try fast O(log n) path when delete boundaries align with fragment boundaries
-    const fastResult = this.tryDeleteFast(start, end, opId);
-    if (fastResult !== null) {
-      return {
-        type: "delete",
-        id: opId,
-        ranges: fastResult.ranges,
-        version: cloneVersionVector(this._version),
-      };
+    // Skip fast path when there are live snapshots (mutations would corrupt them)
+    if (this._liveSnapshots === 0) {
+      const fastResult = this.tryDeleteFast(start, end, opId);
+      if (fastResult !== null) {
+        return {
+          type: "delete",
+          id: opId,
+          ranges: fastResult.ranges,
+          version: cloneVersionVector(this._version),
+        };
+      }
     }
 
-    // Fall back to O(n) path when splits are required
+    // Fall back to O(n) path when splits are required or live snapshots exist
     return this.deleteInternalSlow(start, end, opId);
   }
 
