@@ -1,0 +1,67 @@
+/* Catppuccin Latte */
+:root {
+  --base: #eff1f5;
+  --mantle: #e6e9ef;
+  --surface0: #ccd0da;
+  --surface1: #bcc0cc;
+  --text: #4c4f69;
+  --subtext0: #6c6f85;
+  --subtext1: #5c5f77;
+  --red: #d20f39;
+  --green: #40a02b;
+  --blue: #1e66f5;
+  --lavender: #7287fd;
+  --mauve: #8839ef;
+  --teal: #179299;
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+  font: 12px/1.5 ui-monospace, "SF Mono", Menlo, monospace;
+  color: var(--text);
+  background: var(--base);
+  max-width: 1000px;
+  margin: 0 auto;
+  padding: 16px;
+}
+
+h1 { font-size: 14px; font-weight: bold; margin-bottom: 4px; color: var(--text); }
+h2 { font-size: 13px; font-weight: bold; margin: 24px 0 8px; border-bottom: 1px solid var(--surface0); padding-bottom: 4px; color: var(--text); }
+h3 { font-size: 12px; font-weight: bold; margin: 16px 0 6px; color: var(--subtext1); }
+
+.meta { color: var(--subtext0); font-size: 11px; margin-bottom: 16px; }
+
+table { border-collapse: collapse; width: 100%; margin: 8px 0; font-size: 11px; }
+th, td { border: 1px solid var(--surface0); padding: 4px 8px; text-align: right; }
+th { background: var(--mantle); font-weight: 600; color: var(--subtext1); }
+td:first-child, th:first-child { text-align: left; }
+
+.pos { color: var(--green); }
+.neg { color: var(--red); }
+
+.bar-cell { width: 200px; white-space: nowrap; }
+.bar-wrap { background: var(--surface0); height: 14px; display: inline-block; width: 120px; vertical-align: middle; border-radius: 2px; }
+.bar { height: 100%; border-radius: 2px; }
+.bar-you { background: var(--mauve); }
+.bar-other { background: var(--surface1); }
+.bar-label { display: inline-block; margin-left: 6px; font-size: 10px; color: var(--subtext0); vertical-align: middle; }
+
+.hint { color: var(--subtext0); font-size: 10px; font-weight: normal; margin-left: 8px; }
+
+.sparkline { display: block; }
+.spark-line { fill: none; stroke: var(--mauve); stroke-width: 1.5; }
+.spark-dot { fill: var(--mauve); }
+
+#loading { color: var(--subtext0); }
+.err { color: var(--red); }
+
+.run-row:hover { background: var(--mantle); }
+
+.overview-table td { text-align: center; font-size: 10px; }
+.overview-table th { font-size: 10px; }
+.overview-table .best { background: var(--green); color: white; font-weight: bold; border-radius: 2px; }
+
+.notes { background: var(--mantle); padding: 12px; margin: 12px 0; border-radius: 4px; font-size: 11px; color: var(--subtext0); }
+.notes p { margin: 4px 0; }
+.notes strong { color: var(--text); }

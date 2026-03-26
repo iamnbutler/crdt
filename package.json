@@ -61,7 +61,8 @@
     "bench:all": "bun run bench && bun run bench:text && bun run bench:sum-tree && bun run bench:anchor && bun run bench:memory",
     "fixtures:download": "bun run scripts/download-fixtures.ts",
     "bench:record": "bun run scripts/record-benchmarks.ts",
-    "bench:record:push": "bun run scripts/record-benchmarks.ts --push"
+    "bench:record:push": "bun run scripts/record-benchmarks.ts --push",
+    "bench:build": "bun run docs/bench/build.ts"
   },
   "devDependencies": {
     "@automerge/automerge": "^3.2.4",
