@@ -118,10 +118,20 @@ export const locatorDimension: Dimension<FragmentSummary, Locator> = {
 // Fragment construction
 // ---------------------------------------------------------------------------
 
-/** Count newlines in a string. Uses regex match for best performance on large strings. */
+/** Count newlines in a string. */
 function countNewlines(text: string): number {
-  const matches = text.match(/\n/g);
-  return matches ? matches.length : 0;
+  // Fast path for single chars (common in char-by-char editing traces)
+  if (text.length <= 1) {
+    return text === "\n" ? 1 : 0;
+  }
+  // For longer strings, use indexOf loop (faster than regex for moderate lengths)
+  let count = 0;
+  let idx = 0;
+  while ((idx = text.indexOf("\n", idx)) !== -1) {
+    count++;
+    idx++;
+  }
+  return count;
 }
 
 /**

@@ -870,6 +870,154 @@ export class SumTree<T extends Summarizable<S>, S> {
 
     return newTree;
   }
+  // ---------------------------------------------------------------------------
+  // Sorted tree operations
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Find the insertion index for an item in a tree sorted by a comparator.
+   * O(log n) - single traversal from root to leaf using summary-based navigation.
+   *
+   * @param comparator Returns <=0 if item should go before the candidate, >0 if after
+   * @param summaryCheck Returns true if the item could belong in this subtree
+   *        (i.e., the subtree's summary range includes the item's position)
+   */
+  findSortedInsertIndex(
+    comparator: (candidate: T) => number,
+    summaryCheck: (summary: S) => boolean,
+  ): number {
+    if (this.isEmpty()) return 0;
+
+    const getItemCount = this.summaryOps.getItemCount;
+    let index = 0;
+    let current = this._root;
+
+    // Traverse from root to leaf
+    while (true) {
+      if (this.arena.isLeaf(current)) {
+        const data = this.arena.getItem(current);
+        const items = data?.items ?? [];
+        for (let i = 0; i < items.length; i++) {
+          const item = items[i];
+          if (item === undefined) continue;
+          if (comparator(item) <= 0) {
+            return index + i;
+          }
+        }
+        return index + items.length;
+      }
+
+      // Internal node: find the child that contains the insertion point
+      const children = this.arena.getChildren(current);
+      let found = false;
+      for (let i = 0; i < children.length; i++) {
+        const childId = children[i];
+        if (childId === undefined) continue;
+
+        const childSummary = this.summaries.get(childId);
+        if (childSummary === undefined) continue;
+
+        // If this child's range could contain the insertion point, descend
+        if (summaryCheck(childSummary)) {
+          current = childId;
+          found = true;
+          break;
+        }
+
+        // Otherwise, skip this child and count its items
+        if (getItemCount !== undefined) {
+          index += getItemCount(childSummary);
+        } else {
+          index += this.countItems(childId);
+        }
+      }
+
+      if (!found) {
+        // Item goes after all children
+        return this.length();
+      }
+    }
+  }
+
+  /**
+   * Insert an item into a sorted tree, mutating in place.
+   * O(log n) - single traversal finds position and inserts.
+   * Combines findSortedInsertIndex + insertAtMut into one pass.
+   */
+  insertSortedMut(
+    item: T,
+    comparator: (candidate: T) => number,
+    summaryCheck: (summary: S) => boolean,
+  ): void {
+    if (this.isEmpty()) {
+      this._root = this.createLeaf([item]);
+      return;
+    }
+
+    const path: Array<{ nodeId: NodeId; indexInNode: number }> = [];
+    let current = this._root;
+
+    // Traverse from root to leaf to find insertion point
+    while (true) {
+      if (this.arena.isLeaf(current)) {
+        const data = this.arena.getItem(current);
+        const items = data?.items ?? [];
+        let insertPos = items.length;
+        for (let i = 0; i < items.length; i++) {
+          const existing = items[i];
+          if (existing === undefined) continue;
+          if (comparator(existing) <= 0) {
+            insertPos = i;
+            break;
+          }
+        }
+        path.push({ nodeId: current, indexInNode: insertPos });
+
+        // Insert into the leaf
+        items.splice(insertPos, 0, item);
+        this.arena.setItem(current, { items });
+        this.arena.setCount(current, items.length);
+
+        // Handle overflow
+        if (items.length > this.branchingFactor) {
+          this.splitAndPropagate(path);
+        } else {
+          this.updateSummariesUp(path);
+        }
+        return;
+      }
+
+      // Internal node: find the child containing the insertion point
+      const children = this.arena.getChildren(current);
+      let found = false;
+      for (let i = 0; i < children.length; i++) {
+        const childId = children[i];
+        if (childId === undefined) continue;
+
+        const childSummary = this.summaries.get(childId);
+        if (childSummary === undefined) continue;
+
+        if (summaryCheck(childSummary)) {
+          path.push({ nodeId: current, indexInNode: i });
+          current = childId;
+          found = true;
+          break;
+        }
+      }
+
+      if (!found) {
+        // Insert at end - descend into last child
+        const lastIdx = children.length - 1;
+        const lastChild = children[lastIdx];
+        if (lastChild === undefined) {
+          // Shouldn't happen, but insert at root leaf
+          return;
+        }
+        path.push({ nodeId: current, indexInNode: lastIdx });
+        current = lastChild;
+      }
+    }
+  }
 
   // ---------------------------------------------------------------------------
   // Dimension-based operations (O(log n) using summary seeking)
