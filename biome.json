@@ -56,6 +56,6 @@
     }
   },
   "files": {
-    "ignore": ["node_modules", "dist", "*.json", "fixtures/**/*.json"]
+    "ignore": ["node_modules", "dist", "*.json", "fixtures/**/*.json", "site/**"]
   }
 }

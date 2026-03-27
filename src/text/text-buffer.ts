@@ -23,6 +23,7 @@ import {
   createFragment,
   deleteFragment,
   fragmentSummaryOps,
+  itemCountDimension,
   splitFragment,
   visibleLenDimension,
   withVisibility,
@@ -1446,6 +1447,8 @@ export class TextBuffer {
       this.addToFragmentIndex(op.id);
     } else if (this._liveSnapshots === 0) {
       // Splits needed: use array for splits, then direct tree insertion
+      // NOTE: Incremental tree splits were attempted but SumTree.removeAt() has bugs
+      // that corrupt the tree structure. Using array-based approach for now.
       const frags = this.fragmentsArray();
 
       if (needsAfterSplit) {
@@ -1669,6 +1672,126 @@ export class TextBuffer {
     }
 
     return null; // Reference not found
+  }
+
+  /**
+   * [EXPERIMENTAL - NOT CURRENTLY USED]
+   *
+   * Incrementally split a fragment in the tree to satisfy a reference.
+   * Uses O(log n) cursor iteration + O(log² n) insertions = O(log² n) total.
+   *
+   * This would be the key optimization: instead of extracting all fragments,
+   * modifying the array, sorting, and rebuilding the tree (O(n)), we find
+   * the fragment that needs splitting and modify the tree directly.
+   *
+   * BLOCKING ISSUE: SumTree.removeAt() has bugs that corrupt the tree structure
+   * during rebalancing (mergeOrRedistribute). Until this is fixed, we must use
+   * the array-based approach in findRefIndex + sortFragments + setFragments.
+   *
+   * See: https://github.com/iamnbutler/crdt/issues/158
+   *
+   * @returns true if a split was performed, false if no split was needed
+   *          (either exact match found or reference not found)
+   */
+  private splitRefInTree(
+    ref: { insertionId: OperationId; offset: number },
+    type: "after" | "before",
+  ): boolean {
+    // Use cursor to iterate through all fragments
+    const cursor = this.fragments.cursor(itemCountDimension);
+    cursor.reset();
+
+    // Track matching fragments for edge case handling
+    let firstMatch: { index: number; frag: Fragment } | undefined;
+    let lastMatch: { index: number; frag: Fragment } | undefined;
+
+    while (!cursor.atEnd) {
+      const frag = cursor.item();
+      if (frag === undefined) {
+        cursor.next();
+        continue;
+      }
+
+      if (!operationIdsEqual(frag.insertionId, ref.insertionId)) {
+        cursor.next();
+        continue;
+      }
+
+      // Get the item index BEFORE any modifications (critical for correctness)
+      const index = cursor.itemIndex();
+
+      // Track first and last matches for edge cases
+      if (firstMatch === undefined) {
+        firstMatch = { index, frag };
+      }
+      lastMatch = { index, frag };
+
+      const fragEnd = frag.insertionOffset + frag.length;
+
+      // Case 1: Reference falls strictly inside this fragment — split it
+      if (ref.offset > frag.insertionOffset && ref.offset < fragEnd) {
+        const splitPoint = ref.offset - frag.insertionOffset;
+        const [leftPart, rightPart] = splitFragment(frag, splitPoint);
+
+        // NOTE: This approach is currently broken due to SumTree.removeAt() bugs.
+        // See the array-based approach in applyRemoteInsertDirect instead.
+        this.fragments = this.fragments.removeAt(index);
+
+        const leftIdx = this.findTreeInsertIndex(leftPart);
+        this.fragments.insertAtMut(leftIdx, leftPart);
+
+        const rightIdx = this.findTreeInsertIndex(rightPart);
+        this.fragments.insertAtMut(rightIdx, rightPart);
+
+        return true; // Split performed
+      }
+
+      // Case 2 (after): Fragment ends exactly at the reference offset
+      // No split needed — this is an exact match
+      if (type === "after" && fragEnd === ref.offset) {
+        return false; // No split needed
+      }
+
+      // Case 3 (before): Fragment starts exactly at the reference offset
+      // Prefer non-zero-length fragments
+      if (type === "before" && frag.insertionOffset === ref.offset && frag.length > 0) {
+        return false; // No split needed
+      }
+
+      cursor.next();
+    }
+
+    // No exact match found - check edge cases for zero-length splits
+    if (type === "after" && firstMatch !== undefined) {
+      const { index: matchIndex, frag: matchFrag } = firstMatch;
+      if (matchFrag.insertionOffset === ref.offset && matchFrag.length > 0) {
+        // Create zero-length left split to match sender state
+        const [leftPart, rightPart] = splitFragment(matchFrag, 0);
+        this.fragments = this.fragments.removeAt(matchIndex);
+        const leftIdx = this.findTreeInsertIndex(leftPart);
+        this.fragments.insertAtMut(leftIdx, leftPart);
+        const rightIdx = this.findTreeInsertIndex(rightPart);
+        this.fragments.insertAtMut(rightIdx, rightPart);
+        return true;
+      }
+    }
+
+    if (type === "before" && lastMatch !== undefined) {
+      const { index: matchIndex, frag: matchFrag } = lastMatch;
+      const matchFragEnd = matchFrag.insertionOffset + matchFrag.length;
+      if (matchFragEnd === ref.offset && matchFrag.length > 0) {
+        // Create zero-length right split to match sender state
+        const [leftPart, rightPart] = splitFragment(matchFrag, matchFrag.length);
+        this.fragments = this.fragments.removeAt(matchIndex);
+        const leftIdx = this.findTreeInsertIndex(leftPart);
+        this.fragments.insertAtMut(leftIdx, leftPart);
+        const rightIdx = this.findTreeInsertIndex(rightPart);
+        this.fragments.insertAtMut(rightIdx, rightPart);
+        return true;
+      }
+    }
+
+    return false; // No split needed (or ref not found)
   }
 
   private applyRemoteDelete(op: DeleteOperation): void {

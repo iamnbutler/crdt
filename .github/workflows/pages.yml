@@ -30,14 +30,19 @@ jobs:
       - name: Install dependencies
         run: bun install
 
-      - name: Build benchmark page
-        run: bun run bench:build
+      - name: Install site dependencies
+        run: cd site && bun install
+
+      - name: Build site
+        run: bun run site:build
 
       - name: Assemble Pages artifact
         run: |
           git fetch origin benchmark-data
-          git worktree add _site benchmark-data
-          cp docs/bench/index.html _site/index.html
+          git worktree add benchmark-data-worktree benchmark-data
+          cp -r benchmark-data-worktree/index.json site/dist/
+          cp -r benchmark-data-worktree/results site/dist/
+          mv site/dist _site
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v3

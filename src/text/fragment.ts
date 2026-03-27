@@ -114,6 +114,25 @@ export const locatorDimension: Dimension<FragmentSummary, Locator> = {
   },
 };
 
+/**
+ * Dimension for seeking by item count.
+ * Enables cursor iteration through all fragments regardless of visibility.
+ */
+export const itemCountDimension: Dimension<FragmentSummary, number> = {
+  measure(summary: FragmentSummary): number {
+    return summary.itemCount;
+  },
+  compare(a: number, b: number): number {
+    return a - b;
+  },
+  add(a: number, b: number): number {
+    return a + b;
+  },
+  zero(): number {
+    return 0;
+  },
+};
+
 // ---------------------------------------------------------------------------
 // Fragment construction
 // ---------------------------------------------------------------------------
