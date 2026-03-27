@@ -319,14 +319,53 @@ async function main() {
 
     if (shouldPush) {
       console.log(`\nPushing to origin/${BRANCH}...`);
-      // Fetch and rebase to handle concurrent runs
-      try {
-        exec(`git fetch origin ${BRANCH}`, { cwd: worktree });
-        exec(`git rebase origin/${BRANCH}`, { cwd: worktree });
-      } catch {
-        // Remote branch may not exist yet
+
+      // Try to push, rebasing if needed
+      let pushed = false;
+      for (let attempt = 0; attempt < 3 && !pushed; attempt++) {
+        try {
+          // Fetch latest and rebase
+          try {
+            exec(`git fetch origin ${BRANCH}`, { cwd: worktree });
+            exec(`git rebase origin/${BRANCH}`, { cwd: worktree });
+          } catch {
+            // Rebase conflict - abort and recreate commit on top of latest
+            exec(`git rebase --abort 2>/dev/null || true`, { cwd: worktree });
+            exec(`git reset --hard origin/${BRANCH}`, { cwd: worktree });
+
+            // Re-apply our changes
+            if (!existsSync(join(worktree, RESULTS_DIR))) {
+              mkdirSync(join(worktree, RESULTS_DIR), { recursive: true });
+            }
+            writeFileSync(join(worktree, RESULTS_DIR, `${gitInfo.sha}.json`), JSON.stringify(run, null, 2));
+
+            // Reload and update index
+            const freshIndex: Index = JSON.parse(readFileSync(indexPath, "utf-8"));
+            if (!freshIndex.runs.some(r => r.sha === gitInfo.sha)) {
+              freshIndex.runs.unshift({
+                sha: gitInfo.sha,
+                shortSha: gitInfo.shortSha,
+                timestamp: run.timestamp,
+                branch: gitInfo.branch,
+                subject: gitInfo.subject,
+              });
+              writeFileSync(indexPath, JSON.stringify(freshIndex, null, 2));
+            }
+
+            exec("git add .", { cwd: worktree });
+            exec(`git commit -m "Add benchmark results for ${gitInfo.shortSha}"`, { cwd: worktree });
+          }
+
+          exec(`git push origin ${BRANCH}`, { cwd: worktree });
+          pushed = true;
+        } catch (e) {
+          if (attempt < 2) {
+            console.log(`  Push attempt ${attempt + 1} failed, retrying...`);
+          } else {
+            throw e;
+          }
+        }
       }
-      exec(`git push origin ${BRANCH}`, { cwd: worktree });
     } else {
       console.log("\nResults committed locally. Run with --push to push to remote.");
       // Push the branch ref back to main repo
