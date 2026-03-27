@@ -62,6 +62,7 @@
     "fixtures:download": "bun run scripts/download-fixtures.ts",
     "bench:record": "bun run scripts/record-benchmarks.ts",
     "bench:record:push": "bun run scripts/record-benchmarks.ts --push",
+    "bench:backfill": "bun run scripts/backfill-benchmarks.ts",
     "site:dev": "cd site && bun run dev",
     "site:build": "cd site && bun run build"
   },
