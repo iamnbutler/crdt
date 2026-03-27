@@ -1,0 +1,11 @@
+{
+  "runs": [
+    {
+      "sha": "abc1234567890",
+      "shortSha": "abc1234",
+      "timestamp": "2024-01-15T10:30:00Z",
+      "branch": "main",
+      "subject": "Initial benchmark run"
+    }
+  ]
+}

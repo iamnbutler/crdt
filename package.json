@@ -62,7 +62,8 @@
     "fixtures:download": "bun run scripts/download-fixtures.ts",
     "bench:record": "bun run scripts/record-benchmarks.ts",
     "bench:record:push": "bun run scripts/record-benchmarks.ts --push",
-    "bench:build": "bun run docs/bench/build.ts"
+    "site:dev": "cd site && bun run dev",
+    "site:build": "cd site && bun run build"
   },
   "devDependencies": {
     "@automerge/automerge": "^3.2.4",

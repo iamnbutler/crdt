@@ -1,0 +1,61 @@
+{
+  "results": {
+    "benchmarks": [
+      {
+        "group": "editing-trace",
+        "runs": [
+          {
+            "name": "@iamnbutler/crdt (editing trace)",
+            "stats": { "avg": 125000000, "p50": 120000000, "p75": 130000000, "p99": 150000000, "min": 110000000, "max": 160000000 }
+          },
+          {
+            "name": "Yjs (editing trace)",
+            "stats": { "avg": 180000000, "p50": 175000000, "p75": 190000000, "p99": 210000000, "min": 165000000, "max": 220000000 }
+          },
+          {
+            "name": "Loro (editing trace)",
+            "stats": { "avg": 95000000, "p50": 90000000, "p75": 100000000, "p99": 120000000, "min": 85000000, "max": 130000000 }
+          },
+          {
+            "name": "Automerge (editing trace)",
+            "stats": { "avg": 350000000, "p50": 340000000, "p75": 360000000, "p99": 400000000, "min": 320000000, "max": 420000000 }
+          }
+        ]
+      },
+      {
+        "group": "random-inserts",
+        "runs": [
+          {
+            "name": "@iamnbutler/crdt (random inserts 10k)",
+            "stats": { "avg": 45000000, "p50": 42000000, "p75": 48000000, "p99": 55000000, "min": 40000000, "max": 60000000 }
+          },
+          {
+            "name": "Yjs (random inserts 10k)",
+            "stats": { "avg": 65000000, "p50": 62000000, "p75": 70000000, "p99": 85000000, "min": 58000000, "max": 95000000 }
+          },
+          {
+            "name": "Loro (random inserts 10k)",
+            "stats": { "avg": 38000000, "p50": 35000000, "p75": 40000000, "p99": 50000000, "min": 32000000, "max": 55000000 }
+          },
+          {
+            "name": "Automerge (random inserts 10k)",
+            "stats": { "avg": 120000000, "p50": 115000000, "p75": 125000000, "p99": 145000000, "min": 105000000, "max": 155000000 }
+          }
+        ]
+      }
+    ],
+    "context": {
+      "runtime": "bun",
+      "version": "1.1.0",
+      "arch": "arm64",
+      "cpu": {
+        "name": "Apple M2 Pro",
+        "cores": 10
+      }
+    },
+    "layout": {
+      "editing-trace": { "name": "editing-trace-replay" },
+      "random-inserts": { "name": "random-inserts" }
+    }
+  }
+}
