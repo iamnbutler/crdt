@@ -1,0 +1,1195 @@
+{
+  "sha": "9ffb0f32e5f1c75116818a5c93107efadc061355",
+  "shortSha": "9ffb0f3",
+  "timestamp": "2026-03-27T20:28:05.222Z",
+  "branch": "HEAD",
+  "subject": "fix: handle benchmark push conflicts with retry logic (#168)",
+  "results": {
+    "layout": [
+      {
+        "name": null
+      },
+      {
+        "name": "create-empty"
+      },
+      {
+        "name": null
+      },
+      {
+        "name": "create-from-small-string"
+      },
+      {
+        "name": null
+      },
+      {
+        "name": "create-from-medium-string"
+      },
+      {
+        "name": null
+      },
+      {
+        "name": "create-from-large-string"
+      },
+      {
+        "name": null
+      },
+      {
+        "name": "insert-at-end"
+      },
+      {
+        "name": null
+      },
+      {
+        "name": "insert-at-start"
+      },
+      {
+        "name": null
+      },
+      {
+        "name": "insert-at-middle"
+      },
+      {
+        "name": null
+      },
+      {
+        "name": "delete-from-end"
+      },
+      {
+        "name": null
+      },
+      {
+        "name": "delete-from-start"
+      },
+      {
+        "name": null
+      },
+      {
+        "name": "serialize-small"
+      },
+      {
+        "name": null
+      },
+      {
+        "name": "serialize-medium"
+      },
+      {
+        "name": null
+      },
+      {
+        "name": "deserialize-small"
+      },
+      {
+        "name": null
+      },
+      {
+        "name": "editing-trace-replay"
+      },
+      {
+        "name": null
+      }
+    ],
+    "benchmarks": [
+      {
+        "alias": "@iamnbutler/crdt",
+        "group": 1,
+        "baseline": false,
+        "runs": [
+          {
+            "name": "@iamnbutler/crdt",
+            "args": {},
+            "stats": {
+              "min": 3535.901611328125,
+              "max": 4226.75830078125,
+              "avg": 3678.174386160714,
+              "p50": 3583.6787109375,
+              "p75": 3655.083984375,
+              "p99": 4191.015380859375,
+              "p999": 4191.015380859375,
+              "ticks": 172032
+            }
+          }
+        ]
+      },
+      {
+        "alias": "Loro",
+        "group": 1,
+        "baseline": false,
+        "runs": [
+          {
+            "name": "Loro",
+            "args": {},
+            "stats": {
+              "min": 3347,
+              "max": 1547691,
+              "avg": 26858.252586065348,
+              "p50": 6243,
+              "p75": 8887,
+              "p99": 691242,
+              "p999": 1354327,
+              "ticks": 18271
+            }
+          }
+        ]
+      },
+      {
+        "alias": "Yjs",
+        "group": 1,
+        "baseline": false,
+        "runs": [
+          {
+            "name": "Yjs",
+            "args": {},
+            "stats": {
+              "min": 4027,
+              "max": 108302,
+              "avg": 6763.61514293195,
+              "p50": 5580,
+              "p75": 7604,
+              "p99": 19651,
+              "p999": 38400,
+              "ticks": 42013
+            }
+          }
+        ]
+      },
+      {
+        "alias": "Automerge",
+        "group": 1,
+        "baseline": false,
+        "runs": [
+          {
+            "name": "Automerge",
+            "args": {},
+            "stats": {
+              "min": 97252,
+              "max": 3729891,
+              "avg": 178514.34492670308,
+              "p50": 149849,
+              "p75": 190375,
+              "p99": 1003372,
+              "p999": 2105073,
+              "ticks": 3479
+            }
+          }
+        ]
+      },
+      {
+        "alias": "@iamnbutler/crdt",
+        "group": 3,
+        "baseline": false,
+        "runs": [
+          {
+            "name": "@iamnbutler/crdt",
+            "args": {},
+            "stats": {
+              "min": 6442,
+              "max": 2081439,
+              "avg": 12568.030233865898,
+              "p50": 7995,
+              "p75": 8956,
+              "p99": 62045,
+              "p999": 161020,
+              "ticks": 30231
+            }
+          }
+        ]
+      },
+      {
+        "alias": "Loro",
+        "group": 3,
+        "baseline": false,
+        "runs": [
+          {
+            "name": "Loro",
+            "args": {},
+            "stats": {
+              "min": 6943,
+              "max": 3536381,
+              "avg": 64857.66857014892,
+              "p50": 14347,
+              "p75": 20328,
+              "p99": 1041672,
+              "p999": 1848957,
+              "ticks": 8931
+            }
+          }
+        ]
+      },
+      {
+        "alias": "Yjs",
+        "group": 3,
+        "baseline": false,
+        "runs": [
+          {
+            "name": "Yjs",
+            "args": {},
+            "stats": {
+              "min": 6201,
+              "max": 216944,
+              "avg": 13179.055294358135,
+              "p50": 11592,
+              "p75": 15689,
+              "p99": 38572,
+              "p999": 81873,
+              "ticks": 29352
+            }
+          }
+        ]
+      },
+      {
+        "alias": "Automerge",
+        "group": 3,
+        "baseline": false,
+        "runs": [
+          {
+            "name": "Automerge",
+            "args": {},
+            "stats": {
+              "min": 139620,
+              "max": 1435653,
+              "avg": 188581.26423487545,
+              "p50": 156222,
+              "p75": 174184,
+              "p99": 930815,
+              "p999": 1322405,
+              "ticks": 3372
+            }
+          }
+        ]
+      },
+      {
+        "alias": "@iamnbutler/crdt",
+        "group": 5,
+        "baseline": false,
+        "runs": [
+          {
+            "name": "@iamnbutler/crdt",
+            "args": {},
+            "stats": {
+              "min": 51275,
+              "max": 289410,
+              "avg": 68324.96749156356,
+              "p50": 54873,
+              "p75": 84006,
+              "p99": 107050,
+              "p999": 173944,
+              "ticks": 8890
+            }
+          }
+        ]
+      },
+      {
+        "alias": "Loro",
+        "group": 5,
+        "baseline": false,
+        "runs": [
+          {
+            "name": "Loro",
+            "args": {},
+            "stats": {
+              "min": 186468.49047851562,
+              "max": 190569.14599609375,
+              "avg": 188011.46211751303,
+              "p50": 187637.1435546875,
+              "p75": 188416.09912109375,
+              "p99": 189687.39819335938,
+              "p999": 189687.39819335938,
+              "ticks": 49152
+            }
+          }
+        ]
+      },
+      {
+        "alias": "Yjs",
+        "group": 5,
+        "baseline": false,
+        "runs": [
+          {
+            "name": "Yjs",
+            "args": {},
+            "stats": {
+              "min": 12852.994140625,
+              "max": 22475.97998046875,
+              "avg": 15695.397196451822,
+              "p50": 13963.17236328125,
+              "p75": 16679.135498046875,
+              "p99": 19519.430419921875,
+              "p999": 19519.430419921875,
+              "ticks": 49152
+            }
+          }
+        ]
+      },
+      {
+        "alias": "Automerge",
+        "group": 5,
+        "baseline": false,
+        "runs": [
+          {
+            "name": "Automerge",
+            "args": {},
+            "stats": {
+              "min": 5889737,
+              "max": 7122265,
+              "avg": 6024159.428571428,
+              "p50": 5970239,
+              "p75": 6026174,
+              "p99": 6686091,
+              "p999": 6835402,
+              "ticks": 112
+            }
+          }
+        ]
+      },
+      {
+        "alias": "@iamnbutler/crdt",
+        "group": 7,
+        "baseline": false,
+        "runs": [
+          {
+            "name": "@iamnbutler/crdt",
+            "args": {},
+            "stats": {
+              "min": 487782,
+              "max": 600314,
+              "avg": 507671.15805022157,
+              "p50": 506276,
+              "p75": 513681,
+              "p99": 569455,
+              "p999": 598441,
+              "ticks": 1354
+            }
+          }
+        ]
+      },
+      {
+        "alias": "Loro",
+        "group": 7,
+        "baseline": false,
+        "runs": [
+          {
+            "name": "Loro",
+            "args": {},
+            "stats": {
+              "min": 450060,
+              "max": 2736188,
+              "avg": 846596.7817509248,
+              "p50": 528328,
+              "p75": 1172023,
+              "p99": 1960183,
+              "p999": 2699810,
+              "ticks": 811
+            }
+          }
+        ]
+      },
+      {
+        "alias": "Yjs",
+        "group": 7,
+        "baseline": false,
+        "runs": [
+          {
+            "name": "Yjs",
+            "args": {},
+            "stats": {
+              "min": 13338.29541015625,
+              "max": 28389.712890625,
+              "avg": 19770.339619954426,
+              "p50": 19013.4599609375,
+              "p75": 22690.374267578125,
+              "p99": 25844.86865234375,
+              "p999": 25844.86865234375,
+              "ticks": 49152
+            }
+          }
+        ]
+      },
+      {
+        "alias": "Automerge",
+        "group": 7,
+        "baseline": false,
+        "runs": [
+          {
+            "name": "Automerge",
+            "args": {},
+            "stats": {
+              "min": 59653842,
+              "max": 61475103,
+              "avg": 60430820.25,
+              "p50": 60176700,
+              "p75": 60843680,
+              "p99": 61452210,
+              "p999": 61452210,
+              "ticks": 12
+            }
+          }
+        ]
+      },
+      {
+        "alias": "@iamnbutler/crdt",
+        "group": 9,
+        "baseline": false,
+        "runs": [
+          {
+            "name": "@iamnbutler/crdt",
+            "args": {},
+            "stats": {
+              "min": 4824645,
+              "max": 6454964,
+              "avg": 5044601.385185185,
+              "p50": 5008882,
+              "p75": 5063475,
+              "p99": 5572588,
+              "p999": 6112858,
+              "ticks": 135
+            }
+          }
+        ]
+      },
+      {
+        "alias": "Loro",
+        "group": 9,
+        "baseline": false,
+        "runs": [
+          {
+            "name": "Loro",
+            "args": {},
+            "stats": {
+              "min": 3261601,
+              "max": 6858306,
+              "avg": 4257261.850931677,
+              "p50": 3975499,
+              "p75": 4781644,
+              "p99": 6582405,
+              "p999": 6749270,
+              "ticks": 161
+            }
+          }
+        ]
+      },
+      {
+        "alias": "Yjs",
+        "group": 9,
+        "baseline": false,
+        "runs": [
+          {
+            "name": "Yjs",
+            "args": {},
+            "stats": {
+              "min": 4936205,
+              "max": 11567141,
+              "avg": 6610119.019607843,
+              "p50": 6009273,
+              "p75": 7057913,
+              "p99": 11144022,
+              "p999": 11442726,
+              "ticks": 102
+            }
+          }
+        ]
+      },
+      {
+        "alias": "Automerge",
+        "group": 9,
+        "baseline": false,
+        "runs": [
+          {
+            "name": "Automerge",
+            "args": {},
+            "stats": {
+              "min": 81735978,
+              "max": 95721042,
+              "avg": 87525938.25,
+              "p50": 86462986,
+              "p75": 91560640,
+              "p99": 94568029,
+              "p999": 94568029,
+              "ticks": 12
+            }
+          }
+        ]
+      },
+      {
+        "alias": "@iamnbutler/crdt",
+        "group": 11,
+        "baseline": false,
+        "runs": [
+          {
+            "name": "@iamnbutler/crdt",
+            "args": {},
+            "stats": {
+              "min": 29542389,
+              "max": 111455276,
+              "avg": 94131822.58333333,
+              "p50": 109228208,
+              "p75": 110287846,
+              "p99": 110877827,
+              "p999": 110877827,
+              "ticks": 12
+            }
+          }
+        ]
+      },
+      {
+        "alias": "Loro",
+        "group": 11,
+        "baseline": false,
+        "runs": [
+          {
+            "name": "Loro",
+            "args": {},
+            "stats": {
+              "min": 2911329,
+              "max": 6953892,
+              "avg": 4479563.176470588,
+              "p50": 4194068,
+              "p75": 5529836,
+              "p99": 6503952,
+              "p999": 6521363,
+              "ticks": 153
+            }
+          }
+        ]
+      },
+      {
+        "alias": "Yjs",
+        "group": 11,
+        "baseline": false,
+        "runs": [
+          {
+            "name": "Yjs",
+            "args": {},
+            "stats": {
+              "min": 2913373,
+              "max": 13830095,
+              "avg": 7090289.177083333,
+              "p50": 6088029,
+              "p75": 8776898,
+              "p99": 13815949,
+              "p999": 13815949,
+              "ticks": 96
+            }
+          }
+        ]
+      },
+      {
+        "alias": "Automerge",
+        "group": 11,
+        "baseline": false,
+        "runs": [
+          {
+            "name": "Automerge",
+            "args": {},
+            "stats": {
+              "min": 82295820,
+              "max": 91576968,
+              "avg": 86799637.58333333,
+              "p50": 88153534,
+              "p75": 88626587,
+              "p99": 90189582,
+              "p999": 90189582,
+              "ticks": 12
+            }
+          }
+        ]
+      },
+      {
+        "alias": "@iamnbutler/crdt",
+        "group": 13,
+        "baseline": false,
+        "runs": [
+          {
+            "name": "@iamnbutler/crdt",
+            "args": {},
+            "stats": {
+              "min": 37714765,
+              "max": 117779070,
+              "avg": 104166708.16666667,
+              "p50": 116008537,
+              "p75": 116486349,
+              "p99": 117472212,
+              "p999": 117472212,
+              "ticks": 12
+            }
+          }
+        ]
+      },
+      {
+        "alias": "Loro",
+        "group": 13,
+        "baseline": false,
+        "runs": [
+          {
+            "name": "Loro",
+            "args": {},
+            "stats": {
+              "min": 4501723,
+              "max": 10326064,
+              "avg": 6452550.942857143,
+              "p50": 6675468,
+              "p75": 7401788,
+              "p99": 9379756,
+              "p999": 9520633,
+              "ticks": 105
+            }
+          }
+        ]
+      },
+      {
+        "alias": "Yjs",
+        "group": 13,
+        "baseline": false,
+        "runs": [
+          {
+            "name": "Yjs",
+            "args": {},
+            "stats": {
+              "min": 5427852,
+              "max": 11798094,
+              "avg": 8501068.303797469,
+              "p50": 8374507,
+              "p75": 9674343,
+              "p99": 11741017,
+              "p999": 11741017,
+              "ticks": 79
+            }
+          }
+        ]
+      },
+      {
+        "alias": "Automerge",
+        "group": 13,
+        "baseline": false,
+        "runs": [
+          {
+            "name": "Automerge",
+            "args": {},
+            "stats": {
+              "min": 85603617,
+              "max": 109470968,
+              "avg": 92498918.33333333,
+              "p50": 91691880,
+              "p75": 94436071,
+              "p99": 95707502,
+              "p999": 95707502,
+              "ticks": 12
+            }
+          }
+        ]
+      },
+      {
+        "alias": "@iamnbutler/crdt",
+        "group": 15,
+        "baseline": false,
+        "runs": [
+          {
+            "name": "@iamnbutler/crdt",
+            "args": {},
+            "stats": {
+              "min": 143371,
+              "max": 938585,
+              "avg": 450496.8333333333,
+              "p50": 401008,
+              "p75": 556352,
+              "p99": 865016,
+              "p999": 910261,
+              "ticks": 1518
+            }
+          }
+        ]
+      },
+      {
+        "alias": "Loro",
+        "group": 15,
+        "baseline": false,
+        "runs": [
+          {
+            "name": "Loro",
+            "args": {},
+            "stats": {
+              "min": 8538253,
+              "max": 13253157,
+              "avg": 10049160.545454545,
+              "p50": 9693328,
+              "p75": 10693519,
+              "p99": 13134033,
+              "p999": 13134033,
+              "ticks": 66
+            }
+          }
+        ]
+      },
+      {
+        "alias": "Yjs",
+        "group": 15,
+        "baseline": false,
+        "runs": [
+          {
+            "name": "Yjs",
+            "args": {},
+            "stats": {
+              "min": 6759570,
+              "max": 14834870,
+              "avg": 9051427.702702703,
+              "p50": 8340811,
+              "p75": 9711333,
+              "p99": 14734800,
+              "p999": 14734800,
+              "ticks": 74
+            }
+          }
+        ]
+      },
+      {
+        "alias": "Automerge",
+        "group": 15,
+        "baseline": false,
+        "runs": [
+          {
+            "name": "Automerge",
+            "args": {},
+            "stats": {
+              "min": 62258678,
+              "max": 75627886,
+              "avg": 66884217.75,
+              "p50": 64410716,
+              "p75": 69632309,
+              "p99": 73740828,
+              "p999": 73740828,
+              "ticks": 12
+            }
+          }
+        ]
+      },
+      {
+        "alias": "@iamnbutler/crdt",
+        "group": 17,
+        "baseline": false,
+        "runs": [
+          {
+            "name": "@iamnbutler/crdt",
+            "args": {},
+            "stats": {
+              "min": 114449149,
+              "max": 172289432,
+              "avg": 157610824.66666666,
+              "p50": 159625227,
+              "p75": 165045055,
+              "p99": 170883042,
+              "p999": 170883042,
+              "ticks": 12
+            }
+          }
+        ]
+      },
+      {
+        "alias": "Loro",
+        "group": 17,
+        "baseline": false,
+        "runs": [
+          {
+            "name": "Loro",
+            "args": {},
+            "stats": {
+              "min": 3624546,
+              "max": 8875134,
+              "avg": 5326679.4375,
+              "p50": 5204691,
+              "p75": 6513283,
+              "p99": 8436435,
+              "p999": 8801665,
+              "ticks": 128
+            }
+          }
+        ]
+      },
+      {
+        "alias": "Yjs",
+        "group": 17,
+        "baseline": false,
+        "runs": [
+          {
+            "name": "Yjs",
+            "args": {},
+            "stats": {
+              "min": 5876079,
+              "max": 10289125,
+              "avg": 7459215.747252747,
+              "p50": 7174211,
+              "p75": 8440402,
+              "p99": 10145895,
+              "p999": 10145895,
+              "ticks": 91
+            }
+          }
+        ]
+      },
+      {
+        "alias": "Automerge",
+        "group": 17,
+        "baseline": false,
+        "runs": [
+          {
+            "name": "Automerge",
+            "args": {},
+            "stats": {
+              "min": 61653115,
+              "max": 79026522,
+              "avg": 66595025.583333336,
+              "p50": 63665096,
+              "p75": 69794633,
+              "p99": 70012365,
+              "p999": 70012365,
+              "ticks": 12
+            }
+          }
+        ]
+      },
+      {
+        "alias": "@iamnbutler/crdt",
+        "group": 19,
+        "baseline": false,
+        "runs": [
+          {
+            "name": "@iamnbutler/crdt",
+            "args": {},
+            "stats": {
+              "min": 1032,
+              "max": 364829,
+              "avg": 2872.6680818858104,
+              "p50": 1883,
+              "p75": 3166,
+              "p99": 12845,
+              "p999": 28564,
+              "ticks": 54173
+            }
+          }
+        ]
+      },
+      {
+        "alias": "Loro",
+        "group": 19,
+        "baseline": false,
+        "runs": [
+          {
+            "name": "Loro",
+            "args": {},
+            "stats": {
+              "min": 11522,
+              "max": 618237,
+              "avg": 16866.308897453084,
+              "p50": 12684,
+              "p75": 17392,
+              "p99": 54463,
+              "p999": 250974,
+              "ticks": 23872
+            }
+          }
+        ]
+      },
+      {
+        "alias": "Yjs",
+        "group": 19,
+        "baseline": false,
+        "runs": [
+          {
+            "name": "Yjs",
+            "args": {},
+            "stats": {
+              "min": 1212,
+              "max": 194537,
+              "avg": 3826.4714616891165,
+              "p50": 3096,
+              "p75": 4749,
+              "p99": 16661,
+              "p999": 32732,
+              "ticks": 50038
+            }
+          }
+        ]
+      },
+      {
+        "alias": "Automerge",
+        "group": 19,
+        "baseline": false,
+        "runs": [
+          {
+            "name": "Automerge",
+            "args": {},
+            "stats": {
+              "min": 9708,
+              "max": 99458,
+              "avg": 10991.741589932473,
+              "p50": 10129,
+              "p75": 10450,
+              "p99": 24786,
+              "p999": 42761,
+              "ticks": 32580
+            }
+          }
+        ]
+      },
+      {
+        "alias": "@iamnbutler/crdt",
+        "group": 21,
+        "baseline": false,
+        "runs": [
+          {
+            "name": "@iamnbutler/crdt",
+            "args": {},
+            "stats": {
+              "min": 13629.126220703125,
+              "max": 14581.9951171875,
+              "avg": 14023.30517578125,
+              "p50": 14079.6181640625,
+              "p75": 14174.161865234375,
+              "p99": 14294.5576171875,
+              "p999": 14294.5576171875,
+              "ticks": 36864
+            }
+          }
+        ]
+      },
+      {
+        "alias": "Loro",
+        "group": 21,
+        "baseline": false,
+        "runs": [
+          {
+            "name": "Loro",
+            "args": {},
+            "stats": {
+              "min": 36800,
+              "max": 238731,
+              "avg": 43601.96847314231,
+              "p50": 42751,
+              "p75": 44213,
+              "p99": 77206,
+              "p999": 121920,
+              "ticks": 12529
+            }
+          }
+        ]
+      },
+      {
+        "alias": "Yjs",
+        "group": 21,
+        "baseline": false,
+        "runs": [
+          {
+            "name": "Yjs",
+            "args": {},
+            "stats": {
+              "min": 23354,
+              "max": 250783,
+              "avg": 33733.55631098521,
+              "p50": 32441,
+              "p75": 36168,
+              "p99": 61806,
+              "p999": 226107,
+              "ticks": 15885
+            }
+          }
+        ]
+      },
+      {
+        "alias": "Automerge",
+        "group": 21,
+        "baseline": false,
+        "runs": [
+          {
+            "name": "Automerge",
+            "args": {},
+            "stats": {
+              "min": 325775,
+              "max": 794730,
+              "avg": 345382.1532586558,
+              "p50": 336295,
+              "p75": 345191,
+              "p99": 533347,
+              "p999": 763422,
+              "ticks": 1964
+            }
+          }
+        ]
+      },
+      {
+        "alias": "@iamnbutler/crdt",
+        "group": 23,
+        "baseline": false,
+        "runs": [
+          {
+            "name": "@iamnbutler/crdt",
+            "args": {},
+            "stats": {
+              "min": 31279,
+              "max": 292783,
+              "avg": 46226.45430041657,
+              "p50": 43231,
+              "p75": 47119,
+              "p99": 119566,
+              "p999": 261314,
+              "ticks": 12243
+            }
+          }
+        ]
+      },
+      {
+        "alias": "Loro",
+        "group": 23,
+        "baseline": false,
+        "runs": [
+          {
+            "name": "Loro",
+            "args": {},
+            "stats": {
+              "min": 29446,
+              "max": 5212933,
+              "avg": 151971.17725833942,
+              "p50": 48441,
+              "p75": 64972,
+              "p99": 2719545,
+              "p999": 4140326,
+              "ticks": 4107
+            }
+          }
+        ]
+      },
+      {
+        "alias": "Yjs",
+        "group": 23,
+        "baseline": false,
+        "runs": [
+          {
+            "name": "Yjs",
+            "args": {},
+            "stats": {
+              "min": 8165,
+              "max": 274208,
+              "avg": 18341.851062025693,
+              "p50": 16631,
+              "p75": 19988,
+              "p99": 46417,
+              "p999": 176784,
+              "ticks": 23587
+            }
+          }
+        ]
+      },
+      {
+        "alias": "Automerge",
+        "group": 23,
+        "baseline": false,
+        "runs": [
+          {
+            "name": "Automerge",
+            "args": {},
+            "stats": {
+              "min": 79260,
+              "max": 3003491,
+              "avg": 113092.44316682375,
+              "p50": 94689,
+              "p75": 122351,
+              "p99": 218864,
+              "p999": 1241125,
+              "ticks": 5305
+            }
+          }
+        ]
+      },
+      {
+        "alias": "@iamnbutler/crdt (10000 ops)",
+        "group": 25,
+        "baseline": false,
+        "runs": [
+          {
+            "name": "@iamnbutler/crdt (10000 ops)",
+            "args": {},
+            "stats": {
+              "min": 3714296194,
+              "max": 6640186717,
+              "avg": 4437307055,
+              "p50": 4108536266,
+              "p75": 4317882997,
+              "p99": 5420016047,
+              "p999": 5420016047,
+              "ticks": 12
+            }
+          }
+        ]
+      },
+      {
+        "alias": "Loro (10000 ops)",
+        "group": 25,
+        "baseline": false,
+        "runs": [
+          {
+            "name": "Loro (10000 ops)",
+            "args": {},
+            "stats": {
+              "min": 36755837,
+              "max": 44856224,
+              "avg": 40812980.23076923,
+              "p50": 41199519,
+              "p75": 42205086,
+              "p99": 44809997,
+              "p999": 44809997,
+              "ticks": 13
+            }
+          }
+        ]
+      },
+      {
+        "alias": "Yjs (10000 ops)",
+        "group": 25,
+        "baseline": false,
+        "runs": [
+          {
+            "name": "Yjs (10000 ops)",
+            "args": {},
+            "stats": {
+              "min": 54270394,
+              "max": 188571963,
+              "avg": 101208795.16666667,
+              "p50": 86526001,
+              "p75": 115509028,
+              "p99": 157932538,
+              "p999": 157932538,
+              "ticks": 12
+            }
+          }
+        ]
+      },
+      {
+        "alias": "Automerge (10000 ops)",
+        "group": 25,
+        "baseline": false,
+        "runs": [
+          {
+            "name": "Automerge (10000 ops)",
+            "args": {},
+            "stats": {
+              "min": 1031656399,
+              "max": 1111054807,
+              "avg": 1072976273.1666666,
+              "p50": 1088938774,
+              "p75": 1095468005,
+              "p99": 1105473237,
+              "p999": 1105473237,
+              "ticks": 12
+            }
+          }
+        ]
+      }
+    ],
+    "context": {
+      "arch": "x64-linux",
+      "runtime": "bun",
+      "version": "1.3.11",
+      "cpu": {
+        "name": "AMD EPYC 7763 64-Core Processor",
+        "freq": 2.019061976706513
+      }
+    }
+  }
+}

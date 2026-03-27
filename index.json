@@ -1,6 +1,13 @@
 {
   "runs": [
     {
+      "sha": "9ffb0f32e5f1c75116818a5c93107efadc061355",
+      "shortSha": "9ffb0f3",
+      "timestamp": "2026-03-27T20:28:05.222Z",
+      "branch": "HEAD",
+      "subject": "fix: handle benchmark push conflicts with retry logic (#168)"
+    },
+    {
       "sha": "05fdea5bf9fcd0cc12fa70be8bb5b00c2b31e825",
       "shortSha": "05fdea5",
       "timestamp": "2026-03-27T20:11:31.963Z",
