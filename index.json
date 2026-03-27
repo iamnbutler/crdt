@@ -1,3 +1,11 @@
 {
-  "runs": []
+  "runs": [
+    {
+      "sha": "05fdea5bf9fcd0cc12fa70be8bb5b00c2b31e825",
+      "shortSha": "05fdea5",
+      "timestamp": "2026-03-27T20:11:31.963Z",
+      "branch": "HEAD",
+      "subject": "fix: simplify benchmark workflow for CI-only recording (#166)"
+    }
+  ]
 }
