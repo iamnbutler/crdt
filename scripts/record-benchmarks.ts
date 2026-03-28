@@ -210,6 +210,30 @@ function runBenchmarks(): SlimResults | { raw: string } {
   return { raw: output };
 }
 
+/**
+ * Writes the results JSON and updates index.json in the worktree.
+ * Re-reads the index from disk so it is safe to call after a hard reset.
+ */
+function applyRunToWorktree(worktree: string, indexPath: string, run: BenchmarkRun) {
+  const resultsDir = join(worktree, RESULTS_DIR);
+  if (!existsSync(resultsDir)) {
+    mkdirSync(resultsDir, { recursive: true });
+  }
+  writeFileSync(join(resultsDir, `${run.sha}.json`), JSON.stringify(run, null, 2));
+
+  const index: Index = JSON.parse(readFileSync(indexPath, "utf-8"));
+  if (!index.runs.some((r) => r.sha === run.sha)) {
+    index.runs.unshift({
+      sha: run.sha,
+      shortSha: run.shortSha,
+      timestamp: run.timestamp,
+      branch: run.branch,
+      subject: run.subject,
+    });
+    writeFileSync(indexPath, JSON.stringify(index, null, 2));
+  }
+}
+
 function ensureOrphanBranch(worktree: string) {
   // Fetch remote branch first to ensure we have latest
   try {
@@ -296,68 +320,31 @@ async function main() {
       results,
     };
 
-    // Write results file
-    const resultsDir = join(worktree, RESULTS_DIR);
-    if (!existsSync(resultsDir)) {
-      mkdirSync(resultsDir, { recursive: true });
-    }
-    writeFileSync(join(resultsDir, `${gitInfo.sha}.json`), JSON.stringify(run, null, 2));
-
-    // Update index
-    index.runs.unshift({
-      sha: gitInfo.sha,
-      shortSha: gitInfo.shortSha,
-      timestamp: run.timestamp,
-      branch: gitInfo.branch,
-      subject: gitInfo.subject,
-    });
-    writeFileSync(indexPath, JSON.stringify(index, null, 2));
-
-    // Commit
+    // Write results and commit
+    applyRunToWorktree(worktree, indexPath, run);
     exec("git add .", { cwd: worktree });
     exec(`git commit -m "Add benchmark results for ${gitInfo.shortSha}"`, { cwd: worktree });
 
     if (shouldPush) {
       console.log(`\nPushing to origin/${BRANCH}...`);
 
-      // Try to push, rebasing if needed
-      let pushed = false;
-      for (let attempt = 0; attempt < 3 && !pushed; attempt++) {
+      // Try to push, rebasing if needed (up to 3 attempts)
+      for (let attempt = 0; attempt < 3; attempt++) {
         try {
-          // Fetch latest and rebase
           try {
             exec(`git fetch origin ${BRANCH}`, { cwd: worktree });
             exec(`git rebase origin/${BRANCH}`, { cwd: worktree });
           } catch {
-            // Rebase conflict - abort and recreate commit on top of latest
+            // Rebase conflict — abort, reset to remote, and re-apply our changes
             exec(`git rebase --abort 2>/dev/null || true`, { cwd: worktree });
             exec(`git reset --hard origin/${BRANCH}`, { cwd: worktree });
-
-            // Re-apply our changes
-            if (!existsSync(join(worktree, RESULTS_DIR))) {
-              mkdirSync(join(worktree, RESULTS_DIR), { recursive: true });
-            }
-            writeFileSync(join(worktree, RESULTS_DIR, `${gitInfo.sha}.json`), JSON.stringify(run, null, 2));
-
-            // Reload and update index
-            const freshIndex: Index = JSON.parse(readFileSync(indexPath, "utf-8"));
-            if (!freshIndex.runs.some(r => r.sha === gitInfo.sha)) {
-              freshIndex.runs.unshift({
-                sha: gitInfo.sha,
-                shortSha: gitInfo.shortSha,
-                timestamp: run.timestamp,
-                branch: gitInfo.branch,
-                subject: gitInfo.subject,
-              });
-              writeFileSync(indexPath, JSON.stringify(freshIndex, null, 2));
-            }
-
+            applyRunToWorktree(worktree, indexPath, run);
             exec("git add .", { cwd: worktree });
             exec(`git commit -m "Add benchmark results for ${gitInfo.shortSha}"`, { cwd: worktree });
           }
 
           exec(`git push origin ${BRANCH}`, { cwd: worktree });
-          pushed = true;
+          break;
         } catch (e) {
           if (attempt < 2) {
             console.log(`  Push attempt ${attempt + 1} failed, retrying...`);
