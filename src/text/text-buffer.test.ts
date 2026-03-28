@@ -1131,3 +1131,120 @@ describe("Remote delete with split fragments", () => {
     expect(buf1.getText()).not.toContain("D");
   });
 });
+
+// ---------------------------------------------------------------------------
+// locatorBetween: Case A / Case B depth-level edge cases (regression)
+//
+// These tests target the specific algorithm paths in locatorBetween that were
+// fixed in the "resolve locatorBetween collision with inside-insert locators"
+// commit. The core invariant: between(L, R) must always return M such that
+// L < M < R, even when L and R share a common prefix at level >= 1.
+//
+// At level >= 1, the split/inside-insert scheme reserves:
+//   even values (0, 2, 4, ...) for split locators at offset k/2
+//   odd values  (1, 3, 5, ...) for inside-insert locators at offset (k+1)/2
+// The algorithm must not produce a result that lands exactly on one of these
+// reserved slots, since that would collide with an existing locator.
+// ---------------------------------------------------------------------------
+
+describe("locatorBetween: Case A and Case B depth patterns", () => {
+  // Case A: right extends beyond the current level with a non-zero next value.
+  // The algorithm uses rv as the parent and goes just below right's next level.
+  it("Case A: right extends with a non-zero deeper level", () => {
+    const left = { levels: [5, 0] };
+    const right = { levels: [5, 4, 1000] };
+    const mid = locatorBetween(left, right);
+    expect(compareLocators(left, mid)).toBeLessThan(0);
+    expect(compareLocators(mid, right)).toBeLessThan(0);
+  });
+
+  // Case B: right does not extend beyond the current level.
+  // The algorithm picks the rightmost even value < rv as the parent, then MAX-1.
+  it("Case B: right does not extend beyond current level", () => {
+    const left = { levels: [5, 0] };
+    const right = { levels: [5, 3] };
+    const mid = locatorBetween(left, right);
+    expect(compareLocators(left, mid)).toBeLessThan(0);
+    expect(compareLocators(mid, right)).toBeLessThan(0);
+  });
+
+  // Left is exhausted while right continues deeper (parent-child relationship).
+  // The algorithm must find room between the parent and its first child.
+  it("left exhausted while right extends deeper", () => {
+    const left = { levels: [5] };
+    const right = { levels: [5, 4] };
+    const mid = locatorBetween(left, right);
+    expect(compareLocators(left, mid)).toBeLessThan(0);
+    expect(compareLocators(mid, right)).toBeLessThan(0);
+  });
+
+  // Verify the between-invariant holds for a range of adjacent-locator cases
+  // at level 1 that previously caused collisions.
+  it("between-invariant holds for adjacent level-1 pairs", () => {
+    const cases: Array<[{ levels: number[] }, { levels: number[] }]> = [
+      [{ levels: [5, 0] }, { levels: [5, 2] }],
+      [{ levels: [5, 2] }, { levels: [5, 4] }],
+      [{ levels: [3, 0, 0] }, { levels: [3, 0, 2] }],
+      [{ levels: [10, 0] }, { levels: [10, 1] }],
+      [{ levels: [10, 4] }, { levels: [10, 6] }],
+    ];
+    for (const [left, right] of cases) {
+      const mid = locatorBetween(left, right);
+      expect(compareLocators(left, mid)).toBeLessThan(0);
+      expect(compareLocators(mid, right)).toBeLessThan(0);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Undo across fragment split boundaries (regression for #137 / seed failures)
+//
+// When an insert splits a fragment and subsequent operations insert at the
+// new boundary, undo must restore the exact original text. This was broken
+// when locatorBetween produced colliding locators, scrambling fragment order.
+// ---------------------------------------------------------------------------
+
+describe("undo correctness across split boundaries", () => {
+  it("undo after insert-at-split-boundary restores original text", () => {
+    let time = 0;
+    const buf = TextBuffer.create();
+    buf.setTimeSource(() => time);
+
+    // Each insert is a separate undo group (time advances > groupDelay between them)
+    buf.insert(0, "hello");
+    time += 500;
+
+    // This insert splits the "hello" fragment at position 2: "heXllo"
+    buf.insert(2, "X");
+    time += 500;
+
+    // This insert is at the split boundary (position 3, between "X" and "llo"): "heXYllo"
+    buf.insert(3, "Y");
+    expect(buf.getText()).toBe("heXYllo");
+
+    buf.undo(); // undo "Y"
+    expect(buf.getText()).toBe("heXllo");
+
+    buf.undo(); // undo "X"
+    expect(buf.getText()).toBe("hello");
+  });
+
+  it("redo after undo-of-split-boundary-insert restores correct text", () => {
+    let time = 0;
+    const buf = TextBuffer.create();
+    buf.setTimeSource(() => time);
+
+    buf.insert(0, "ABCDE");
+    time += 500;
+    buf.insert(2, "X"); // "ABxCDE" — splits "ABCDE" at offset 2
+    time += 500;
+    buf.insert(3, "Y"); // "ABxYCDE" — inserts at split boundary
+    expect(buf.getText()).toBe("ABXYCDE");
+
+    buf.undo(); // undo "Y" -> "ABXCDE"
+    expect(buf.getText()).toBe("ABXCDE");
+
+    buf.redo(); // redo "Y" -> "ABXYCDE"
+    expect(buf.getText()).toBe("ABXYCDE");
+  });
+});
