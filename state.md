@@ -1,5 +1,5 @@
 ---
-last_updated: 2026-03-27
+last_updated: 2026-03-28
 ---
 
 ## Commands
@@ -14,13 +14,20 @@ last_updated: 2026-03-27
 - 1K remote ops perf test threshold is 250ms (raised from 100ms for CI variability)
 - No AGENTS.md file in repo
 - 11 undo/redo property test failures from #137 were fixed in commit 82f89e2
+- protocol.test.ts already exists in-repo (not added by Test Improver)
 
 ## Backlog
 
 - computeTextSummary CRLF/empty-line edge cases (low priority)
 - SumTree redistribution: Perf Improver PR #160 adds regression test (pending review)
 
+## Open Test Improver PRs
+
+- PR #162 (draft): locatorBetween Case A/B + split-boundary undo regression
+  - Cleanly applies to current main (no rebase needed; base test file SHA unchanged)
+
 ## Task History
 
-- 2026-03-26: Task 1+3+7 (commands discovered, protocol tests added)
-- 2026-03-27: Task 2+3+7 (analyzed locatorBetween coverage, added Case A/B + undo regression tests PR pending)
+- 2026-03-26: Task 1+3+7 (commands discovered, protocol tests surveyed)
+- 2026-03-27: Task 2+3+7 (analyzed locatorBetween coverage, PR #162 created)
+- 2026-03-28: Task 4+7 (PR #162 verified clean, Monthly Activity issue created)
