@@ -301,6 +301,31 @@ describe("SumTree", () => {
       expect(invariants.valid).toBe(true);
     });
 
+    it("preserves order when redistribution uses a right sibling", () => {
+      // Trigger redistribution where the deficient node is the leftmost child
+      // (its only sibling is to the RIGHT). redistributeNodes had a
+      // total.reverse() bug that scrambled leaf items in this path.
+      //
+      // Setup: bf=4. fromItems([0..7]) → leaf[0,1,2,3] | leaf[4,5,6,7]  (two full leaves)
+      // removeAt(0) three times → leaf[3] | leaf[4,5,6,7]
+      // count=1 < minItems=2, siblingCount=4, 1+4=5>4 → redistribute with right sibling
+      //
+      // Bug: total=[4,5,6,7,3].reverse()=[3,7,6,5,4] → leftItems=[3,7], rightItems=[6,5,4]
+      //   → tree becomes [3,7,6,5,4] which is wrong
+      // Fix: total=[3,4,5,6,7] → leftItems=[3,4], rightItems=[5,6,7] → correct
+      let tree = SumTree.fromItems(
+        [0, 1, 2, 3, 4, 5, 6, 7].map((v) => new CountItem(v)),
+        countSummaryOps,
+        4,
+      );
+      tree = tree.removeAt(0);
+      tree = tree.removeAt(0);
+      tree = tree.removeAt(0);
+      const values = tree.toArray().map((i) => i.value);
+      expect(values).toEqual([3, 4, 5, 6, 7]);
+      expect(tree.checkInvariants().valid).toBe(true);
+    });
+
     it("handles node merging on delete with small branching factor", () => {
       let tree = new SumTree<CountItem, CountSummary>(countSummaryOps, 4);
 
