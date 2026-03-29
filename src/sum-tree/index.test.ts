@@ -320,6 +320,29 @@ describe("SumTree", () => {
       expect(invariants.valid).toBe(true);
     });
 
+    it("preserves item order when redistributing with right sibling", () => {
+      // Use BF=4 so min items per leaf is 2, max is 4.
+      // Build a tree where deleting from the leftmost leaf triggers
+      // redistribution with the right sibling (not merge).
+      let tree = new SumTree<CountItem, CountSummary>(countSummaryOps, 4);
+
+      // Insert items 0..7 to get a 2-leaf tree after splitting
+      for (let i = 0; i < 8; i++) {
+        tree = tree.push(new CountItem(i));
+      }
+
+      // Delete from the front until redistribution with right sibling fires.
+      // After each delete, items must remain in sorted order.
+      for (let i = 0; i < 4; i++) {
+        tree = tree.removeAt(0);
+        const arr = tree.toArray().map((x) => x.value);
+        // Items should be consecutive integers starting at i+1
+        expect(arr).toEqual([...Array(7 - i)].map((_, j) => j + i + 1));
+        const invariants = tree.checkInvariants();
+        expect(invariants.valid).toBe(true);
+      }
+    });
+
     it("maintains all leaves at same depth", () => {
       let tree = new SumTree<CountItem, CountSummary>(countSummaryOps, 4);
 
