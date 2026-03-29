@@ -1446,23 +1446,15 @@ export class TextBuffer {
       this.fragments.insertAtMut(insertIndex, newFrag);
       this.addToFragmentIndex(op.id);
     } else if (this._liveSnapshots === 0) {
-      // Splits needed: use array for splits, then direct tree insertion
-      // NOTE: Incremental tree splits were attempted but SumTree.removeAt() has bugs
-      // that corrupt the tree structure. Using array-based approach for now.
-      const frags = this.fragmentsArray();
-
+      // Splits needed: use O(log n) incremental tree splits
       if (needsAfterSplit) {
-        this.findRefIndex(frags, op.after, "after");
+        this.splitRefInTree(op.after, "after");
       }
       if (needsBeforeSplit) {
-        this.findRefIndex(frags, op.before, "before");
+        this.splitRefInTree(op.before, "before");
       }
 
-      // After splits, re-sort and rebuild tree, then use direct insertion
-      sortFragments(frags);
-      this.setFragments(frags);
-
-      // Now use O(log² n) insertion for the new fragment
+      // Use O(log² n) insertion for the new fragment
       const insertIndex = this.findTreeInsertIndex(newFrag);
       this.fragments.insertAtMut(insertIndex, newFrag);
       this.addToFragmentIndex(op.id);
@@ -1675,20 +1667,9 @@ export class TextBuffer {
   }
 
   /**
-   * [EXPERIMENTAL - NOT CURRENTLY USED]
-   *
    * Incrementally split a fragment in the tree to satisfy a reference.
-   * Uses O(log n) cursor iteration + O(log² n) insertions = O(log² n) total.
-   *
-   * This would be the key optimization: instead of extracting all fragments,
-   * modifying the array, sorting, and rebuilding the tree (O(n)), we find
-   * the fragment that needs splitting and modify the tree directly.
-   *
-   * BLOCKING ISSUE: SumTree.removeAt() has bugs that corrupt the tree structure
-   * during rebalancing (mergeOrRedistribute). Until this is fixed, we must use
-   * the array-based approach in findRefIndex + sortFragments + setFragments.
-   *
-   * See: https://github.com/iamnbutler/crdt/issues/158
+   * Uses cursor iteration to find the fragment, then O(log n) tree operations
+   * for the split — avoiding O(n) extract + sort + rebuild.
    *
    * @returns true if a split was performed, false if no split was needed
    *          (either exact match found or reference not found)
@@ -1733,9 +1714,8 @@ export class TextBuffer {
         const splitPoint = ref.offset - frag.insertionOffset;
         const [leftPart, rightPart] = splitFragment(frag, splitPoint);
 
-        // NOTE: This approach is currently broken due to SumTree.removeAt() bugs.
-        // See the array-based approach in applyRemoteInsertDirect instead.
-        this.fragments = this.fragments.removeAt(index);
+        // Remove original and insert split parts at their sorted positions
+        this.fragments.replaceAtMut(index, []);
 
         const leftIdx = this.findTreeInsertIndex(leftPart);
         this.fragments.insertAtMut(leftIdx, leftPart);
@@ -1767,7 +1747,7 @@ export class TextBuffer {
       if (matchFrag.insertionOffset === ref.offset && matchFrag.length > 0) {
         // Create zero-length left split to match sender state
         const [leftPart, rightPart] = splitFragment(matchFrag, 0);
-        this.fragments = this.fragments.removeAt(matchIndex);
+        this.fragments.replaceAtMut(matchIndex, []);
         const leftIdx = this.findTreeInsertIndex(leftPart);
         this.fragments.insertAtMut(leftIdx, leftPart);
         const rightIdx = this.findTreeInsertIndex(rightPart);
@@ -1782,7 +1762,7 @@ export class TextBuffer {
       if (matchFragEnd === ref.offset && matchFrag.length > 0) {
         // Create zero-length right split to match sender state
         const [leftPart, rightPart] = splitFragment(matchFrag, matchFrag.length);
-        this.fragments = this.fragments.removeAt(matchIndex);
+        this.fragments.replaceAtMut(matchIndex, []);
         const leftIdx = this.findTreeInsertIndex(leftPart);
         this.fragments.insertAtMut(leftIdx, leftPart);
         const rightIdx = this.findTreeInsertIndex(rightPart);

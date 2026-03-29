@@ -320,6 +320,49 @@ describe("SumTree", () => {
       expect(invariants.valid).toBe(true);
     });
 
+    it("preserves order when redistribution uses a right sibling", () => {
+      // Regression test: removing items from the left leaf should trigger
+      // redistribution with the right sibling without scrambling item order.
+      // The bug was in redistributeNodes using total.reverse() instead of
+      // correct concatenation order for the !siblingIsLeft case.
+      let tree = new SumTree<CountItem, CountSummary>(countSummaryOps, 4);
+
+      // Create 8 items → two full leaves: [0,1,2,3] | [4,5,6,7]
+      for (let i = 0; i < 8; i++) {
+        tree = tree.push(new CountItem(i));
+      }
+
+      // Remove first 3 items → left leaf underflows to [3], triggers right-sibling redistribution
+      tree = tree.removeAt(0); // remove 0
+      tree = tree.removeAt(0); // remove 1
+      tree = tree.removeAt(0); // remove 2
+
+      expect(tree.length()).toBe(5);
+      expect(tree.toArray().map((i) => i.value)).toEqual([3, 4, 5, 6, 7]);
+
+      const invariants = tree.checkInvariants();
+      expect(invariants.valid).toBe(true);
+    });
+
+    it("preserves order when replaceAtMut removes triggering redistribution", () => {
+      // Same scenario but using replaceAtMut(index, []) for removal
+      const tree = new SumTree<CountItem, CountSummary>(countSummaryOps, 4);
+
+      for (let i = 0; i < 8; i++) {
+        tree.pushMut(new CountItem(i));
+      }
+
+      tree.replaceAtMut(0, []);
+      tree.replaceAtMut(0, []);
+      tree.replaceAtMut(0, []);
+
+      expect(tree.length()).toBe(5);
+      expect(tree.toArray().map((i) => i.value)).toEqual([3, 4, 5, 6, 7]);
+
+      const invariants = tree.checkInvariants();
+      expect(invariants.valid).toBe(true);
+    });
+
     it("maintains all leaves at same depth", () => {
       let tree = new SumTree<CountItem, CountSummary>(countSummaryOps, 4);
 
