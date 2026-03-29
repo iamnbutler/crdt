@@ -202,7 +202,7 @@ describe("TextBufferSnapshot", () => {
   describe("garbage collection", () => {
     test("collectGarbage() frees unreachable nodes", () => {
       const buffer = TextBuffer.fromString("initial content");
-      const _utilBefore = buffer.arenaUtilization();
+      const utilBefore = buffer.arenaUtilization();
 
       // Create and release many snapshots with mutations
       for (let i = 0; i < 10; i++) {
@@ -214,12 +214,12 @@ describe("TextBufferSnapshot", () => {
       // Run garbage collection
       const freed = buffer.collectGarbage();
 
-      // Should have freed some nodes
-      expect(freed).toBeGreaterThanOrEqual(0); // May be 0 if nodes are still reachable
+      // GC should have freed nodes from released snapshots
+      expect(freed).toBeGreaterThan(0);
 
       const utilAfter = buffer.arenaUtilization();
-      // Free list should have grown
-      expect(utilAfter.free).toBeGreaterThanOrEqual(0);
+      // Free list should have grown compared to before
+      expect(utilAfter.free).toBeGreaterThan(utilBefore.free);
     });
 
     test("GC does not free nodes reachable from live snapshot", () => {
