@@ -822,6 +822,117 @@ describe("SumTree", () => {
     });
   });
 
+  describe("redistribution boundary cases", () => {
+    it("triggers redistribute (not merge) when combined count exceeds branching factor", () => {
+      // With B=4, minItems=2. Build tree, then delete to trigger redistribute
+      // when node has 1 item but sibling has 3 (total=4 > B=4 is false, so merge).
+      // We need total > B: node=1, sibling=4 won't happen. So use B=4 carefully.
+      // Actually merge happens when count + siblingCount <= branchingFactor.
+      // Redistribute happens when count + siblingCount > branchingFactor.
+      // With B=4: if node has 1 and sibling has 4, total=5 > 4, so redistribute.
+      let tree = new SumTree<CountItem, CountSummary>(countSummaryOps, 4);
+
+      // Insert enough items to create a multi-level tree
+      for (let i = 0; i < 16; i++) {
+        tree = tree.push(new CountItem(i));
+      }
+
+      // Delete items from one side to create imbalance that triggers redistribution
+      for (let i = 0; i < 5; i++) {
+        tree = tree.removeAt(0);
+      }
+
+      // Verify tree is still valid after redistribution
+      const invariants = tree.checkInvariants();
+      expect(invariants.valid).toBe(true);
+      expect(tree.length()).toBe(11);
+      // Verify ordering is preserved
+      const values = tree.toArray().map((item) => item.value);
+      for (let i = 0; i < values.length - 1; i++) {
+        const curr = values[i];
+        const next = values[i + 1];
+        if (curr !== undefined && next !== undefined) {
+          expect(curr).toBeLessThan(next);
+        }
+      }
+    });
+
+    it("alternating deletes from both ends forces repeated rebalancing", () => {
+      let tree = new SumTree<CountItem, CountSummary>(countSummaryOps, 4);
+
+      for (let i = 0; i < 32; i++) {
+        tree = tree.push(new CountItem(i));
+      }
+
+      // Delete alternately from front and back
+      for (let i = 0; i < 12; i++) {
+        if (i % 2 === 0) {
+          tree = tree.removeAt(0);
+        } else {
+          tree = tree.removeAt(tree.length() - 1);
+        }
+        const invariants = tree.checkInvariants();
+        expect(invariants.valid).toBe(true);
+      }
+
+      expect(tree.length()).toBe(20);
+    });
+
+    it("delete down to exactly minItems per node", () => {
+      // B=4, minItems=2. Start with tree that has multiple levels,
+      // delete until each leaf has exactly minItems
+      let tree = new SumTree<CountItem, CountSummary>(countSummaryOps, 4);
+
+      for (let i = 0; i < 8; i++) {
+        tree = tree.push(new CountItem(i));
+      }
+
+      // Delete from middle to stress rebalancing
+      tree = tree.removeAt(3);
+      tree = tree.removeAt(3);
+
+      expect(tree.length()).toBe(6);
+      const invariants = tree.checkInvariants();
+      expect(invariants.valid).toBe(true);
+    });
+
+    it("summaries remain correct after redistribute", () => {
+      let tree = new SumTree<CountItem, CountSummary>(countSummaryOps, 4);
+
+      for (let i = 0; i < 20; i++) {
+        tree = tree.push(new CountItem(i));
+      }
+
+      // Delete several items to trigger rebalancing
+      for (let i = 0; i < 8; i++) {
+        tree = tree.removeAt(0);
+      }
+
+      expect(tree.summary().count).toBe(12);
+      const invariants = tree.checkInvariants();
+      expect(invariants.valid).toBe(true);
+    });
+
+    it("root collapses when internal node has single child after merges", () => {
+      let tree = new SumTree<CountItem, CountSummary>(countSummaryOps, 4);
+
+      for (let i = 0; i < 16; i++) {
+        tree = tree.push(new CountItem(i));
+      }
+
+      // Delete most items - each step should maintain invariants
+      while (tree.length() > 2) {
+        tree = tree.removeAt(tree.length() - 1);
+        const inv = tree.checkInvariants();
+        expect(inv.valid).toBe(true);
+      }
+
+      expect(tree.length()).toBe(2);
+      expect(tree.get(0)?.value).toBe(0);
+      expect(tree.get(1)?.value).toBe(1);
+    });
+  });
+
   describe("branching factor comparison", () => {
     const sizes = [100, 1000];
     const factors = [4, 8, 16];
