@@ -755,9 +755,9 @@ export class TextBuffer {
           locatorBetween(fastResult.leftLocator, fastResult.rightLocator);
         const newFrag = createFragment(opId, 0, locator, text, true);
 
-        // O(log² n) to find index + O(log n) to insert
+        // O(log² n) to find index + O(log n) to insert (in-place, no path copying)
         const insertIdx = this.findTreeInsertIndex(newFrag);
-        this.fragments = this.fragments.insertAt(insertIdx, newFrag);
+        this.fragments.insertAtMut(insertIdx, newFrag);
         this.addToFragmentIndex(opId);
 
         return {
@@ -787,7 +787,7 @@ export class TextBuffer {
 
     // Apply changes using direct tree operations when possible
     // Note: When there are live snapshots, we must use setFragments to create
-    // a new tree with a separate arena, since insertAt shares the arena and
+    // a new tree with a separate arena, since insertAtMut shares the arena and
     // GC could incorrectly free nodes still referenced by snapshots.
     if (splitInfo !== undefined || this._liveSnapshots > 0) {
       // Split case or live snapshots: use array-based approach (O(n))
@@ -801,7 +801,7 @@ export class TextBuffer {
     } else {
       // No split and no snapshots: use direct tree insertion (O(log n))
       const insertIdx = this.findTreeInsertIndex(newFrag);
-      this.fragments = this.fragments.insertAt(insertIdx, newFrag);
+      this.fragments.insertAtMut(insertIdx, newFrag);
       this.addToFragmentIndex(opId);
     }
 
@@ -1394,6 +1394,22 @@ export class TextBuffer {
   // ---------------------------------------------------------------------------
 
   private recomputeVisibility(): void {
+    // When there are no live snapshots, use O(k log n) in-place edits
+    // (where k = number of changed fragments) instead of O(n) rebuild.
+    if (this._liveSnapshots === 0) {
+      const n = this.fragments.length();
+      for (let i = 0; i < n; i++) {
+        const frag = this.fragments.get(i);
+        if (frag === undefined) continue;
+        const shouldBeVisible = this.undoMap.isVisible(frag.insertionId, frag.deletions);
+        if (shouldBeVisible !== frag.visible) {
+          this.fragments.editAtIndex(i, (f) => withVisibility(f, shouldBeVisible));
+        }
+      }
+      return;
+    }
+
+    // With live snapshots, must rebuild to avoid corrupting shared arena
     const frags = this.fragmentsArray();
     let changed = false;
     const newFrags: Fragment[] = [];
