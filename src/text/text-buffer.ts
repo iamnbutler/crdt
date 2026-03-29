@@ -28,7 +28,13 @@ import {
   visibleLenDimension,
   withVisibility,
 } from "./fragment.js";
-import { MAX_LOCATOR, MIN_LOCATOR, compareLocators, locatorBetween } from "./locator.js";
+import {
+  MAX_LOCATOR,
+  MIN_LOCATOR,
+  compareLocators,
+  createLocator,
+  locatorBetween,
+} from "./locator.js";
 import {
   SERIALIZATION_VERSION,
   type SerializedSnapshot,
@@ -893,12 +899,10 @@ export class TextBuffer {
             // This happens when the current fragment is an inside-insert at the same slot.
             let insertLocator: Locator | undefined = undefined;
             if (prevFrag !== undefined) {
-              const candidateInsertLocator: Locator = {
-                levels: [
-                  ...prevFrag.baseLocator.levels,
-                  2 * (prevFrag.insertionOffset + prevFrag.length) - 1,
-                ],
-              };
+              const candidateInsertLocator: Locator = createLocator([
+                ...prevFrag.baseLocator.levels,
+                2 * (prevFrag.insertionOffset + prevFrag.length) - 1,
+              ]);
               const candidateCmp = compareLocators(candidateInsertLocator, rightLocator);
               // Only use the candidate if it's strictly less than rightLocator
               insertLocator = candidateCmp < 0 ? candidateInsertLocator : undefined;
@@ -926,9 +930,7 @@ export class TextBuffer {
           // Compute explicit Locator using the 2*k-1 scheme to avoid collisions
           // with the 2*k scheme used for split fragments
           const k = right.insertionOffset;
-          const insertLocator: Locator = {
-            levels: [...frag.baseLocator.levels, 2 * k - 1],
-          };
+          const insertLocator: Locator = createLocator([...frag.baseLocator.levels, 2 * k - 1]);
 
           return {
             leftLocator: left.locator,
@@ -963,9 +965,10 @@ export class TextBuffer {
           // fragment due to operation ID tie-breaking. Instead, we use
           // locatorBetween to find a locator that sorts BEFORE the next fragment.
           const k = frag.insertionOffset + frag.length;
-          const candidateInsertLocator: Locator = {
-            levels: [...frag.baseLocator.levels, 2 * k - 1],
-          };
+          const candidateInsertLocator: Locator = createLocator([
+            ...frag.baseLocator.levels,
+            2 * k - 1,
+          ]);
 
           const leftLocator = frag.locator;
           const rightLocator =
@@ -1005,12 +1008,10 @@ export class TextBuffer {
     // Compute insertLocator from the last fragment's end position
     const insertLocator =
       lastFrag !== undefined
-        ? {
-            levels: [
-              ...lastFrag.baseLocator.levels,
-              2 * (lastFrag.insertionOffset + lastFrag.length) - 1,
-            ],
-          }
+        ? createLocator([
+            ...lastFrag.baseLocator.levels,
+            2 * (lastFrag.insertionOffset + lastFrag.length) - 1,
+          ])
         : undefined;
     return {
       leftLocator: lastFrag !== undefined ? lastFrag.locator : MIN_LOCATOR,
@@ -1051,9 +1052,7 @@ export class TextBuffer {
         return {
           leftLocator: lastFrag.locator,
           rightLocator: MAX_LOCATOR,
-          insertLocator: {
-            levels: [...lastFrag.baseLocator.levels, 2 * k - 1],
-          },
+          insertLocator: createLocator([...lastFrag.baseLocator.levels, 2 * k - 1]),
           afterRef: {
             insertionId: lastFrag.insertionId,
             offset: k,
@@ -1119,12 +1118,10 @@ export class TextBuffer {
       // because there's no room between a locator and its immediate child.
       let insertLocator: Locator | undefined = undefined;
       if (prevFrag) {
-        const candidateInsertLocator: Locator = {
-          levels: [
-            ...prevFrag.baseLocator.levels,
-            2 * (prevFrag.insertionOffset + prevFrag.length) - 1,
-          ],
-        };
+        const candidateInsertLocator: Locator = createLocator([
+          ...prevFrag.baseLocator.levels,
+          2 * (prevFrag.insertionOffset + prevFrag.length) - 1,
+        ]);
         const candidateCmp = compareLocators(candidateInsertLocator, currentFrag.locator);
         // Check if candidate is a prefix of rightLocator
         const isPrefix =
@@ -1163,9 +1160,10 @@ export class TextBuffer {
       // Compute insertLocator from current fragment's end position
       // IMPORTANT: Check for collision with rightLocator (nextFrag?.locator)
       const k = currentFrag.insertionOffset + currentFrag.length;
-      const candidateInsertLocator: Locator = {
-        levels: [...currentFrag.baseLocator.levels, 2 * k - 1],
-      };
+      const candidateInsertLocator: Locator = createLocator([
+        ...currentFrag.baseLocator.levels,
+        2 * k - 1,
+      ]);
       const candidateCmp =
         rightLocator !== MAX_LOCATOR ? compareLocators(candidateInsertLocator, rightLocator) : -1;
       const insertLocator = candidateCmp < 0 ? candidateInsertLocator : undefined;

@@ -9,6 +9,7 @@
 
 import { cloneVersionVector } from "../text/clock.js";
 import { createFragment } from "../text/fragment.js";
+import { createLocator } from "../text/locator.js";
 import type { Fragment, OperationId, ReplicaId, VersionVector } from "../text/types.js";
 import { BINARY_VERSION, type SerializedFragment, type StateSnapshot } from "./types.js";
 
@@ -84,11 +85,11 @@ export function applySnapshot(snapshot: StateSnapshot): ApplySnapshotResult {
     const fragment = createFragment(
       serialized.insertionId,
       serialized.insertionOffset,
-      { levels: [...serialized.locatorLevels] },
+      createLocator([...serialized.locatorLevels]),
       serialized.text,
       serialized.visible,
       [...serialized.deletions],
-      { levels: [...serialized.baseLocatorLevels] },
+      createLocator([...serialized.baseLocatorLevels]),
     );
     fragments.push(fragment);
   }

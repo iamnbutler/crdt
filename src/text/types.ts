@@ -78,6 +78,15 @@ export const MAX_OPERATION_ID: OperationId = {
  */
 export interface Locator {
   readonly levels: ReadonlyArray<number>;
+  /**
+   * Precomputed Float64 sort key for fast comparison. Encodes the first 3
+   * levels into a single number (52-bit mantissa). When present, enables
+   * single-instruction comparisons for the common case.
+   *
+   * Set to -1 if any level exceeds the encodable range (overflow sentinel).
+   * Undefined if not yet computed (falls through to exact comparison).
+   */
+  readonly sortKey?: number;
 }
 
 // ---------------------------------------------------------------------------

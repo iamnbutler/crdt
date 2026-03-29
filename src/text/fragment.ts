@@ -10,7 +10,7 @@
  */
 
 import type { Dimension, Summary } from "../sum-tree/index.js";
-import { MIN_LOCATOR, compareLocators } from "./locator.js";
+import { MIN_LOCATOR, compareLocators, createLocator } from "./locator.js";
 import { MIN_OPERATION_ID, compareOperationIds } from "./types.js";
 import type { Fragment, FragmentSummary, Locator, OperationId } from "./types.js";
 
@@ -222,9 +222,7 @@ export function splitFragment(fragment: Fragment, localOffset: number): [Fragmen
 
   // Left: [...baseLocator, 2*insertionOffset]
   const leftInsertionOffset = fragment.insertionOffset;
-  const leftLocator: Locator = {
-    levels: [...parentLocator.levels, 2 * leftInsertionOffset],
-  };
+  const leftLocator: Locator = createLocator([...parentLocator.levels, 2 * leftInsertionOffset]);
 
   const left = createFragment(
     fragment.insertionId,
@@ -238,9 +236,7 @@ export function splitFragment(fragment: Fragment, localOffset: number): [Fragmen
 
   // Right: [...baseLocator, 2*insertionOffset] for the right part
   const rightInsertionOffset = fragment.insertionOffset + localOffset;
-  const rightLocator: Locator = {
-    levels: [...parentLocator.levels, 2 * rightInsertionOffset],
-  };
+  const rightLocator: Locator = createLocator([...parentLocator.levels, 2 * rightInsertionOffset]);
 
   const right = createFragment(
     fragment.insertionId,

@@ -14,6 +14,64 @@ import type { Locator } from "./types.js";
 // 2^53 - 1 is Number.MAX_SAFE_INTEGER (the max integer a JS number can represent exactly)
 const MAX_VALUE = Number.MAX_SAFE_INTEGER;
 
+// ---------------------------------------------------------------------------
+// Float64 sort key encoding
+// ---------------------------------------------------------------------------
+//
+// Packs the first 3 levels of a Locator into a single Float64 number for
+// fast comparison. Layout (52 bits of mantissa):
+//   Level 0: 16 bits (max 65535) — matches the FIRST_LEVEL_SHIFT constraint
+//   Level 1: 18 bits (max 262143) — covers most split/insert offsets
+//   Level 2: 18 bits (max 262143)
+//
+// When a level value exceeds its encodable range, the sort key is set to
+// the sentinel value -1 ("no sort key"). This forces fallback to exact
+// comparison, avoiding incorrect ordering from clamped values.
+
+/** Bit widths for each encoded level. */
+const SORT_KEY_L1_SHIFT = 18;
+const SORT_KEY_L0_SHIFT = 36; // 18 + 18
+const SORT_KEY_L1_MAX = 262143; // (1 << 18) - 1
+const SORT_KEY_L0_MAX = 65535; // (1 << 16) - 1
+
+/** Sentinel indicating the sort key could not be computed (overflow). */
+const SORT_KEY_OVERFLOW = -1;
+
+// Precomputed constants to avoid repeated exponentiation in hot paths
+const L0_MULTIPLIER = 2 ** SORT_KEY_L0_SHIFT; // 2^36
+const L1_MULTIPLIER = 2 ** SORT_KEY_L1_SHIFT; // 2^18
+
+/**
+ * Compute a Float64 sort key from a Locator's levels.
+ *
+ * Returns a non-negative number that preserves lexicographic ordering for
+ * locators whose first 3 levels fit within the bit-width limits. Returns
+ * SORT_KEY_OVERFLOW (-1) if any level exceeds its range, forcing fallback
+ * to exact comparison.
+ *
+ * Locators with > 3 levels that share the same first 3 levels produce the
+ * same sort key (a safe tie resolved by exact comparison).
+ */
+export function computeSortKey(levels: ReadonlyArray<number>): number {
+  const l0 = levels[0] ?? 0;
+  if (l0 > SORT_KEY_L0_MAX) return SORT_KEY_OVERFLOW;
+
+  const l1 = levels.length > 1 ? (levels[1] ?? 0) : 0;
+  if (l1 > SORT_KEY_L1_MAX) return SORT_KEY_OVERFLOW;
+
+  const l2 = levels.length > 2 ? (levels[2] ?? 0) : 0;
+  if (l2 > SORT_KEY_L1_MAX) return SORT_KEY_OVERFLOW;
+
+  return l0 * L0_MULTIPLIER + l1 * L1_MULTIPLIER + l2;
+}
+
+/**
+ * Create a Locator with a precomputed sort key.
+ */
+export function createLocator(levels: ReadonlyArray<number>): Locator {
+  return { levels, sortKey: computeSortKey(levels) };
+}
+
 // The right-shift for the first element: leave room for sequential insertions.
 // >> 37 means the midpoint of the first level is ~2^15 = 32768.
 const FIRST_LEVEL_SHIFT = 37;
@@ -22,16 +80,39 @@ const FIRST_LEVEL_SHIFT = 37;
 const MAX_DEPTH = 16;
 
 /** The minimum Locator — sorts before all others. */
-export const MIN_LOCATOR: Locator = { levels: [0] };
+export const MIN_LOCATOR: Locator = createLocator([0]);
 
 /** The maximum Locator — sorts after all others. */
-export const MAX_LOCATOR: Locator = { levels: [MAX_VALUE] };
+export const MAX_LOCATOR: Locator = createLocator([MAX_VALUE]);
 
 /**
  * Lexicographic comparison of two Locators.
  * Returns <0 if a < b, 0 if a === b, >0 if a > b.
+ *
+ * Uses a Float64 sort key as a fast path: if the sort keys differ, the
+ * comparison is a single number subtraction. Falls through to exact
+ * level-by-level comparison only when sort keys tie (rare in practice:
+ * deep locators, large level values, or trailing-zero differences).
  */
 export function compareLocators(a: Locator, b: Locator): number {
+  // Fast path: compare precomputed Float64 sort keys.
+  // Only use when both are present and valid (>= 0). Overflow (-1) or
+  // undefined means we must use exact comparison.
+  const ka = a.sortKey;
+  const kb = b.sortKey;
+  if (ka !== undefined && kb !== undefined && ka >= 0 && kb >= 0 && ka !== kb) {
+    return ka - kb;
+  }
+
+  // Slow path: exact level-by-level comparison (sort keys tied)
+  return compareLocatorsExact(a, b);
+}
+
+/**
+ * Exact level-by-level lexicographic comparison. Used as fallback when
+ * Float64 sort keys are equal.
+ */
+function compareLocatorsExact(a: Locator, b: Locator): number {
   const minLen = Math.min(a.levels.length, b.levels.length);
   for (let i = 0; i < minLen; i++) {
     const aLevel = a.levels[i];
@@ -93,7 +174,7 @@ export function locatorBetween(left: Locator, right: Locator): Locator {
           if (levels.length < MAX_DEPTH) {
             levels.push(MAX_VALUE - 1);
           }
-          return { levels };
+          return createLocator(levels);
         }
         // rightNextVal is 0, need to go even deeper - continue the loop
       }
@@ -104,7 +185,7 @@ export function locatorBetween(left: Locator, right: Locator): Locator {
     if (i === 0 && rv - lv > 1) {
       const mid = lv + Math.floor((rv - lv) / 2);
       levels.push(mid);
-      return { levels };
+      return createLocator(levels);
     }
 
     // At level >= 1: go deeper to avoid collision with inside-inserts and splits.
@@ -173,7 +254,7 @@ export function locatorBetween(left: Locator, right: Locator): Locator {
         }
       }
     }
-    return { levels };
+    return createLocator(levels);
   }
 
   // Fallback: extend with a midpoint at the next level
@@ -182,7 +263,7 @@ export function locatorBetween(left: Locator, right: Locator): Locator {
     levels.push(Math.floor(nextMax / 2));
   }
 
-  return { levels };
+  return createLocator(levels);
 }
 
 /**

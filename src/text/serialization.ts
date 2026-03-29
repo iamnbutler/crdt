@@ -12,6 +12,7 @@
  * - Applied operations set (for idempotency)
  */
 
+import { createLocator } from "./locator.js";
 import type { Fragment, Locator, OperationId, ReplicaId, TransactionId } from "./types.js";
 import { replicaId, transactionId } from "./types.js";
 
@@ -118,7 +119,7 @@ export function serializeLocator(loc: Locator): SerializedLocator {
 
 /** Deserialize a Locator. */
 export function deserializeLocator(s: SerializedLocator): Locator {
-  return { levels: [...s.l] };
+  return createLocator([...s.l]);
 }
 
 /** Serialize a Fragment (without the summary method). */

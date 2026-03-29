@@ -52,6 +52,8 @@ export {
   MIN_LOCATOR,
   MAX_LOCATOR,
   compareLocators,
+  computeSortKey,
+  createLocator,
   locatorBetween,
   locatorsEqual,
 } from "./locator.js";
