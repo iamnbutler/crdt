@@ -755,9 +755,9 @@ export class TextBuffer {
           locatorBetween(fastResult.leftLocator, fastResult.rightLocator);
         const newFrag = createFragment(opId, 0, locator, text, true);
 
-        // O(log² n) to find index + O(log n) to insert
+        // O(log² n) to find index + O(log n) to insert (mutating - safe since no snapshots)
         const insertIdx = this.findTreeInsertIndex(newFrag);
-        this.fragments = this.fragments.insertAt(insertIdx, newFrag);
+        this.fragments.insertAtMut(insertIdx, newFrag);
         this.addToFragmentIndex(opId);
 
         return {
@@ -799,9 +799,9 @@ export class TextBuffer {
       }
       this.setFragments(frags);
     } else {
-      // No split and no snapshots: use direct tree insertion (O(log n))
+      // No split and no snapshots: use direct tree insertion (O(log n), mutating)
       const insertIdx = this.findTreeInsertIndex(newFrag);
-      this.fragments = this.fragments.insertAt(insertIdx, newFrag);
+      this.fragments.insertAtMut(insertIdx, newFrag);
       this.addToFragmentIndex(opId);
     }
 
