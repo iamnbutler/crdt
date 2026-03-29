@@ -1882,10 +1882,9 @@ export class SumTree<T extends Summarizable<S>, S> {
       const nodeItems = nodeData?.items ?? [];
       const siblingItems = siblingData?.items ?? [];
 
-      const total = [...siblingItems, ...nodeItems];
-      if (!siblingIsLeft) {
-        total.reverse();
-      }
+      const total = siblingIsLeft
+        ? [...siblingItems, ...nodeItems]
+        : [...nodeItems, ...siblingItems];
 
       const mid = Math.floor(total.length / 2);
       const leftItems = total.slice(0, mid);
