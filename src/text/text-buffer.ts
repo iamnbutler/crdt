@@ -28,6 +28,7 @@ import {
   visibleLenDimension,
   withVisibility,
 } from "./fragment.js";
+import { jitCompareFragments } from "./jit-comparator.js";
 import { MAX_LOCATOR, MIN_LOCATOR, compareLocators, locatorBetween } from "./locator.js";
 import {
   SERIALIZATION_VERSION,
@@ -61,7 +62,6 @@ import type {
 import {
   MAX_OPERATION_ID,
   MIN_OPERATION_ID,
-  compareOperationIds,
   operationIdsEqual,
   replicaId,
   transactionId,
@@ -73,25 +73,14 @@ import { UndoMap } from "./undo-map.js";
 // ---------------------------------------------------------------------------
 
 /**
- * Compare locators for fragment sorting using full lexicographic comparison.
- *
- * When one locator is a prefix of another, the shorter one sorts FIRST.
- * This is correct because child locators (e.g., [L, X]) represent positions
- * INSIDE the parent's original span - they should come after the parent's
- * left portion and before concurrent siblings that sort later.
- *
- * Operation ID tie-breaking only applies when locators are EXACTLY equal,
- * which happens with concurrent inserts at the same position.
- */
-function compareLocatorsForSort(a: Locator, b: Locator): number {
-  return compareLocators(a, b);
-}
-
-/**
  * Sort fragments to ensure canonical order regardless of operation application
  * sequence.
  *
  * Sort key: (locator prefix, insertionId, insertionOffset, locator length)
+ *
+ * Uses a JIT-compiled comparator that inlines all comparison stages (locator,
+ * operation ID, offset, length) into a single function, eliminating cross-
+ * function call overhead in the sort hot path.
  *
  * This ensures:
  * 1. Fragments at the same position (locator prefix) sort by operation ID
@@ -99,22 +88,7 @@ function compareLocatorsForSort(a: Locator, b: Locator): number {
  * 3. Child locators sort after parent locators with lower operation IDs
  */
 function sortFragments(frags: Fragment[]): void {
-  frags.sort((a, b) => {
-    // First, compare by locator prefix
-    const locCmp = compareLocatorsForSort(a.locator, b.locator);
-    if (locCmp !== 0) return locCmp;
-
-    // Same prefix: tie-break by operation ID
-    const idCmp = compareOperationIds(a.insertionId, b.insertionId);
-    if (idCmp !== 0) return idCmp;
-
-    // Same operation: sort by insertionOffset (split parts)
-    const offsetCmp = a.insertionOffset - b.insertionOffset;
-    if (offsetCmp !== 0) return offsetCmp;
-
-    // Finally, sort by locator length (children after parent)
-    return a.locator.levels.length - b.locator.levels.length;
-  });
+  frags.sort(jitCompareFragments);
 }
 
 // ---------------------------------------------------------------------------
@@ -1525,22 +1499,11 @@ export class TextBuffer {
    * Compare two fragments using the same logic as sortFragments.
    * This ensures insertFragmentByLocator produces the same order as sorting.
    * Returns: <0 if a should come before b, >0 if after, 0 if equal.
+   *
+   * Uses the JIT-compiled comparator for consistent ordering and performance.
    */
   private compareFragmentsForSort(a: Fragment, b: Fragment): number {
-    // First, compare by locator prefix (not lexicographic!)
-    const locCmp = compareLocatorsForSort(a.locator, b.locator);
-    if (locCmp !== 0) return locCmp;
-
-    // Same prefix: tie-break by operation ID
-    const idCmp = compareOperationIds(a.insertionId, b.insertionId);
-    if (idCmp !== 0) return idCmp;
-
-    // Same operation: sort by insertionOffset (split parts)
-    const offsetCmp = a.insertionOffset - b.insertionOffset;
-    if (offsetCmp !== 0) return offsetCmp;
-
-    // Finally, sort by locator length (children after parent)
-    return a.locator.levels.length - b.locator.levels.length;
+    return jitCompareFragments(a, b);
   }
 
   /**
@@ -1875,14 +1838,8 @@ export class TextBuffer {
     }
 
     // Sort by (locator, insertionId, insertionOffset) to maintain canonical order
-    // after splits. This matches the sorting in applyRemoteInsertDirect.
-    resultFrags.sort((a, b) => {
-      const locCmp = compareLocators(a.locator, b.locator);
-      if (locCmp !== 0) return locCmp;
-      const idCmp = compareOperationIds(a.insertionId, b.insertionId);
-      if (idCmp !== 0) return idCmp;
-      return a.insertionOffset - b.insertionOffset;
-    });
+    // after splits. Uses JIT-compiled comparator matching sortFragments order.
+    resultFrags.sort(jitCompareFragments);
 
     this.setFragments(resultFrags);
   }
