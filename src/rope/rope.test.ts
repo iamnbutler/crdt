@@ -422,6 +422,89 @@ describe("Rope", () => {
     });
   });
 
+  describe("computeTextSummary edge cases", () => {
+    it("empty string", () => {
+      const summary = computeTextSummary("");
+      expect(summary.lines).toBe(0);
+      expect(summary.utf16Len).toBe(0);
+      expect(summary.bytes).toBe(0);
+      expect(summary.lastLineLen).toBe(0);
+      expect(summary.lastLineBytes).toBe(0);
+    });
+
+    it("string with only newlines", () => {
+      const summary = computeTextSummary("\n\n\n");
+      expect(summary.lines).toBe(3);
+      expect(summary.utf16Len).toBe(3);
+      expect(summary.lastLineLen).toBe(0);
+    });
+
+    it("consecutive empty lines", () => {
+      const summary = computeTextSummary("a\n\n\nb");
+      expect(summary.lines).toBe(3);
+      expect(summary.lastLineLen).toBe(1); // "b"
+    });
+
+    it("CRLF line endings count only LF as line breaks", () => {
+      const summary = computeTextSummary("abc\r\ndef\r\nghi");
+      // Only \n counts as line break, \r is part of content
+      expect(summary.lines).toBe(2);
+      // lastLineLen includes "ghi" (3 chars)
+      expect(summary.lastLineLen).toBe(3);
+    });
+
+    it("CRLF lastLineLen does not include trailing CR from previous line", () => {
+      const summary = computeTextSummary("abc\r\n");
+      expect(summary.lines).toBe(1);
+      // After the last \n, the remaining text is ""
+      expect(summary.lastLineLen).toBe(0);
+    });
+
+    it("single newline", () => {
+      const summary = computeTextSummary("\n");
+      expect(summary.lines).toBe(1);
+      expect(summary.utf16Len).toBe(1);
+      expect(summary.lastLineLen).toBe(0);
+    });
+
+    it("trailing newline", () => {
+      const summary = computeTextSummary("abc\n");
+      expect(summary.lines).toBe(1);
+      expect(summary.lastLineLen).toBe(0);
+    });
+
+    it("no newline (single line)", () => {
+      const summary = computeTextSummary("hello");
+      expect(summary.lines).toBe(0);
+      expect(summary.lastLineLen).toBe(5);
+      expect(summary.utf16Len).toBe(5);
+    });
+
+    it("multibyte UTF-8 characters", () => {
+      // "é" is 2 bytes in UTF-8, 1 UTF-16 code unit
+      const summary = computeTextSummary("café");
+      expect(summary.utf16Len).toBe(4);
+      expect(summary.lastLineLen).toBe(4);
+      expect(summary.bytes).toBe(5); // c(1) + a(1) + f(1) + é(2)
+    });
+
+    it("emoji (4-byte UTF-8, surrogate pair in UTF-16)", () => {
+      // "😀" is 4 bytes in UTF-8, 2 UTF-16 code units (surrogate pair)
+      const summary = computeTextSummary("hi😀");
+      expect(summary.utf16Len).toBe(4); // h(1) + i(1) + 😀(2)
+      expect(summary.bytes).toBe(6); // h(1) + i(1) + 😀(4)
+      expect(summary.lastLineLen).toBe(4);
+      expect(summary.lastLineBytes).toBe(6);
+    });
+
+    it("multibyte characters across lines", () => {
+      const summary = computeTextSummary("café\n🎉");
+      expect(summary.lines).toBe(1);
+      expect(summary.lastLineLen).toBe(2); // 🎉 is 2 UTF-16 code units
+      expect(summary.lastLineBytes).toBe(4); // 🎉 is 4 bytes
+    });
+  });
+
   describe("line iterator", () => {
     it("iterates all lines forward", () => {
       const rope = Rope.from("a\nb\nc");
