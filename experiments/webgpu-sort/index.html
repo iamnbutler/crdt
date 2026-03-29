@@ -1,0 +1,548 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>WebGPU Bitonic Sort Spike</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: system-ui, -apple-system, sans-serif; background: #0d1117; color: #c9d1d9; padding: 24px; }
+    h1 { font-size: 1.4rem; margin-bottom: 8px; color: #f0f6fc; }
+    .subtitle { color: #8b949e; margin-bottom: 24px; font-size: 0.9rem; }
+    #status { padding: 12px; background: #161b22; border: 1px solid #30363d; border-radius: 6px; margin-bottom: 16px; font-family: monospace; font-size: 0.85rem; white-space: pre-wrap; }
+    #results { width: 100%; border-collapse: collapse; margin-top: 16px; }
+    #results th, #results td { padding: 8px 12px; text-align: right; border-bottom: 1px solid #21262d; font-family: monospace; font-size: 0.85rem; }
+    #results th { color: #8b949e; font-weight: 600; text-align: right; }
+    #results th:first-child, #results td:first-child { text-align: left; }
+    .pass { color: #3fb950; }
+    .fail { color: #f85149; }
+    .warn { color: #d29922; }
+    button { background: #238636; color: #fff; border: none; padding: 8px 16px; border-radius: 6px; cursor: pointer; font-size: 0.9rem; margin-bottom: 16px; }
+    button:hover { background: #2ea043; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+    #adapter-info { color: #8b949e; font-size: 0.8rem; margin-bottom: 16px; font-family: monospace; }
+    #recommendation { margin-top: 24px; padding: 16px; background: #161b22; border: 1px solid #30363d; border-radius: 6px; display: none; }
+    #recommendation h2 { font-size: 1.1rem; margin-bottom: 8px; }
+  </style>
+</head>
+<body>
+  <h1>WebGPU Bitonic Sort Spike</h1>
+  <p class="subtitle">Issue #189 — Validate GPU sorting approach for CRDT fragment ordering</p>
+  <div id="adapter-info"></div>
+  <button id="run-btn" disabled>Run Benchmark</button>
+  <div id="status">Initializing WebGPU...</div>
+  <table id="results" style="display:none">
+    <thead>
+      <tr>
+        <th>N</th>
+        <th>Array.sort (ms)</th>
+        <th>GPU total (ms)</th>
+        <th>┣ upload (ms)</th>
+        <th>┣ sort (ms)</th>
+        <th>┗ download (ms)</th>
+        <th>Speedup</th>
+      </tr>
+    </thead>
+    <tbody id="results-body"></tbody>
+  </table>
+  <div id="recommendation"></div>
+
+<script type="module">
+// ─── WGSL Bitonic Sort Shader ───────────────────────────────────────────────
+const WGSL_SOURCE = /* wgsl */`
+struct Params {
+  stage: u32,
+  step: u32,
+  n: u32,
+}
+
+@group(0) @binding(0) var<storage, read_write> data: array<u32>;
+@group(0) @binding(1) var<uniform> params: Params;
+
+@compute @workgroup_size(256)
+fn main(@builtin(global_invocation_id) gid: vec3<u32>) {
+  let i = gid.x;
+  if (i >= params.n / 2u) {
+    return;
+  }
+
+  let stage = params.stage;
+  let step = params.step;
+
+  // Bitonic sort: compute partner index
+  let block_size = 1u << (step + 1u);
+  let half_block = 1u << step;
+  let block_start = (i / half_block) * block_size;
+  let offset = i % half_block;
+  let left = block_start + offset;
+  let right = left + half_block;
+
+  if (right >= params.n) {
+    return;
+  }
+
+  // Ascending if in first half of stage-block, else descending
+  let stage_block = 1u << (stage + 1u);
+  let ascending = ((left / stage_block) % 2u) == 0u;
+
+  let l = data[left];
+  let r = data[right];
+  let should_swap = select(l < r, l > r, ascending);
+
+  if (should_swap) {
+    data[left] = r;
+    data[right] = l;
+  }
+}
+`;
+
+// ─── Utility ────────────────────────────────────────────────────────────────
+function nextPow2(n) {
+  let p = 1;
+  while (p < n) p <<= 1;
+  return p;
+}
+
+function log2(n) {
+  let l = 0;
+  while ((1 << l) < n) l++;
+  return l;
+}
+
+function generateRandomU32Array(n) {
+  const arr = new Uint32Array(n);
+  for (let i = 0; i < n; i++) {
+    arr[i] = (Math.random() * 0xFFFFFFFF) >>> 0;
+  }
+  return arr;
+}
+
+function isSorted(arr) {
+  for (let i = 1; i < arr.length; i++) {
+    if (arr[i] < arr[i - 1]) return false;
+  }
+  return true;
+}
+
+// ─── GPU Sorting ────────────────────────────────────────────────────────────
+async function initGPU() {
+  if (!navigator.gpu) {
+    throw new Error("WebGPU not supported in this browser");
+  }
+
+  const adapter = await navigator.gpu.requestAdapter({
+    powerPreference: "high-performance",
+  });
+  if (!adapter) {
+    throw new Error("No WebGPU adapter found. Enable WebGPU in browser flags.");
+  }
+
+  // Check for timestamp query support
+  const hasTimestamps = adapter.features.has("timestamp-query");
+
+  const requiredFeatures = [];
+  if (hasTimestamps) {
+    requiredFeatures.push("timestamp-query");
+  }
+
+  const device = await adapter.requestDevice({
+    requiredFeatures,
+  });
+
+  device.addEventListener("uncapturederror", (e) => {
+    console.error("WebGPU uncaptured error:", e.error);
+  });
+
+  let adapterInfo = null;
+  try {
+    adapterInfo = await adapter.requestAdapterInfo();
+  } catch {
+    // Some browsers don't support requestAdapterInfo
+  }
+
+  return { adapter, device, hasTimestamps, adapterInfo };
+}
+
+function createPipeline(device) {
+  const module = device.createShaderModule({ code: WGSL_SOURCE });
+
+  const bindGroupLayout = device.createBindGroupLayout({
+    entries: [
+      { binding: 0, visibility: GPUShaderStage.COMPUTE, buffer: { type: "storage" } },
+      { binding: 1, visibility: GPUShaderStage.COMPUTE, buffer: { type: "uniform" } },
+    ],
+  });
+
+  const pipeline = device.createComputePipeline({
+    layout: device.createPipelineLayout({ bindGroupLayouts: [bindGroupLayout] }),
+    compute: { module, entryPoint: "main" },
+  });
+
+  return { pipeline, bindGroupLayout };
+}
+
+async function gpuBitonicSort(device, pipeline, bindGroupLayout, inputData, hasTimestamps) {
+  const n = inputData.length;
+  const paddedN = nextPow2(n);
+  const stages = log2(paddedN);
+
+  // Pad input to power of 2 with max sentinel values
+  const padded = new Uint32Array(paddedN);
+  padded.set(inputData);
+  for (let i = n; i < paddedN; i++) {
+    padded[i] = 0xFFFFFFFF;
+  }
+
+  // ── Upload (CPU → GPU) ──
+  const uploadStart = performance.now();
+
+  const dataBuffer = device.createBuffer({
+    size: padded.byteLength,
+    usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
+    mappedAtCreation: true,
+  });
+  new Uint32Array(dataBuffer.getMappedRange()).set(padded);
+  dataBuffer.unmap();
+
+  const paramsBuffer = device.createBuffer({
+    size: 16, // 3 u32s + 4 bytes padding
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+  });
+
+  const readbackBuffer = device.createBuffer({
+    size: padded.byteLength,
+    usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+  });
+
+  const uploadEnd = performance.now();
+  const uploadMs = uploadEnd - uploadStart;
+
+  // ── GPU Sort ──
+  let querySet = null;
+  let queryBuffer = null;
+  let queryReadBuffer = null;
+  let dispatchCount = 0;
+
+  // Count total dispatches for timestamp allocation
+  for (let stage = 0; stage < stages; stage++) {
+    for (let step = stage; step >= 0; step--) {
+      dispatchCount++;
+    }
+  }
+
+  if (hasTimestamps) {
+    // 2 timestamps per dispatch (begin + end), but we only need overall begin and end
+    querySet = device.createQuerySet({ type: "timestamp", count: 2 });
+    queryBuffer = device.createBuffer({
+      size: 2 * 8, // 2 timestamps × 8 bytes
+      usage: GPUBufferUsage.QUERY_RESOLVE | GPUBufferUsage.COPY_SRC,
+    });
+    queryReadBuffer = device.createBuffer({
+      size: 2 * 8,
+      usage: GPUBufferUsage.MAP_READ | GPUBufferUsage.COPY_DST,
+    });
+  }
+
+  const bindGroup = device.createBindGroup({
+    layout: bindGroupLayout,
+    entries: [
+      { binding: 0, resource: { buffer: dataBuffer } },
+      { binding: 1, resource: { buffer: paramsBuffer } },
+    ],
+  });
+
+  const workgroupCount = Math.ceil(paddedN / 2 / 256);
+  const paramsData = new Uint32Array(4);
+
+  const sortStart = performance.now();
+
+  // Encode all dispatches
+  const encoder = device.createCommandEncoder();
+
+  let isFirst = true;
+  let isLast = false;
+  let dispatchIdx = 0;
+
+  for (let stage = 0; stage < stages; stage++) {
+    for (let step = stage; step >= 0; step--) {
+      dispatchIdx++;
+      isLast = dispatchIdx === dispatchCount;
+
+      paramsData[0] = stage;
+      paramsData[1] = step;
+      paramsData[2] = paddedN;
+      device.queue.writeBuffer(paramsBuffer, 0, paramsData);
+
+      const passDescriptor = {};
+      if (hasTimestamps && (isFirst || isLast)) {
+        passDescriptor.timestampWrites = { querySet };
+        if (isFirst) {
+          passDescriptor.timestampWrites.beginningOfPassWriteIndex = 0;
+          isFirst = false;
+        }
+        if (isLast) {
+          passDescriptor.timestampWrites.endOfPassWriteIndex = 1;
+        }
+      }
+
+      const hasDescriptor = passDescriptor.timestampWrites !== undefined;
+      const pass = encoder.beginComputePass(hasDescriptor ? passDescriptor : undefined);
+      pass.setPipeline(pipeline);
+      pass.setBindGroup(0, bindGroup);
+      pass.dispatchWorkgroups(workgroupCount);
+      pass.end();
+    }
+  }
+
+  // Copy result to readback buffer
+  encoder.copyBufferToBuffer(dataBuffer, 0, readbackBuffer, 0, padded.byteLength);
+
+  if (hasTimestamps) {
+    encoder.resolveQuerySet(querySet, 0, 2, queryBuffer, 0);
+    encoder.copyBufferToBuffer(queryBuffer, 0, queryReadBuffer, 0, 2 * 8);
+  }
+
+  device.queue.submit([encoder.finish()]);
+
+  // ── Download (GPU → CPU) ──
+  const downloadStart = performance.now();
+  await readbackBuffer.mapAsync(GPUMapMode.READ);
+  const resultPadded = new Uint32Array(readbackBuffer.getMappedRange().slice(0));
+  readbackBuffer.unmap();
+  const downloadEnd = performance.now();
+
+  const sortEnd = performance.now();
+
+  // Extract non-padded result
+  const result = resultPadded.slice(0, n);
+
+  let gpuSortMs = null;
+  if (hasTimestamps && queryReadBuffer) {
+    try {
+      await queryReadBuffer.mapAsync(GPUMapMode.READ);
+      const timestamps = new BigUint64Array(queryReadBuffer.getMappedRange().slice(0));
+      queryReadBuffer.unmap();
+      gpuSortMs = Number(timestamps[1] - timestamps[0]) / 1e6; // ns → ms
+    } catch {
+      // Timestamp readback failed
+    }
+  }
+
+  // Cleanup
+  dataBuffer.destroy();
+  paramsBuffer.destroy();
+  readbackBuffer.destroy();
+  if (querySet) querySet.destroy();
+  if (queryBuffer) queryBuffer.destroy();
+  if (queryReadBuffer) queryReadBuffer.destroy();
+
+  return {
+    result,
+    uploadMs,
+    downloadMs: downloadEnd - downloadStart,
+    totalMs: sortEnd - sortStart + uploadMs,
+    gpuSortMs: gpuSortMs ?? (sortEnd - sortStart - (downloadEnd - downloadStart)),
+    wallSortMs: sortEnd - downloadStart, // just the GPU+download portion
+  };
+}
+
+// ─── CPU Baseline ───────────────────────────────────────────────────────────
+function cpuSort(data) {
+  const arr = new Uint32Array(data);
+  const start = performance.now();
+  arr.sort();
+  const end = performance.now();
+  return { result: arr, ms: end - start };
+}
+
+// ─── Benchmark Runner ───────────────────────────────────────────────────────
+const SIZES = [1_000, 10_000, 50_000];
+const WARMUP_RUNS = 2;
+const BENCH_RUNS = 5;
+
+const statusEl = document.getElementById("status");
+const resultsEl = document.getElementById("results");
+const resultsBody = document.getElementById("results-body");
+const runBtn = document.getElementById("run-btn");
+const adapterInfoEl = document.getElementById("adapter-info");
+const recEl = document.getElementById("recommendation");
+
+function log(msg) {
+  statusEl.textContent = msg;
+}
+
+let gpu = null;
+let pipelineData = null;
+
+async function init() {
+  try {
+    gpu = await initGPU();
+    pipelineData = createPipeline(gpu.device);
+
+    if (gpu.adapterInfo) {
+      const info = gpu.adapterInfo;
+      adapterInfoEl.textContent = `GPU: ${info.description || info.device || "unknown"} | Vendor: ${info.vendor || "unknown"} | Timestamps: ${gpu.hasTimestamps ? "yes" : "no"}`;
+    }
+
+    // Verify correctness with small array
+    log("Verifying correctness...");
+    const testInput = new Uint32Array([5, 3, 8, 1, 9, 2, 7, 4, 6, 0]);
+    const { result } = await gpuBitonicSort(
+      gpu.device, pipelineData.pipeline, pipelineData.bindGroupLayout,
+      testInput, gpu.hasTimestamps
+    );
+
+    if (!isSorted(result)) {
+      log("❌ Correctness check FAILED. GPU sort produced unsorted output.");
+      return;
+    }
+
+    // Verify values match
+    const expected = new Uint32Array(testInput).sort();
+    let valuesMatch = true;
+    for (let i = 0; i < expected.length; i++) {
+      if (result[i] !== expected[i]) { valuesMatch = false; break; }
+    }
+
+    if (!valuesMatch) {
+      log("❌ Correctness check FAILED. Values don't match CPU sort.");
+      return;
+    }
+
+    log("✓ Correctness verified. Ready to benchmark.");
+    runBtn.disabled = false;
+  } catch (e) {
+    log(`❌ ${e.message}`);
+    console.error(e);
+  }
+}
+
+async function runBenchmark() {
+  runBtn.disabled = true;
+  resultsEl.style.display = "table";
+  resultsBody.innerHTML = "";
+
+  const allResults = [];
+
+  for (const n of SIZES) {
+    log(`Benchmarking N=${n.toLocaleString()}...`);
+
+    // Generate data once, copy for each run
+    const sourceData = generateRandomU32Array(n);
+
+    // Warmup
+    for (let i = 0; i < WARMUP_RUNS; i++) {
+      cpuSort(new Uint32Array(sourceData));
+      await gpuBitonicSort(
+        gpu.device, pipelineData.pipeline, pipelineData.bindGroupLayout,
+        new Uint32Array(sourceData), gpu.hasTimestamps
+      );
+    }
+
+    // Benchmark CPU
+    const cpuTimes = [];
+    for (let i = 0; i < BENCH_RUNS; i++) {
+      const { ms } = cpuSort(new Uint32Array(sourceData));
+      cpuTimes.push(ms);
+    }
+
+    // Benchmark GPU
+    const gpuResults = [];
+    for (let i = 0; i < BENCH_RUNS; i++) {
+      const res = await gpuBitonicSort(
+        gpu.device, pipelineData.pipeline, pipelineData.bindGroupLayout,
+        new Uint32Array(sourceData), gpu.hasTimestamps
+      );
+      gpuResults.push(res);
+    }
+
+    const median = (arr) => {
+      const s = [...arr].sort((a, b) => a - b);
+      return s[Math.floor(s.length / 2)];
+    };
+
+    const cpuMedian = median(cpuTimes);
+    const gpuTotalMedian = median(gpuResults.map(r => r.totalMs));
+    const gpuUploadMedian = median(gpuResults.map(r => r.uploadMs));
+    const gpuSortMedian = median(gpuResults.map(r => r.gpuSortMs));
+    const gpuDownloadMedian = median(gpuResults.map(r => r.downloadMs));
+    const speedup = cpuMedian / gpuTotalMedian;
+
+    const row = {
+      n,
+      cpuMs: cpuMedian,
+      gpuTotalMs: gpuTotalMedian,
+      gpuUploadMs: gpuUploadMedian,
+      gpuSortMs: gpuSortMedian,
+      gpuDownloadMs: gpuDownloadMedian,
+      speedup,
+    };
+    allResults.push(row);
+
+    const fmt = (v) => v.toFixed(2);
+    const speedupClass = speedup >= 1 ? "pass" : "fail";
+
+    resultsBody.innerHTML += `<tr>
+      <td>${n.toLocaleString()}</td>
+      <td>${fmt(cpuMedian)}</td>
+      <td>${fmt(gpuTotalMedian)}</td>
+      <td>${fmt(gpuUploadMedian)}</td>
+      <td>${fmt(gpuSortMedian)}</td>
+      <td>${fmt(gpuDownloadMedian)}</td>
+      <td class="${speedupClass}">${fmt(speedup)}×</td>
+    </tr>`;
+  }
+
+  // Generate recommendation
+  generateRecommendation(allResults);
+
+  log("✓ Benchmark complete.");
+  runBtn.disabled = false;
+}
+
+function generateRecommendation(results) {
+  const gpuWins = results.filter(r => r.speedup > 1);
+  const breakeven = results.find(r => r.speedup >= 1);
+  const transferOverhead = results.map(r => r.gpuUploadMs + r.gpuDownloadMs);
+  const avgTransfer = transferOverhead.reduce((a, b) => a + b, 0) / transferOverhead.length;
+
+  let verdict, explanation, color;
+
+  if (gpuWins.length === 0) {
+    verdict = "NO-GO";
+    color = "fail";
+    explanation = `GPU sorting did not beat Array.sort() at any tested size (up to ${SIZES[SIZES.length-1].toLocaleString()}).
+Average GPU↔CPU transfer overhead: ${avgTransfer.toFixed(2)}ms.
+The transfer cost alone likely exceeds the sort time for realistic fragment counts.
+Recommendation: pursue WASM SIMD (issue #188) or SharedArrayBuffer workers (#190) instead.`;
+  } else if (gpuWins.length === SIZES.length) {
+    verdict = "GO";
+    color = "pass";
+    explanation = `GPU sorting beat Array.sort() at all tested sizes.
+Breakeven point: < ${SIZES[0].toLocaleString()} elements.
+Average GPU↔CPU transfer overhead: ${avgTransfer.toFixed(2)}ms.
+Recommendation: proceed with src/gpu/ module. Transfer overhead is manageable.`;
+  } else {
+    verdict = "CONDITIONAL";
+    color = "warn";
+    const breakevenN = breakeven ? breakeven.n : "unknown";
+    explanation = `GPU sorting only wins at N ≥ ${breakevenN.toLocaleString()}.
+Average GPU↔CPU transfer overhead: ${avgTransfer.toFixed(2)}ms.
+Recommendation: only integrate if fragment counts regularly exceed ${breakevenN.toLocaleString()}.
+Consider hybrid approach: CPU sort for small N, GPU for large N.`;
+  }
+
+  recEl.style.display = "block";
+  recEl.innerHTML = `<h2>Recommendation: <span class="${color}">${verdict}</span></h2>
+<pre style="margin-top:8px;white-space:pre-wrap;color:#c9d1d9">${explanation}</pre>
+<p style="margin-top:12px;color:#8b949e;font-size:0.8rem">
+  Median of ${BENCH_RUNS} runs after ${WARMUP_RUNS} warmup runs.
+  ${gpu.hasTimestamps ? "GPU sort time measured via timestamp queries." : "GPU sort time estimated from wall clock (no timestamp query support)."}
+</p>`;
+}
+
+runBtn.addEventListener("click", runBenchmark);
+init();
+</script>
+</body>
+</html>
