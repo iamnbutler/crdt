@@ -10,7 +10,8 @@
  */
 
 import type { Dimension, Summary } from "../sum-tree/index.js";
-import { MIN_LOCATOR, compareLocators } from "./locator.js";
+import { jitCompareLocators } from "./jit-comparator.js";
+import { MIN_LOCATOR } from "./locator.js";
 import { MIN_OPERATION_ID, compareOperationIds } from "./types.js";
 import type { Fragment, FragmentSummary, Locator, OperationId } from "./types.js";
 
@@ -46,7 +47,7 @@ export const fragmentSummaryOps: Summary<FragmentSummary> = {
           ? left.maxInsertionId
           : right.maxInsertionId,
       maxLocator:
-        compareLocators(left.maxLocator, right.maxLocator) >= 0
+        jitCompareLocators(left.maxLocator, right.maxLocator) >= 0
           ? left.maxLocator
           : right.maxLocator,
       itemCount: left.itemCount + right.itemCount,
@@ -103,11 +104,11 @@ export const locatorDimension: Dimension<FragmentSummary, Locator> = {
     return summary.maxLocator;
   },
   compare(a: Locator, b: Locator): number {
-    return compareLocators(a, b);
+    return jitCompareLocators(a, b);
   },
   add(a: Locator, b: Locator): Locator {
     // For max-based dimensions, "add" returns the max
-    return compareLocators(a, b) >= 0 ? a : b;
+    return jitCompareLocators(a, b) >= 0 ? a : b;
   },
   zero(): Locator {
     return MIN_LOCATOR;

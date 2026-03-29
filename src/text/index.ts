@@ -83,6 +83,16 @@ export {
   withVisibility,
 } from "./fragment.js";
 
+// JIT-compiled comparators
+export {
+  createJitFragmentComparator,
+  createJitLocatorComparator,
+  jitCompareFragments,
+  jitCompareLocators,
+} from "./jit-comparator.js";
+
+export type { FragmentCompareFn, LocatorCompareFn } from "./jit-comparator.js";
+
 // TextBuffer
 export { TextBuffer } from "./text-buffer.js";
 
