@@ -3,7 +3,7 @@
 
 export const ROPE_VERSION = "0.1.0";
 
-export { Rope } from "./rope.js";
+export { Rope, RopeView } from "./rope.js";
 export { createTextChunk, computeTextSummary } from "./summary.js";
 export type { TextChunk } from "./types.js";
 export { CHUNK_TARGET, CHUNK_MIN } from "./types.js";

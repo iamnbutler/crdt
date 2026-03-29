@@ -157,16 +157,15 @@ export class TextBufferSnapshot implements DocumentSnapshot {
 
   /**
    * Get the visible text content, or a slice of it.
+   * When called with a range, uses the Rope's lazy chunked access instead of
+   * materializing the full string first.
    */
   getText(start?: number, end?: number): string {
     this.checkReleased();
-    const text = this.getFullText();
     if (start !== undefined || end !== undefined) {
-      const s = start ?? 0;
-      const e = end ?? text.length;
-      return text.slice(s, e);
+      return this.getRope().getText(start, end);
     }
-    return text;
+    return this.getFullText();
   }
 
   /**

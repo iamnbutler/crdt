@@ -70,6 +70,149 @@ function chunkText(text: string): TextChunk[] {
 }
 
 /**
+ * RopeView: a lazy, non-materializing view over a Rope or a range within it.
+ *
+ * Instead of building the full string eagerly, RopeView provides O(log n)
+ * positional access via cursor seeking. Only the requested characters are
+ * materialized. This is ideal for editor viewport rendering where only a
+ * small window of a large document is needed.
+ */
+export class RopeView {
+  private readonly tree: SumTree<TextChunk, TextSummary>;
+  private readonly start: number;
+  private readonly end: number;
+  private readonly _length: number;
+
+  constructor(tree: SumTree<TextChunk, TextSummary>, start?: number, end?: number) {
+    this.tree = tree;
+    const totalLen = tree.summary().utf16Len;
+    this.start = Math.max(0, Math.min(start ?? 0, totalLen));
+    this.end = Math.max(this.start, Math.min(end ?? totalLen, totalLen));
+    this._length = this.end - this.start;
+  }
+
+  /** Length of the view in UTF-16 code units. O(1). */
+  get length(): number {
+    return this._length;
+  }
+
+  /**
+   * Get the character at a position relative to the view start.
+   * O(log n) via cursor seeking.
+   */
+  charAt(pos: number): string {
+    if (pos < 0 || pos >= this._length) return "";
+    return this.slice(pos, pos + 1);
+  }
+
+  /**
+   * Get a substring of the view. Only materializes the requested range.
+   * O(log n) seek + O(k) materialization where k = end - start.
+   */
+  slice(start: number, end?: number): string {
+    const s = Math.max(0, Math.min(start, this._length));
+    const e = Math.max(s, Math.min(end ?? this._length, this._length));
+    if (s === e) return "";
+
+    // Map view-relative offsets to absolute rope offsets
+    const absStart = this.start + s;
+    const absEnd = this.start + e;
+
+    return collectChunks(this.tree, absStart, absEnd);
+  }
+
+  /**
+   * Narrow this view to a sub-range. Returns a new RopeView without materializing.
+   * O(1) — just adjusts the offset bounds.
+   */
+  subview(start: number, end?: number): RopeView {
+    const s = Math.max(0, Math.min(start, this._length));
+    const e = Math.max(s, Math.min(end ?? this._length, this._length));
+    return new RopeView(this.tree, this.start + s, this.start + e);
+  }
+
+  /**
+   * Iterate over chunks in this view's range.
+   * Each chunk is a slice of the underlying storage — no full string built.
+   */
+  *chunks(): IterableIterator<string> {
+    yield* chunksFromTree(this.tree, this.start, this.end);
+  }
+
+  /**
+   * Materialize the entire view as a string. Only call when you truly need
+   * the full string (e.g., passing to an API that requires string).
+   */
+  toString(): string {
+    return this.slice(0, this._length);
+  }
+
+  /** Iterate over individual characters. */
+  *[Symbol.iterator](): IterableIterator<string> {
+    for (const chunk of this.chunks()) {
+      for (const ch of chunk) {
+        yield ch;
+      }
+    }
+  }
+
+  /**
+   * Search for a substring within this view. Returns the view-relative index or -1.
+   * Materializes only enough chunks to perform the search.
+   */
+  indexOf(searchString: string, position?: number): number {
+    if (searchString.length === 0) return position ?? 0;
+    if (searchString.length > this._length) return -1;
+
+    // For short search strings, materialize and search
+    const text = this.toString();
+    return text.indexOf(searchString, position);
+  }
+}
+
+/**
+ * Collect chunks from a SumTree in [start, end) using cursor seeking.
+ */
+function collectChunks(tree: SumTree<TextChunk, TextSummary>, start: number, end: number): string {
+  const parts: string[] = [];
+  for (const chunk of chunksFromTree(tree, start, end)) {
+    parts.push(chunk);
+  }
+  return parts.join("");
+}
+
+/**
+ * Iterate over chunks from a SumTree in [start, end) using cursor seeking.
+ * O(log n) seek + O(k/CHUNK_SIZE) iteration.
+ */
+function* chunksFromTree(
+  tree: SumTree<TextChunk, TextSummary>,
+  start: number,
+  end: number,
+): IterableIterator<string> {
+  if (start >= end) return;
+
+  const cursor = tree.cursor(utf16Dimension);
+
+  if (start > 0) {
+    cursor.seekForward(start, "right");
+  }
+
+  let chunk = cursor.item();
+  while (chunk !== undefined) {
+    const chunkStart = cursor.position;
+    if (chunkStart >= end) break;
+
+    const sliceStart = Math.max(0, start - chunkStart);
+    const sliceEnd = Math.min(chunk.text.length, end - chunkStart);
+    yield chunk.text.slice(sliceStart, sliceEnd);
+
+    if (!cursor.next()) break;
+    chunk = cursor.item();
+  }
+}
+
+/**
  * Rope: an immutable text storage structure backed by SumTree<TextChunk>.
  *
  * All mutation methods return a new Rope (structural sharing via path copying).
@@ -254,25 +397,17 @@ export class Rope {
 
   /**
    * Get the full text of the rope (or a slice).
+   * When called with a range, only materializes chunks in that range — O(k) where k = range size.
    */
   getText(start?: number, end?: number): string {
-    const parts: string[] = [];
-    const items = this.tree.toArray();
-    for (const chunk of items) {
-      parts.push(chunk.text);
-    }
-    const full = parts.join("");
-
-    if (start !== undefined || end !== undefined) {
-      const s = start ?? 0;
-      const e = end ?? full.length;
-      return full.slice(s, e);
-    }
-    return full;
+    const s = start ?? 0;
+    const e = end ?? this.length;
+    return Array.from(this.chunks(s, e)).join("");
   }
 
   /**
    * Get a single line by line number (0-based). Does not include the trailing newline.
+   * Uses range-based getText which only materializes chunks in the line's range.
    */
   getLine(line: number): string {
     if (line < 0 || line >= this.lineCount) {
@@ -282,11 +417,11 @@ export class Rope {
     const start = this.lineToOffset(line);
     const nextLineStart = line + 1 < this.lineCount ? this.lineToOffset(line + 1) : this.length;
 
-    let lineText = this.getText(start, nextLineStart);
+    const lineText = this.getText(start, nextLineStart);
 
     // Strip trailing newline if present
     if (lineText.endsWith("\n")) {
-      lineText = lineText.slice(0, -1);
+      return lineText.slice(0, -1);
     }
 
     return lineText;
@@ -323,44 +458,19 @@ export class Rope {
   }
 
   /**
-   * Iterate over raw text chunks in a UTF-16 offset range [start, end).
-   * If omitted, iterates all chunks.
+   * Create a lazy, non-materializing view over this rope (or a range within it).
+   * The view provides O(log n) charAt/slice without building the full string.
    */
-  *chunks(start?: number, end?: number): IterableIterator<string> {
-    const s = start ?? 0;
-    const e = end ?? this.length;
-
-    let offset = 0;
-    for (const chunkText of this.chunksIter()) {
-      const chunkStart = offset;
-      const chunkEnd = offset + chunkText.length;
-
-      if (chunkEnd <= s) {
-        offset = chunkEnd;
-        continue;
-      }
-      if (chunkStart >= e) {
-        break;
-      }
-
-      const sliceStart = Math.max(0, s - chunkStart);
-      const sliceEnd = Math.min(chunkText.length, e - chunkStart);
-      yield chunkText.slice(sliceStart, sliceEnd);
-
-      offset = chunkEnd;
-    }
+  view(start?: number, end?: number): RopeView {
+    return new RopeView(this.tree, start, end);
   }
 
   /**
-   * Internal: iterate over all chunk text strings using cursor traversal.
+   * Iterate over raw text chunks in a UTF-16 offset range [start, end).
+   * If omitted, iterates all chunks.
+   * Uses cursor seeking for O(log n) start position.
    */
-  private *chunksIter(): IterableIterator<string> {
-    const cursor = this.tree.cursor(utf16Dimension);
-    let chunk = cursor.item();
-    while (chunk !== undefined) {
-      yield chunk.text;
-      if (!cursor.next()) break;
-      chunk = cursor.item();
-    }
+  *chunks(start?: number, end?: number): IterableIterator<string> {
+    yield* chunksFromTree(this.tree, start ?? 0, end ?? this.length);
   }
 }

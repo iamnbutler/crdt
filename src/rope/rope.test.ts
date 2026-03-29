@@ -657,3 +657,188 @@ describe("Rope", () => {
     });
   });
 });
+
+describe("RopeView", () => {
+  describe("basic operations", () => {
+    it("has correct length", () => {
+      const rope = Rope.from("hello world");
+      const view = rope.view();
+      expect(view.length).toBe(11);
+    });
+
+    it("charAt returns correct characters", () => {
+      const rope = Rope.from("hello");
+      const view = rope.view();
+      expect(view.charAt(0)).toBe("h");
+      expect(view.charAt(1)).toBe("e");
+      expect(view.charAt(4)).toBe("o");
+    });
+
+    it("charAt returns empty string for out-of-bounds", () => {
+      const rope = Rope.from("hello");
+      const view = rope.view();
+      expect(view.charAt(-1)).toBe("");
+      expect(view.charAt(5)).toBe("");
+      expect(view.charAt(100)).toBe("");
+    });
+
+    it("slice returns correct substrings", () => {
+      const rope = Rope.from("hello world");
+      const view = rope.view();
+      expect(view.slice(0, 5)).toBe("hello");
+      expect(view.slice(6, 11)).toBe("world");
+      expect(view.slice(0, 11)).toBe("hello world");
+    });
+
+    it("slice clamps out-of-bounds", () => {
+      const rope = Rope.from("hello");
+      const view = rope.view();
+      expect(view.slice(-5, 100)).toBe("hello");
+      expect(view.slice(3, 2)).toBe("");
+    });
+
+    it("toString materializes full text", () => {
+      const text = "hello world\nfoo bar\nbaz";
+      const rope = Rope.from(text);
+      expect(rope.view().toString()).toBe(text);
+    });
+  });
+
+  describe("ranged view", () => {
+    it("view with start/end restricts range", () => {
+      const rope = Rope.from("hello world");
+      const view = rope.view(6, 11);
+      expect(view.length).toBe(5);
+      expect(view.toString()).toBe("world");
+      expect(view.charAt(0)).toBe("w");
+      expect(view.charAt(4)).toBe("d");
+    });
+
+    it("view slice is relative to view start", () => {
+      const rope = Rope.from("0123456789");
+      const view = rope.view(3, 8);
+      expect(view.length).toBe(5);
+      expect(view.slice(1, 3)).toBe("45");
+    });
+
+    it("subview narrows further", () => {
+      const rope = Rope.from("0123456789");
+      const view = rope.view(2, 8);
+      const sub = view.subview(1, 4);
+      expect(sub.length).toBe(3);
+      expect(sub.toString()).toBe("345");
+    });
+  });
+
+  describe("empty rope", () => {
+    it("empty rope view", () => {
+      const rope = Rope.empty();
+      const view = rope.view();
+      expect(view.length).toBe(0);
+      expect(view.toString()).toBe("");
+      expect(view.charAt(0)).toBe("");
+      expect(view.slice(0, 10)).toBe("");
+    });
+  });
+
+  describe("large documents", () => {
+    it("only materializes requested range on multi-chunk rope", () => {
+      // Create a rope that spans multiple chunks
+      const lineText = `${"x".repeat(80)}\n`;
+      const lines = Array.from({ length: 200 }, () => lineText);
+      const text = lines.join("");
+      const rope = Rope.from(text);
+
+      // Verify the rope has the right total length
+      expect(rope.length).toBe(text.length);
+
+      // View a small range in the middle
+      const midStart = 5000;
+      const midEnd = 5100;
+      const view = rope.view(midStart, midEnd);
+      expect(view.length).toBe(100);
+      expect(view.toString()).toBe(text.slice(midStart, midEnd));
+
+      // charAt in the middle
+      expect(view.charAt(0)).toBe(text.charAt(midStart));
+      expect(view.charAt(50)).toBe(text.charAt(midStart + 50));
+    });
+
+    it("slice across chunk boundaries", () => {
+      // ~3 chunks worth of text
+      const text = "a".repeat(CHUNK_TARGET) + "b".repeat(CHUNK_TARGET) + "c".repeat(CHUNK_TARGET);
+      const rope = Rope.from(text);
+
+      // Slice spanning chunk boundary
+      const start = CHUNK_TARGET - 10;
+      const end = CHUNK_TARGET + 10;
+      const view = rope.view(start, end);
+      expect(view.toString()).toBe(text.slice(start, end));
+      expect(view.toString()).toBe("a".repeat(10) + "b".repeat(10));
+    });
+  });
+
+  describe("chunks iterator", () => {
+    it("iterates over chunks in view range", () => {
+      const text = "hello world foo bar baz";
+      const rope = Rope.from(text);
+      const view = rope.view(6, 17);
+      const chunks = Array.from(view.chunks());
+      expect(chunks.join("")).toBe("world foo b");
+    });
+  });
+
+  describe("Symbol.iterator", () => {
+    it("iterates over characters", () => {
+      const rope = Rope.from("hello");
+      const view = rope.view();
+      const chars = Array.from(view);
+      expect(chars).toEqual(["h", "e", "l", "l", "o"]);
+    });
+
+    it("iterates over ranged view characters", () => {
+      const rope = Rope.from("hello world");
+      const view = rope.view(6, 11);
+      const chars = Array.from(view);
+      expect(chars).toEqual(["w", "o", "r", "l", "d"]);
+    });
+  });
+
+  describe("indexOf", () => {
+    it("finds substring", () => {
+      const rope = Rope.from("hello world");
+      const view = rope.view();
+      expect(view.indexOf("world")).toBe(6);
+      expect(view.indexOf("xyz")).toBe(-1);
+    });
+
+    it("indexOf with position", () => {
+      const rope = Rope.from("abcabc");
+      const view = rope.view();
+      expect(view.indexOf("abc", 1)).toBe(3);
+    });
+
+    it("empty search string returns 0", () => {
+      const rope = Rope.from("hello");
+      expect(rope.view().indexOf("")).toBe(0);
+    });
+  });
+
+  describe("getText() optimization", () => {
+    it("getText with range matches full getText slice", () => {
+      const text = "a".repeat(CHUNK_TARGET * 3);
+      const rope = Rope.from(text);
+
+      // Range in first chunk
+      expect(rope.getText(0, 10)).toBe(text.slice(0, 10));
+      // Range spanning chunks
+      expect(rope.getText(CHUNK_TARGET - 5, CHUNK_TARGET + 5)).toBe(
+        text.slice(CHUNK_TARGET - 5, CHUNK_TARGET + 5),
+      );
+      // Range in last chunk
+      expect(rope.getText(text.length - 10, text.length)).toBe(text.slice(-10));
+      // Full text
+      expect(rope.getText()).toBe(text);
+    });
+  });
+});
