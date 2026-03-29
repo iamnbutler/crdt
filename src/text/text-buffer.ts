@@ -743,36 +743,76 @@ export class TextBuffer {
       }
     }
 
-    // Fast path: use cursor-based seeking for boundary inserts (no splits)
+    // Fast path: use cursor-based seeking (O(log n) for both boundary and split inserts)
     // Skip fast path when there are live snapshots (mutations would corrupt them)
     if (this._liveSnapshots === 0 && !this.fragments.isEmpty()) {
       const fastResult = this.tryFindInsertPositionFast(offset);
       if (fastResult !== null) {
-        // Boundary insert: no split needed, use O(log n) operations
-        // Use insertLocator if provided, otherwise fall back to locatorBetween
         const locator =
           fastResult.insertLocator ??
           locatorBetween(fastResult.leftLocator, fastResult.rightLocator);
         const newFrag = createFragment(opId, 0, locator, text, true);
 
-        // O(log² n) to find index + O(log n) to insert
-        const insertIdx = this.findTreeInsertIndex(newFrag);
-        this.fragments = this.fragments.insertAt(insertIdx, newFrag);
-        this.addToFragmentIndex(opId);
+        if (fastResult.splitInfo !== undefined) {
+          // Split case: replace original with split parts, then insert new at sorted position.
+          // Verify that split parts maintain order with neighbors before mutating.
+          // This check is O(log n) and avoids the rare case where concurrent-style operations
+          // create child fragments that would interleave with the split parts.
+          const { index, left, right } = fastResult.splitInfo;
+          const treeLen = this.fragments.length();
+          let canSplitInPlace = true;
 
-        return {
-          type: "insert",
-          id: opId,
-          text,
-          after: fastResult.afterRef,
-          before: fastResult.beforeRef,
-          version: cloneVersionVector(this._version),
-          locator,
-        };
+          if (index > 0) {
+            const pred = this.fragments.get(index - 1);
+            if (pred && this.compareFragmentsForSort(left, pred) < 0) {
+              canSplitInPlace = false;
+            }
+          }
+
+          if (canSplitInPlace && index + 1 < treeLen) {
+            const succ = this.fragments.get(index + 1);
+            if (succ && this.compareFragmentsForSort(right, succ) > 0) {
+              canSplitInPlace = false;
+            }
+          }
+
+          if (canSplitInPlace) {
+            this.fragments.replaceAtMut(index, [left, right]);
+            const insertIdx = this.findTreeInsertIndex(newFrag);
+            this.fragments.insertAtMut(insertIdx, newFrag);
+            this.addToFragmentIndex(opId);
+
+            return {
+              type: "insert",
+              id: opId,
+              text,
+              after: fastResult.afterRef,
+              before: fastResult.beforeRef,
+              version: cloneVersionVector(this._version),
+              locator,
+            };
+          }
+          // Fall through to slow path when split parts would be out of order
+        } else {
+          // Boundary insert: O(log² n) to find index + O(log n) to insert (mutable)
+          const insertIdx = this.findTreeInsertIndex(newFrag);
+          this.fragments.insertAtMut(insertIdx, newFrag);
+          this.addToFragmentIndex(opId);
+
+          return {
+            type: "insert",
+            id: opId,
+            text,
+            after: fastResult.afterRef,
+            before: fastResult.beforeRef,
+            version: cloneVersionVector(this._version),
+            locator,
+          };
+        }
       }
     }
 
-    // Standard path: split cases or when fast path unavailable
+    // Standard path: live snapshots, empty tree, or interleaving split — use array-based approach
     const frags = this.fragmentsArray();
 
     // Find the position to insert: seek to the visible offset
@@ -785,25 +825,14 @@ export class TextBuffer {
     // Create the new fragment
     const newFrag = createFragment(opId, 0, locator, text, true);
 
-    // Apply changes using direct tree operations when possible
-    // Note: When there are live snapshots, we must use setFragments to create
+    // When there are live snapshots, we must use setFragments to create
     // a new tree with a separate arena, since insertAt shares the arena and
     // GC could incorrectly free nodes still referenced by snapshots.
-    if (splitInfo !== undefined || this._liveSnapshots > 0) {
-      // Split case or live snapshots: use array-based approach (O(n))
-      this.insertFragmentByLocator(frags, newFrag);
-      // Must sort after splits: split parts get new locators that may need to
-      // interleave with other fragments (e.g., [...,8] must come after [...,4,10])
-      if (splitInfo !== undefined) {
-        sortFragments(frags);
-      }
-      this.setFragments(frags);
-    } else {
-      // No split and no snapshots: use direct tree insertion (O(log n))
-      const insertIdx = this.findTreeInsertIndex(newFrag);
-      this.fragments = this.fragments.insertAt(insertIdx, newFrag);
-      this.addToFragmentIndex(opId);
+    this.insertFragmentByLocator(frags, newFrag);
+    if (splitInfo !== undefined) {
+      sortFragments(frags);
     }
+    this.setFragments(frags);
 
     return {
       type: "insert",
@@ -1030,8 +1059,8 @@ export class TextBuffer {
 
   /**
    * Try to find insert position using cursor-based seeking (O(log n)).
-   * Returns null if a split would be required (must use O(n) array path).
-   * Only handles boundary inserts (at fragment start or end).
+   * Returns null only when the tree is empty or cursor fails.
+   * Handles both boundary inserts and mid-fragment splits.
    */
   private tryFindInsertPositionFast(offset: number): {
     leftLocator: Locator;
@@ -1039,6 +1068,12 @@ export class TextBuffer {
     insertLocator?: Locator;
     afterRef: { insertionId: OperationId; offset: number };
     beforeRef: { insertionId: OperationId; offset: number };
+    /** Present when insert requires splitting an existing fragment */
+    splitInfo?: {
+      index: number;
+      left: Fragment;
+      right: Fragment;
+    };
   } | null {
     const totalVisibleLen = this.fragments.summary().visibleLen;
 
@@ -1182,8 +1217,31 @@ export class TextBuffer {
       };
     }
 
-    // Split case: offset is inside the fragment, must use O(n) path
-    return null;
+    // Split case: offset is inside the fragment — handle with O(log n) replaceAtMut
+    const [left, right] = splitFragment(currentFrag, localOffset);
+    const k = right.insertionOffset;
+    const insertLocator: Locator = {
+      levels: [...currentFrag.baseLocator.levels, 2 * k - 1],
+    };
+
+    return {
+      leftLocator: left.locator,
+      rightLocator: right.locator,
+      insertLocator,
+      afterRef: {
+        insertionId: left.insertionId,
+        offset: left.insertionOffset + left.length,
+      },
+      beforeRef: {
+        insertionId: right.insertionId,
+        offset: right.insertionOffset,
+      },
+      splitInfo: {
+        index: cursor.itemIndex(),
+        left,
+        right,
+      },
+    };
   }
 
   // ---------------------------------------------------------------------------
@@ -1220,8 +1278,8 @@ export class TextBuffer {
   }
 
   /**
-   * Attempt fast O(log n) delete when boundaries align with fragments.
-   * Returns null if splits are required (must use slow path).
+   * Attempt fast O(log n) delete, handling single-fragment splits with replaceAtMut.
+   * Returns null for splits or boundary misalignment requiring O(n) path.
    */
   private tryDeleteFast(
     start: number,
@@ -1236,25 +1294,94 @@ export class TextBuffer {
     cursor.seekForward(start, "right");
 
     if (cursor.atEnd) {
-      // Start is past end of document - nothing to delete
       return { ranges };
     }
 
-    // Check if start aligns with a fragment boundary
     const startFrag = cursor.item();
     if (startFrag === undefined) {
       return { ranges };
     }
 
-    // position is the cumulative visible length BEFORE the current item
     const startFragVisibleStart = cursor.position;
 
-    // If start doesn't align with the fragment's visible start, we need a split
+    // Handle start split: delete range starts inside a fragment
     if (start !== startFragVisibleStart) {
-      return null; // Need split, use slow path
+      const localOffset = start - startFragVisibleStart;
+      const fragEnd = startFragVisibleStart + startFrag.length;
+
+      // Only handle single-fragment deletes (range fully within this fragment)
+      if (end <= fragEnd) {
+        const startIdx = cursor.itemIndex();
+        const treeLen = this.fragments.length();
+
+        if (end === fragEnd) {
+          // Split into [keep, deleted]
+          const [keepPart, deletedPart] = splitFragment(startFrag, localOffset);
+          const deleted = deleteFragment(deletedPart, opId);
+
+          // Verify ordering with neighbors before mutating
+          let canSplitInPlace = true;
+          if (startIdx > 0) {
+            const pred = this.fragments.get(startIdx - 1);
+            if (pred && this.compareFragmentsForSort(keepPart, pred) < 0) {
+              canSplitInPlace = false;
+            }
+          }
+          if (canSplitInPlace && startIdx + 1 < treeLen) {
+            const succ = this.fragments.get(startIdx + 1);
+            if (succ && this.compareFragmentsForSort(deleted, succ) > 0) {
+              canSplitInPlace = false;
+            }
+          }
+
+          if (canSplitInPlace) {
+            this.fragments.replaceAtMut(startIdx, [keepPart, deleted]);
+            ranges.push({
+              insertionId: deletedPart.insertionId,
+              offset: deletedPart.insertionOffset,
+              length: deletedPart.length,
+            });
+            return { ranges };
+          }
+        } else {
+          // Split into [keep, deleted, keep]
+          const [beforePart, rest] = splitFragment(startFrag, localOffset);
+          const deleteLen = end - start;
+          const [deletedPart, afterPart] = splitFragment(rest, deleteLen);
+          const deleted = deleteFragment(deletedPart, opId);
+
+          // Verify ordering with neighbors
+          let canSplitInPlace = true;
+          if (startIdx > 0) {
+            const pred = this.fragments.get(startIdx - 1);
+            if (pred && this.compareFragmentsForSort(beforePart, pred) < 0) {
+              canSplitInPlace = false;
+            }
+          }
+          if (canSplitInPlace && startIdx + 1 < treeLen) {
+            const succ = this.fragments.get(startIdx + 1);
+            if (succ && this.compareFragmentsForSort(afterPart, succ) > 0) {
+              canSplitInPlace = false;
+            }
+          }
+
+          if (canSplitInPlace) {
+            this.fragments.replaceAtMut(startIdx, [beforePart, deleted, afterPart]);
+            ranges.push({
+              insertionId: deletedPart.insertionId,
+              offset: deletedPart.insertionOffset,
+              length: deletedPart.length,
+            });
+            return { ranges };
+          }
+        }
+      }
+
+      // Fall back to slow path
+      return null;
     }
 
-    // Collect fragments to delete, checking for alignment at each step
+    // Start aligns with fragment boundary — collect fragments to delete/split
     const indicesToDelete: number[] = [];
     let currentVisibleOffset = start;
 
@@ -1263,7 +1390,6 @@ export class TextBuffer {
       if (frag === undefined) break;
 
       if (!frag.visible) {
-        // Skip invisible fragments - they don't contribute to visible offset
         cursor.next();
         continue;
       }
@@ -1271,7 +1397,6 @@ export class TextBuffer {
       const fragVisibleEnd = currentVisibleOffset + frag.length;
 
       if (fragVisibleEnd <= end) {
-        // Fragment is entirely within delete range
         indicesToDelete.push(cursor.itemIndex());
         ranges.push({
           insertionId: frag.insertionId,
@@ -1281,12 +1406,12 @@ export class TextBuffer {
         currentVisibleOffset = fragVisibleEnd;
         cursor.next();
       } else {
-        // Fragment extends past end - would need split
-        return null; // Use slow path
+        // Fragment extends past end — would need split, use slow path
+        return null;
       }
     }
 
-    // All boundaries align! Apply the edits in-place
+    // All boundaries aligned — apply in-place deletes
     for (const index of indicesToDelete) {
       this.fragments.editAtIndex(index, (frag) => deleteFragment(frag, opId));
     }
