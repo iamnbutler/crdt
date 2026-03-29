@@ -58,6 +58,8 @@
     "bench:memory:ci": "bun run benchmarks/memory.ts --ci",
     "bench:compare": "bun run benchmarks/comparison.ts",
     "bench:compare:ci": "bun run benchmarks/comparison.ts --ci",
+    "bench:wasm": "bun run benchmarks/wasm-locator.ts",
+    "build:wasm": "bun run src/wasm/compile.ts",
     "bench:all": "bun run bench && bun run bench:text && bun run bench:sum-tree && bun run bench:anchor && bun run bench:memory",
     "fixtures:download": "bun run scripts/download-fixtures.ts",
     "bench:record": "bun run scripts/record-benchmarks.ts",
@@ -72,6 +74,7 @@
     "loro-crdt": "^1.10.8",
     "mitata": "1.0.34",
     "typescript": "5.7.2",
+    "wabt": "^1.0.39",
     "yjs": "^13.6.30"
   }
 }
