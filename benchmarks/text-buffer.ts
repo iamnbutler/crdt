@@ -12,7 +12,8 @@
  */
 
 import { bench, group, run } from "mitata";
-import { TextBuffer } from "../src/text/index.js";
+import { TextBuffer, sortFragments } from "../src/text/index.js";
+import type { Fragment } from "../src/text/index.js";
 import { loadEditingTrace } from "./fixtures.js";
 import { type DocumentSize, generateSyntheticDocument } from "./synthetic.js";
 
@@ -321,6 +322,56 @@ group("text-apply-remote", () => {
     }
     return target;
   });
+});
+
+// ---------------------------------------------------------------------------
+// Fragment Bulk Sort
+// ---------------------------------------------------------------------------
+
+// Build a fragmented buffer with `count` fragments via single-char inserts.
+// Each single-char insert creates exactly one fragment. Inserts at the end
+// are fast and produce fragments with distinct locators for sort benchmarking.
+function createFragmentedBuffer(count: number): TextBuffer {
+  const buf = TextBuffer.create("replica-0");
+  for (let i = 0; i < count; i++) {
+    buf.insert(buf.length, String.fromCharCode(97 + (i % 26)));
+  }
+  return buf;
+}
+
+const fragmentCounts = [1_000, 10_000, 50_000];
+
+console.log("Generating fragmented buffers for sort benchmarks...");
+const fragmentedBuffers: Record<number, { buf: TextBuffer; frags: Fragment[] }> = {};
+for (const count of fragmentCounts) {
+  const buf = createFragmentedBuffer(count);
+  const frags = buf.getFragments();
+  fragmentedBuffers[count] = { buf, frags };
+  console.log(`  ${count.toLocaleString()} target → ${frags.length.toLocaleString()} fragments`);
+}
+console.log("Fragmented buffers ready.\n");
+
+group("fragment-bulk-sort", () => {
+  for (const count of fragmentCounts) {
+    const entry = fragmentedBuffers[count];
+    if (entry === undefined) continue;
+    const label = count >= 1000 ? `${count / 1000}K` : `${count}`;
+
+    // Benchmark raw Array.sort() with the comparator
+    bench(`raw sort (${label} fragments)`, () => {
+      const copy = entry.frags.slice();
+      sortFragments(copy);
+      return copy;
+    });
+
+    // Benchmark sort + tree rebuild (sortFragments + setFragments)
+    bench(`sort + tree rebuild (${label} fragments)`, () => {
+      const copy = entry.frags.slice();
+      sortFragments(copy);
+      entry.buf.rebuildFromFragments(copy);
+      return entry.buf;
+    });
+  }
 });
 
 // ---------------------------------------------------------------------------
