@@ -743,22 +743,40 @@ export class TextBuffer {
       }
     }
 
-    // Fast path: use cursor-based seeking for boundary inserts (no splits)
+    // Fast path: use cursor-based seeking for O(log n) inserts (including splits)
     // Skip fast path when there are live snapshots (mutations would corrupt them)
     if (this._liveSnapshots === 0 && !this.fragments.isEmpty()) {
       const fastResult = this.tryFindInsertPositionFast(offset);
       if (fastResult !== null) {
-        // Boundary insert: no split needed, use O(log n) operations
-        // Use insertLocator if provided, otherwise fall back to locatorBetween
         const locator =
           fastResult.insertLocator ??
           locatorBetween(fastResult.leftLocator, fastResult.rightLocator);
         const newFrag = createFragment(opId, 0, locator, text, true);
 
-        // O(log² n) to find index + O(log n) to insert
-        const insertIdx = this.findTreeInsertIndex(newFrag);
-        this.fragments = this.fragments.insertAt(insertIdx, newFrag);
-        this.addToFragmentIndex(opId);
+        if (fastResult.splitInfo !== undefined) {
+          // Split case: replace original fragment with left part using O(log n) replaceAtMut,
+          // then insert right part and new fragment at their correct locator-ordered positions.
+          // This avoids the O(n) extractAll + sort + fromItems() rebuild.
+          const { treeIndex, left, right } = fastResult.splitInfo;
+
+          // Replace original with just the left part (same or nearby position in locator order)
+          this.fragments.replaceAtMut(treeIndex, [left]);
+
+          // Insert right part at its correct locator-ordered position
+          const rightIdx = this.findTreeInsertIndex(right);
+          this.fragments.insertAtMut(rightIdx, right);
+
+          // Insert new fragment at its correct locator-ordered position
+          const insertIdx = this.findTreeInsertIndex(newFrag);
+          this.fragments.insertAtMut(insertIdx, newFrag);
+          this.addToFragmentIndex(opId);
+        } else {
+          // Boundary insert: no split needed, use O(log n) mutable operations
+          // Safe to mutate since we already checked _liveSnapshots === 0
+          const insertIdx = this.findTreeInsertIndex(newFrag);
+          this.fragments.insertAtMut(insertIdx, newFrag);
+          this.addToFragmentIndex(opId);
+        }
 
         return {
           type: "insert",
@@ -772,7 +790,7 @@ export class TextBuffer {
       }
     }
 
-    // Standard path: split cases or when fast path unavailable
+    // Standard path: live snapshots or empty tree (fast path unavailable)
     const frags = this.fragmentsArray();
 
     // Find the position to insert: seek to the visible offset
@@ -1039,6 +1057,11 @@ export class TextBuffer {
     insertLocator?: Locator;
     afterRef: { insertionId: OperationId; offset: number };
     beforeRef: { insertionId: OperationId; offset: number };
+    splitInfo?: {
+      treeIndex: number;
+      left: Fragment;
+      right: Fragment;
+    };
   } | null {
     const totalVisibleLen = this.fragments.summary().visibleLen;
 
@@ -1182,8 +1205,37 @@ export class TextBuffer {
       };
     }
 
-    // Split case: offset is inside the fragment, must use O(n) path
-    return null;
+    // Split case: offset is inside the fragment
+    // Use O(log n) tree operations: replaceAtMut + insertAtMut
+    const splitPoint = localOffset;
+    const [leftPart, rightPart] = splitFragment(currentFrag, splitPoint);
+
+    // Compute explicit Locator using the 2*k-1 scheme
+    const k = rightPart.insertionOffset;
+    const insertLocator: Locator = {
+      levels: [...currentFrag.baseLocator.levels, 2 * k - 1],
+    };
+
+    const treeIndex = cursor.itemIndex();
+
+    return {
+      leftLocator: leftPart.locator,
+      rightLocator: rightPart.locator,
+      insertLocator,
+      afterRef: {
+        insertionId: leftPart.insertionId,
+        offset: leftPart.insertionOffset + leftPart.length,
+      },
+      beforeRef: {
+        insertionId: rightPart.insertionId,
+        offset: rightPart.insertionOffset,
+      },
+      splitInfo: {
+        treeIndex,
+        left: leftPart,
+        right: rightPart,
+      },
+    };
   }
 
   // ---------------------------------------------------------------------------
