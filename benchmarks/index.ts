@@ -25,6 +25,7 @@ import {
   textSummaryOps,
 } from "../src/sum-tree/index.js";
 import { TextBuffer } from "../src/text/index.js";
+import { OperationBatcher } from "../src/text/operation-batcher.js";
 import { loadEditingTrace } from "./fixtures.js";
 import { type DocumentSize, generateSyntheticDocument } from "./synthetic.js";
 
@@ -437,6 +438,65 @@ if (editingTrace) {
               buf.insert(Math.min(op.position, buf.length), op.insertText);
             }
           }
+          return buf;
+        },
+      );
+    });
+  }
+  // ---------------------------------------------------------------------------
+  // Batched trace replay (OperationBatcher coalescing)
+  // ---------------------------------------------------------------------------
+
+  group("editing-trace-batched", () => {
+    for (const count of [1000, 10000, 50000]) {
+      if (count > editingTrace.operations.length) continue;
+      const subset = editingTrace.operations.slice(0, count);
+
+      bench(`batched replay ${count.toLocaleString()} ops`, () => {
+        const buf = TextBuffer.create();
+        const batcher = new OperationBatcher(buf, { flushDelay: 0, maxBatchSize: 200 });
+        for (const op of subset) {
+          if (op.deleteCount > 0) {
+            const len = batcher.getLength();
+            if (len > 0) {
+              const start = Math.min(op.position, len);
+              const end = Math.min(op.position + op.deleteCount, len);
+              if (end > start) batcher.delete(start, end);
+            }
+          }
+          if (op.insertText) {
+            const len = batcher.getLength();
+            batcher.insert(Math.min(op.position, len), op.insertText);
+          }
+        }
+        batcher.flush();
+        return buf;
+      });
+    }
+  });
+
+  if (!isCI) {
+    group("editing-trace-batched-full", () => {
+      bench(
+        `batched replay full trace (${editingTrace.operations.length.toLocaleString()} ops)`,
+        () => {
+          const buf = TextBuffer.create();
+          const batcher = new OperationBatcher(buf, { flushDelay: 0, maxBatchSize: 200 });
+          for (const op of editingTrace.operations) {
+            if (op.deleteCount > 0) {
+              const len = batcher.getLength();
+              if (len > 0) {
+                const start = Math.min(op.position, len);
+                const end = Math.min(op.position + op.deleteCount, len);
+                if (end > start) batcher.delete(start, end);
+              }
+            }
+            if (op.insertText) {
+              const len = batcher.getLength();
+              batcher.insert(Math.min(op.position, len), op.insertText);
+            }
+          }
+          batcher.flush();
           return buf;
         },
       );
