@@ -86,6 +86,10 @@ export {
 // TextBuffer
 export { TextBuffer } from "./text-buffer.js";
 
+// Operation Batcher
+export { OperationBatcher } from "./operation-batcher.js";
+export type { OperationBatcherOptions } from "./operation-batcher.js";
+
 // Snapshot
 export { TextBufferSnapshot } from "./snapshot.js";
 
