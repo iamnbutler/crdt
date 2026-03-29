@@ -743,21 +743,19 @@ export class TextBuffer {
       }
     }
 
-    // Fast path: use cursor-based seeking for boundary inserts (no splits)
+    // Fast path: use cursor-based seeking for O(log n) boundary inserts
     // Skip fast path when there are live snapshots (mutations would corrupt them)
     if (this._liveSnapshots === 0 && !this.fragments.isEmpty()) {
       const fastResult = this.tryFindInsertPositionFast(offset);
-      if (fastResult !== null) {
-        // Boundary insert: no split needed, use O(log n) operations
-        // Use insertLocator if provided, otherwise fall back to locatorBetween
+      if (fastResult !== null && fastResult.splitInfo === undefined) {
+        // Boundary insert: no split needed, use O(log n) in-place mutation
         const locator =
           fastResult.insertLocator ??
           locatorBetween(fastResult.leftLocator, fastResult.rightLocator);
         const newFrag = createFragment(opId, 0, locator, text, true);
 
-        // O(log² n) to find index + O(log n) to insert
         const insertIdx = this.findTreeInsertIndex(newFrag);
-        this.fragments = this.fragments.insertAt(insertIdx, newFrag);
+        this.fragments.insertAtMut(insertIdx, newFrag);
         this.addToFragmentIndex(opId);
 
         return {
@@ -798,8 +796,13 @@ export class TextBuffer {
         sortFragments(frags);
       }
       this.setFragments(frags);
+    } else if (this._liveSnapshots === 0) {
+      // No split and no snapshots: use direct tree mutation (O(log n))
+      const insertIdx = this.findTreeInsertIndex(newFrag);
+      this.fragments.insertAtMut(insertIdx, newFrag);
+      this.addToFragmentIndex(opId);
     } else {
-      // No split and no snapshots: use direct tree insertion (O(log n))
+      // No split but live snapshots: use immutable insertion (O(log n) + path copying)
       const insertIdx = this.findTreeInsertIndex(newFrag);
       this.fragments = this.fragments.insertAt(insertIdx, newFrag);
       this.addToFragmentIndex(opId);
@@ -1030,8 +1033,8 @@ export class TextBuffer {
 
   /**
    * Try to find insert position using cursor-based seeking (O(log n)).
-   * Returns null if a split would be required (must use O(n) array path).
-   * Only handles boundary inserts (at fragment start or end).
+   * Returns null only if cursor navigation fails.
+   * Handles both boundary inserts and split cases.
    */
   private tryFindInsertPositionFast(offset: number): {
     leftLocator: Locator;
@@ -1039,6 +1042,11 @@ export class TextBuffer {
     insertLocator?: Locator;
     afterRef: { insertionId: OperationId; offset: number };
     beforeRef: { insertionId: OperationId; offset: number };
+    splitInfo?: {
+      fragTreeIndex: number;
+      left: Fragment;
+      right: Fragment;
+    };
   } | null {
     const totalVisibleLen = this.fragments.summary().visibleLen;
 
@@ -1182,8 +1190,35 @@ export class TextBuffer {
       };
     }
 
-    // Split case: offset is inside the fragment, must use O(n) path
-    return null;
+    // Split case: offset is inside the fragment
+    // Use cursor to get tree index for O(log n) incremental operations
+    const fragTreeIndex = cursor.itemIndex();
+    const [left, right] = splitFragment(currentFrag, localOffset);
+
+    // Compute explicit Locator using the 2*k-1 scheme
+    const k = right.insertionOffset;
+    const insertLocator: Locator = {
+      levels: [...currentFrag.baseLocator.levels, 2 * k - 1],
+    };
+
+    return {
+      leftLocator: left.locator,
+      rightLocator: right.locator,
+      insertLocator,
+      afterRef: {
+        insertionId: left.insertionId,
+        offset: left.insertionOffset + left.length,
+      },
+      beforeRef: {
+        insertionId: right.insertionId,
+        offset: right.insertionOffset,
+      },
+      splitInfo: {
+        fragTreeIndex,
+        left,
+        right,
+      },
+    };
   }
 
   // ---------------------------------------------------------------------------
