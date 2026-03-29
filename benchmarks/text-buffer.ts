@@ -12,7 +12,14 @@
  */
 
 import { bench, group, run } from "mitata";
-import { TextBuffer } from "../src/text/index.js";
+import { SumTree } from "../src/sum-tree/index.js";
+import {
+  TextBuffer,
+  fragmentSummaryOps,
+  generateReplicaId,
+  sortFragments,
+} from "../src/text/index.js";
+import type { Fragment, FragmentSummary } from "../src/text/index.js";
 import { loadEditingTrace } from "./fixtures.js";
 import { type DocumentSize, generateSyntheticDocument } from "./synthetic.js";
 
@@ -321,6 +328,66 @@ group("text-apply-remote", () => {
     }
     return target;
   });
+});
+
+// ---------------------------------------------------------------------------
+// Fragment Bulk Sort (baseline for #117 GPU-accelerated sorting exploration)
+// ---------------------------------------------------------------------------
+
+// Build a fragmented buffer by interleaving single-char inserts from multiple
+// replicas.  This maximises fragment count and exercises the comparator
+// realistically (interleaved locators + different operation IDs).
+function createFragmentedBuffer(fragmentCount: number): TextBuffer {
+  const replicaCount = 4;
+  const replicas: TextBuffer[] = [];
+  for (let i = 0; i < replicaCount; i++) {
+    replicas.push(TextBuffer.create(generateReplicaId()));
+  }
+  const buf = TextBuffer.create(generateReplicaId());
+
+  for (let i = 0; i < fragmentCount; i++) {
+    // Rotate across replicas so locators interleave
+    const source = replicas[i % replicaCount] as TextBuffer;
+    const op = source.insert(0, String.fromCharCode(65 + (i % 26)));
+    buf.applyRemote(op);
+  }
+
+  return buf;
+}
+
+const fragmentCounts = [1_000, 10_000, 50_000];
+
+console.log("Generating fragmented buffers for sort benchmarks...");
+const fragmentedBuffers: Record<number, { buf: TextBuffer; frags: Fragment[] }> = {};
+for (const count of fragmentCounts) {
+  const buf = createFragmentedBuffer(count);
+  const frags = buf.getFragments();
+  fragmentedBuffers[count] = { buf, frags };
+  console.log(`  ${count.toLocaleString()} fragments: ${frags.length.toLocaleString()} actual`);
+}
+console.log("Fragmented buffers ready.\n");
+
+group("fragment-bulk-sort", () => {
+  for (const count of fragmentCounts) {
+    const entry = fragmentedBuffers[count];
+    if (entry === undefined) continue;
+    const label = count >= 1000 ? `${count / 1000}K` : `${count}`;
+
+    // Bench 1: raw Array.sort() with the comparator only
+    bench(`raw sort (${label} fragments)`, () => {
+      const copy = entry.frags.slice();
+      sortFragments(copy);
+      return copy;
+    });
+
+    // Bench 2: sort + SumTree rebuild + fragment ID index rebuild
+    bench(`sort + tree rebuild (${label} fragments)`, () => {
+      const copy = entry.frags.slice();
+      sortFragments(copy);
+      const tree = SumTree.fromItems<Fragment, FragmentSummary>(copy, fragmentSummaryOps);
+      return tree;
+    });
+  }
 });
 
 // ---------------------------------------------------------------------------

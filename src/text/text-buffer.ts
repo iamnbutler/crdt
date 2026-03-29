@@ -98,7 +98,7 @@ function compareLocatorsForSort(a: Locator, b: Locator): number {
  * 2. Split parts of the same operation sort by offset
  * 3. Child locators sort after parent locators with lower operation IDs
  */
-function sortFragments(frags: Fragment[]): void {
+export function sortFragments(frags: Fragment[]): void {
   frags.sort((a, b) => {
     // First, compare by locator prefix
     const locCmp = compareLocatorsForSort(a.locator, b.locator);
@@ -1904,8 +1904,13 @@ export class TextBuffer {
   // ---------------------------------------------------------------------------
 
   /** Get all fragments as an array. */
-  private fragmentsArray(): Fragment[] {
+  getFragments(): Fragment[] {
     return this.fragments.toArray();
+  }
+
+  /** @internal Alias kept for internal callers. */
+  private fragmentsArray(): Fragment[] {
+    return this.getFragments();
   }
 
   /** Check if an operation has already been applied. O(1) numeric lookup. */
