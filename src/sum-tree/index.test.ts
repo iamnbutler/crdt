@@ -320,6 +320,33 @@ describe("SumTree", () => {
       expect(invariants.valid).toBe(true);
     });
 
+    it("preserves item order when redistributing with right sibling (BF=4)", () => {
+      // Regression test: redistributeNodes leaf case previously used
+      // total.reverse() which scrambled individual item order when the
+      // sibling was to the right. The fix uses conditional spread order
+      // matching the internal-node pattern.
+      let tree = new SumTree<CountItem, CountSummary>(countSummaryOps, 4);
+
+      // Build a tree that will trigger right-sibling redistribution on delete
+      for (let i = 0; i < 16; i++) {
+        tree = tree.push(new CountItem(i));
+      }
+
+      // Delete from the left to trigger redistribution with a right sibling
+      for (let i = 0; i < 8; i++) {
+        tree = tree.removeAt(0);
+        const arr = tree.toArray().map((x) => x.value);
+        // Items should remain in ascending order
+        for (let j = 1; j < arr.length; j++) {
+          expect(arr[j]).toBeGreaterThan(arr[j - 1] as number);
+        }
+        const invariants = tree.checkInvariants();
+        expect(invariants.valid).toBe(true);
+      }
+
+      expect(tree.toArray().map((x) => x.value)).toEqual([8, 9, 10, 11, 12, 13, 14, 15]);
+    });
+
     it("maintains all leaves at same depth", () => {
       let tree = new SumTree<CountItem, CountSummary>(countSummaryOps, 4);
 

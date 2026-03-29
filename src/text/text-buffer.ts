@@ -1446,23 +1446,14 @@ export class TextBuffer {
       this.fragments.insertAtMut(insertIndex, newFrag);
       this.addToFragmentIndex(op.id);
     } else if (this._liveSnapshots === 0) {
-      // Splits needed: use array for splits, then direct tree insertion
-      // NOTE: Incremental tree splits were attempted but SumTree.removeAt() has bugs
-      // that corrupt the tree structure. Using array-based approach for now.
-      const frags = this.fragmentsArray();
-
+      // Splits needed: use O(log n) tree operations directly
       if (needsAfterSplit) {
-        this.findRefIndex(frags, op.after, "after");
+        this.splitRefInTree(op.after, "after");
       }
       if (needsBeforeSplit) {
-        this.findRefIndex(frags, op.before, "before");
+        this.splitRefInTree(op.before, "before");
       }
 
-      // After splits, re-sort and rebuild tree, then use direct insertion
-      sortFragments(frags);
-      this.setFragments(frags);
-
-      // Now use O(log² n) insertion for the new fragment
       const insertIndex = this.findTreeInsertIndex(newFrag);
       this.fragments.insertAtMut(insertIndex, newFrag);
       this.addToFragmentIndex(op.id);
@@ -1684,12 +1675,6 @@ export class TextBuffer {
    * modifying the array, sorting, and rebuilding the tree (O(n)), we find
    * the fragment that needs splitting and modify the tree directly.
    *
-   * BLOCKING ISSUE: SumTree.removeAt() has bugs that corrupt the tree structure
-   * during rebalancing (mergeOrRedistribute). Until this is fixed, we must use
-   * the array-based approach in findRefIndex + sortFragments + setFragments.
-   *
-   * See: https://github.com/iamnbutler/crdt/issues/158
-   *
    * @returns true if a split was performed, false if no split was needed
    *          (either exact match found or reference not found)
    */
@@ -1733,8 +1718,6 @@ export class TextBuffer {
         const splitPoint = ref.offset - frag.insertionOffset;
         const [leftPart, rightPart] = splitFragment(frag, splitPoint);
 
-        // NOTE: This approach is currently broken due to SumTree.removeAt() bugs.
-        // See the array-based approach in applyRemoteInsertDirect instead.
         this.fragments = this.fragments.removeAt(index);
 
         const leftIdx = this.findTreeInsertIndex(leftPart);
