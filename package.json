@@ -33,6 +33,14 @@
     "./anchor": {
       "types": "./dist/anchor/index.d.ts",
       "import": "./dist/anchor/index.js"
+    },
+    "./worker": {
+      "types": "./dist/worker/index.d.ts",
+      "import": "./dist/worker/index.js"
+    },
+    "./worker/crdt-worker": {
+      "types": "./dist/worker/crdt-worker.d.ts",
+      "import": "./dist/worker/crdt-worker.js"
     }
   },
   "files": [
@@ -40,7 +48,7 @@
   ],
   "scripts": {
     "build": "bun run build:js && bun run build:types",
-    "build:js": "bun build ./src/index.ts ./src/arena/index.ts ./src/sum-tree/index.ts ./src/rope/index.ts ./src/text/index.ts ./src/protocol/index.ts ./src/anchor/index.ts --outdir ./dist --target node --splitting",
+    "build:js": "bun build ./src/index.ts ./src/arena/index.ts ./src/sum-tree/index.ts ./src/rope/index.ts ./src/text/index.ts ./src/protocol/index.ts ./src/anchor/index.ts ./src/worker/index.ts ./src/worker/crdt-worker.ts --outdir ./dist --target node --splitting",
     "build:types": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
