@@ -83,6 +83,18 @@ export {
   withVisibility,
 } from "./fragment.js";
 
+// Fragment Store (SoA layout)
+export {
+  FragmentStore,
+  FragmentRef,
+  createStoredFragment,
+  splitStoredFragment,
+  deleteStoredFragment,
+  withStoredVisibility,
+  isFragmentRef,
+} from "./fragment-store.js";
+export type { FragmentHandle } from "./fragment-store.js";
+
 // TextBuffer
 export { TextBuffer } from "./text-buffer.js";
 

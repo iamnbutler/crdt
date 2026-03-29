@@ -20,14 +20,13 @@ import {
   observeVersion,
 } from "./clock.js";
 import {
-  createFragment,
-  deleteFragment,
-  fragmentSummaryOps,
-  itemCountDimension,
-  splitFragment,
-  visibleLenDimension,
-  withVisibility,
-} from "./fragment.js";
+  FragmentStore,
+  createStoredFragment,
+  deleteStoredFragment,
+  splitStoredFragment,
+  withStoredVisibility,
+} from "./fragment-store.js";
+import { fragmentSummaryOps, itemCountDimension, visibleLenDimension } from "./fragment.js";
 import { MAX_LOCATOR, MIN_LOCATOR, compareLocators, locatorBetween } from "./locator.js";
 import {
   SERIALIZATION_VERSION,
@@ -145,6 +144,9 @@ export class TextBuffer {
   private undoMap: UndoMap;
   private _version: VersionVector;
 
+  /** SoA backing store for fragment data — provides cache-friendly typed array storage. */
+  private _store: FragmentStore;
+
   // Transaction tracking
   private nextTransactionId: number;
   private activeTransaction: Transaction | null;
@@ -180,6 +182,7 @@ export class TextBuffer {
     this.fragments = new SumTree<Fragment, FragmentSummary>(fragmentSummaryOps);
     this.undoMap = new UndoMap();
     this._version = createVersionVector();
+    this._store = new FragmentStore();
     this.nextTransactionId = 0;
     this.activeTransaction = null;
     this.transactionHistory = [];
@@ -225,7 +228,7 @@ export class TextBuffer {
 
       // Use a simple locator between MIN and MAX
       const locator = locatorBetween(MIN_LOCATOR, MAX_LOCATOR);
-      const fragment = createFragment(opId, 0, locator, normalized, true);
+      const fragment = createStoredFragment(buffer._store, opId, 0, locator, normalized, true);
 
       // Build SumTree with single fragment and initialize the insertionId index
       buffer.setFragments([fragment]);
@@ -722,7 +725,7 @@ export class TextBuffer {
 
       if (lastFrag) {
         const locator = locatorBetween(lastFrag.locator, MAX_LOCATOR);
-        const newFrag = createFragment(opId, 0, locator, text, true);
+        const newFrag = createStoredFragment(this._store, opId, 0, locator, text, true);
 
         // O(log n) in-place push (avoids O(n) shallowClone)
         this.fragments.pushMut(newFrag);
@@ -753,7 +756,7 @@ export class TextBuffer {
         const locator =
           fastResult.insertLocator ??
           locatorBetween(fastResult.leftLocator, fastResult.rightLocator);
-        const newFrag = createFragment(opId, 0, locator, text, true);
+        const newFrag = createStoredFragment(this._store, opId, 0, locator, text, true);
 
         // O(log² n) to find index + O(log n) to insert
         const insertIdx = this.findTreeInsertIndex(newFrag);
@@ -783,7 +786,7 @@ export class TextBuffer {
     const locator = insertLocator ?? locatorBetween(leftLocator, rightLocator);
 
     // Create the new fragment
-    const newFrag = createFragment(opId, 0, locator, text, true);
+    const newFrag = createStoredFragment(this._store, opId, 0, locator, text, true);
 
     // Apply changes using direct tree operations when possible
     // Note: When there are live snapshots, we must use setFragments to create
@@ -918,7 +921,12 @@ export class TextBuffer {
           }
 
           // The insert point is strictly inside this fragment — split it
-          const [left, right] = splitFragment(frag, localOffset);
+          const [left, right] = splitStoredFragment(
+            this._store,
+            frag,
+            localOffset,
+            this._safeToFree,
+          );
 
           // Replace the original fragment with the split pair
           frags.splice(i, 1, left, right);
@@ -1288,7 +1296,9 @@ export class TextBuffer {
 
     // All boundaries align! Apply the edits in-place
     for (const index of indicesToDelete) {
-      this.fragments.editAtIndex(index, (frag) => deleteFragment(frag, opId));
+      this.fragments.editAtIndex(index, (frag) =>
+        deleteStoredFragment(this._store, frag, opId, this._safeToFree),
+      );
     }
 
     return { ranges };
@@ -1321,7 +1331,7 @@ export class TextBuffer {
         newFrags.push(frag);
       } else if (fragStart >= start && fragEnd <= end) {
         // Fragment is entirely within the delete range
-        newFrags.push(deleteFragment(frag, opId));
+        newFrags.push(deleteStoredFragment(this._store, frag, opId, this._safeToFree));
         ranges.push({
           insertionId: frag.insertionId,
           offset: frag.insertionOffset,
@@ -1332,11 +1342,21 @@ export class TextBuffer {
         const deleteStart = start - fragStart;
         const deleteEnd = end - fragStart;
 
-        const [beforePart, rest] = splitFragment(frag, deleteStart);
-        const [deletedPart, afterPart] = splitFragment(rest, deleteEnd - deleteStart);
+        const [beforePart, rest] = splitStoredFragment(
+          this._store,
+          frag,
+          deleteStart,
+          this._safeToFree,
+        );
+        const [deletedPart, afterPart] = splitStoredFragment(
+          this._store,
+          rest,
+          deleteEnd - deleteStart,
+          this._safeToFree,
+        );
 
         newFrags.push(beforePart);
-        newFrags.push(deleteFragment(deletedPart, opId));
+        newFrags.push(deleteStoredFragment(this._store, deletedPart, opId, this._safeToFree));
         newFrags.push(afterPart);
 
         ranges.push({
@@ -1347,10 +1367,15 @@ export class TextBuffer {
       } else if (fragStart < start) {
         // Delete range overlaps the end of this fragment
         const splitPoint = start - fragStart;
-        const [keepPart, deletedPart] = splitFragment(frag, splitPoint);
+        const [keepPart, deletedPart] = splitStoredFragment(
+          this._store,
+          frag,
+          splitPoint,
+          this._safeToFree,
+        );
 
         newFrags.push(keepPart);
-        newFrags.push(deleteFragment(deletedPart, opId));
+        newFrags.push(deleteStoredFragment(this._store, deletedPart, opId, this._safeToFree));
 
         ranges.push({
           insertionId: deletedPart.insertionId,
@@ -1360,9 +1385,14 @@ export class TextBuffer {
       } else {
         // Delete range overlaps the start of this fragment (fragEnd > end)
         const splitPoint = end - fragStart;
-        const [deletedPart, keepPart] = splitFragment(frag, splitPoint);
+        const [deletedPart, keepPart] = splitStoredFragment(
+          this._store,
+          frag,
+          splitPoint,
+          this._safeToFree,
+        );
 
-        newFrags.push(deleteFragment(deletedPart, opId));
+        newFrags.push(deleteStoredFragment(this._store, deletedPart, opId, this._safeToFree));
         newFrags.push(keepPart);
 
         ranges.push({
@@ -1401,7 +1431,7 @@ export class TextBuffer {
     for (const frag of frags) {
       const shouldBeVisible = this.undoMap.isVisible(frag.insertionId, frag.deletions);
       if (shouldBeVisible !== frag.visible) {
-        newFrags.push(withVisibility(frag, shouldBeVisible));
+        newFrags.push(withStoredVisibility(this._store, frag, shouldBeVisible, this._safeToFree));
         changed = true;
       } else {
         newFrags.push(frag);
@@ -1434,7 +1464,7 @@ export class TextBuffer {
     // Check the undo map to determine initial visibility - an undo operation
     // for this insert might have arrived before the insert itself.
     const visible = !this.undoMap.isUndone(op.id);
-    const newFrag = createFragment(op.id, 0, op.locator, op.text, visible);
+    const newFrag = createStoredFragment(this._store, op.id, 0, op.locator, op.text, visible);
 
     // Fast path: use O(log n) tree operations when no live snapshots and no splits needed
     const needsAfterSplit = !operationIdsEqual(op.after.insertionId, MIN_OPERATION_ID);
@@ -1612,7 +1642,12 @@ export class TextBuffer {
       // Case 1: Reference falls strictly inside this fragment — split it
       if (ref.offset > frag.insertionOffset && ref.offset < fragEnd) {
         const splitPoint = ref.offset - frag.insertionOffset;
-        const [leftPart, rightPart] = splitFragment(frag, splitPoint);
+        const [leftPart, rightPart] = splitStoredFragment(
+          this._store,
+          frag,
+          splitPoint,
+          this._safeToFree,
+        );
         frags.splice(i, 1, leftPart, rightPart);
         return type === "after" ? i : i + 1;
       }
@@ -1648,7 +1683,12 @@ export class TextBuffer {
         firstFrag.length > 0
       ) {
         // Create zero-length left split to match sender state
-        const [leftPart, rightPart] = splitFragment(firstFrag, 0);
+        const [leftPart, rightPart] = splitStoredFragment(
+          this._store,
+          firstFrag,
+          0,
+          this._safeToFree,
+        );
         frags.splice(firstIdx, 1, leftPart, rightPart);
         return firstIdx; // Return the zero-length fragment's index
       }
@@ -1664,7 +1704,12 @@ export class TextBuffer {
         const lastEnd = lastFrag.insertionOffset + lastFrag.length;
         if (lastEnd === ref.offset && lastFrag.length > 0) {
           // Create zero-length right split to match sender state
-          const [leftPart, rightPart] = splitFragment(lastFrag, lastFrag.length);
+          const [leftPart, rightPart] = splitStoredFragment(
+            this._store,
+            lastFrag,
+            lastFrag.length,
+            this._safeToFree,
+          );
           frags.splice(lastIdx, 1, leftPart, rightPart);
           return lastIdx + 1; // Return the zero-length fragment's index
         }
@@ -1731,7 +1776,12 @@ export class TextBuffer {
       // Case 1: Reference falls strictly inside this fragment — split it
       if (ref.offset > frag.insertionOffset && ref.offset < fragEnd) {
         const splitPoint = ref.offset - frag.insertionOffset;
-        const [leftPart, rightPart] = splitFragment(frag, splitPoint);
+        const [leftPart, rightPart] = splitStoredFragment(
+          this._store,
+          frag,
+          splitPoint,
+          this._safeToFree,
+        );
 
         // NOTE: This approach is currently broken due to SumTree.removeAt() bugs.
         // See the array-based approach in applyRemoteInsertDirect instead.
@@ -1766,7 +1816,12 @@ export class TextBuffer {
       const { index: matchIndex, frag: matchFrag } = firstMatch;
       if (matchFrag.insertionOffset === ref.offset && matchFrag.length > 0) {
         // Create zero-length left split to match sender state
-        const [leftPart, rightPart] = splitFragment(matchFrag, 0);
+        const [leftPart, rightPart] = splitStoredFragment(
+          this._store,
+          matchFrag,
+          0,
+          this._safeToFree,
+        );
         this.fragments = this.fragments.removeAt(matchIndex);
         const leftIdx = this.findTreeInsertIndex(leftPart);
         this.fragments.insertAtMut(leftIdx, leftPart);
@@ -1781,7 +1836,12 @@ export class TextBuffer {
       const matchFragEnd = matchFrag.insertionOffset + matchFrag.length;
       if (matchFragEnd === ref.offset && matchFrag.length > 0) {
         // Create zero-length right split to match sender state
-        const [leftPart, rightPart] = splitFragment(matchFrag, matchFrag.length);
+        const [leftPart, rightPart] = splitStoredFragment(
+          this._store,
+          matchFrag,
+          matchFrag.length,
+          this._safeToFree,
+        );
         this.fragments = this.fragments.removeAt(matchIndex);
         const leftIdx = this.findTreeInsertIndex(leftPart);
         this.fragments.insertAtMut(leftIdx, leftPart);
@@ -1827,7 +1887,7 @@ export class TextBuffer {
 
         if (fragStart >= rangeStart && fragEnd <= rangeEnd) {
           // Fragment is entirely within the delete range - done with this fragment
-          resultFrags.push(deleteFragment(frag, op.id));
+          resultFrags.push(deleteStoredFragment(this._store, frag, op.id, this._safeToFree));
           wasProcessed = true;
           break;
         }
@@ -1838,11 +1898,21 @@ export class TextBuffer {
           const deleteLocalStart = rangeStart - fragStart;
           const deleteLocalEnd = rangeEnd - fragStart;
 
-          const [beforePart, rest] = splitFragment(frag, deleteLocalStart);
-          const [deletedPart, afterPart] = splitFragment(rest, deleteLocalEnd - deleteLocalStart);
+          const [beforePart, rest] = splitStoredFragment(
+            this._store,
+            frag,
+            deleteLocalStart,
+            this._safeToFree,
+          );
+          const [deletedPart, afterPart] = splitStoredFragment(
+            this._store,
+            rest,
+            deleteLocalEnd - deleteLocalStart,
+            this._safeToFree,
+          );
 
           resultFrags.push(beforePart);
-          resultFrags.push(deleteFragment(deletedPart, op.id));
+          resultFrags.push(deleteStoredFragment(this._store, deletedPart, op.id, this._safeToFree));
           workList.unshift(afterPart); // Re-check against remaining ranges
           wasProcessed = true;
           break;
@@ -1851,10 +1921,15 @@ export class TextBuffer {
         if (fragStart < rangeStart) {
           // Delete range overlaps the end of this fragment
           const splitPoint = rangeStart - fragStart;
-          const [keepPart, deletedPart] = splitFragment(frag, splitPoint);
+          const [keepPart, deletedPart] = splitStoredFragment(
+            this._store,
+            frag,
+            splitPoint,
+            this._safeToFree,
+          );
 
           resultFrags.push(keepPart);
-          resultFrags.push(deleteFragment(deletedPart, op.id));
+          resultFrags.push(deleteStoredFragment(this._store, deletedPart, op.id, this._safeToFree));
           wasProcessed = true;
           break;
         }
@@ -1862,9 +1937,14 @@ export class TextBuffer {
         // Delete range overlaps the start of this fragment (fragEnd > rangeEnd)
         // The "keep" part might still overlap with other ranges, so re-check it.
         const splitPoint = rangeEnd - fragStart;
-        const [deletedPart, keepPart] = splitFragment(frag, splitPoint);
+        const [deletedPart, keepPart] = splitStoredFragment(
+          this._store,
+          frag,
+          splitPoint,
+          this._safeToFree,
+        );
 
-        resultFrags.push(deleteFragment(deletedPart, op.id));
+        resultFrags.push(deleteStoredFragment(this._store, deletedPart, op.id, this._safeToFree));
         workList.unshift(keepPart); // Re-check against remaining ranges
         wasProcessed = true;
         break;
@@ -1902,6 +1982,14 @@ export class TextBuffer {
   // ---------------------------------------------------------------------------
   // Helpers
   // ---------------------------------------------------------------------------
+
+  /**
+   * Whether it's safe to free store handles. False when live snapshots
+   * hold references to old FragmentRef objects that read from the store.
+   */
+  private get _safeToFree(): boolean {
+    return this._liveSnapshots === 0;
+  }
 
   /** Get all fragments as an array. */
   private fragmentsArray(): Fragment[] {
@@ -2048,7 +2136,16 @@ export class TextBuffer {
       const baseLocator = deserializeLocator(sf.base);
       const deletions = sf.del.map(deserializeOperationId);
 
-      return createFragment(insertionId, sf.io, locator, sf.t, sf.v, deletions, baseLocator);
+      return createStoredFragment(
+        buffer._store,
+        insertionId,
+        sf.io,
+        locator,
+        sf.t,
+        sf.v,
+        deletions,
+        baseLocator,
+      );
     });
     buffer.setFragments(fragments);
 
