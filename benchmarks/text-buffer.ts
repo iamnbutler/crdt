@@ -12,9 +12,66 @@
  */
 
 import { bench, group, run } from "mitata";
-import { TextBuffer } from "../src/text/index.js";
+import { SumTree } from "../src/sum-tree/index.js";
+import type { Fragment } from "../src/text/index.js";
+import {
+  TextBuffer,
+  compareLocators,
+  compareOperationIds,
+  createFragment,
+  fragmentSummaryOps,
+  replicaId,
+} from "../src/text/index.js";
 import { loadEditingTrace } from "./fixtures.js";
 import { type DocumentSize, generateSyntheticDocument } from "./synthetic.js";
+
+// ---------------------------------------------------------------------------
+// Fragment Bulk Sort Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * Compare two fragments using the same ordering as TextBuffer's sortFragments.
+ * This is a standalone replica of the comparison for benchmark isolation.
+ */
+function compareFragments(a: Fragment, b: Fragment): number {
+  const locCmp = compareLocators(a.locator, b.locator);
+  if (locCmp !== 0) return locCmp;
+  const idCmp = compareOperationIds(a.insertionId, b.insertionId);
+  if (idCmp !== 0) return idCmp;
+  const offsetCmp = a.insertionOffset - b.insertionOffset;
+  if (offsetCmp !== 0) return offsetCmp;
+  return a.locator.levels.length - b.locator.levels.length;
+}
+
+/**
+ * Build N fragments with deterministic sequential locators.
+ * Uses two alternating replica IDs to simulate multi-replica fragmentation.
+ */
+function buildFragments(n: number): Fragment[] {
+  const rid1 = replicaId(1);
+  const rid2 = replicaId(2);
+  const frags: Fragment[] = [];
+  for (let i = 0; i < n; i++) {
+    const rid = i % 2 === 0 ? rid1 : rid2;
+    frags.push(
+      createFragment({ replicaId: rid, counter: i + 1 }, 0, { levels: [i + 1] }, "x", true),
+    );
+  }
+  return frags;
+}
+
+/** Fisher-Yates shuffle (mutates in place). */
+function shuffle(arr: Fragment[]): void {
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const tmp = arr[i];
+    const other = arr[j];
+    if (tmp !== undefined && other !== undefined) {
+      arr[i] = other;
+      arr[j] = tmp;
+    }
+  }
+}
 
 const isCI = process.argv.includes("--ci");
 
@@ -321,6 +378,59 @@ group("text-apply-remote", () => {
     }
     return target;
   });
+});
+
+// ---------------------------------------------------------------------------
+// Fragment Bulk Sort (baseline for #187)
+//
+// Measures two components of the O(n) slow path in TextBuffer:
+//   1. Array.sort() with the fragment comparator (sortFragments equivalent)
+//   2. SumTree.fromItems() tree rebuild (setFragments equivalent)
+//   3. Combined sort + rebuild (the full slow-path cost)
+//
+// Run with: bun run bench
+// ---------------------------------------------------------------------------
+
+const bulkSortSizes = isCI ? [1_000] : [1_000, 10_000, 50_000];
+
+// Pre-build and pre-shuffle fragment sets (sorted order → random order).
+// Shuffling happens once outside the benchmark iterations so each bench
+// call measures only the sort / rebuild, not setup.
+console.log("Building fragment arrays for bulk sort benchmarks...");
+const fragmentSets: Map<number, Fragment[]> = new Map();
+for (const n of bulkSortSizes) {
+  const frags = buildFragments(n);
+  shuffle(frags);
+  fragmentSets.set(n, frags);
+}
+console.log("Fragment arrays built.\n");
+
+group("fragment-bulk-sort", () => {
+  for (const n of bulkSortSizes) {
+    const baseFrags = fragmentSets.get(n);
+    if (baseFrags === undefined) continue;
+
+    // Benchmark 1: raw Array.sort() with the fragment comparator.
+    // Copies the array each iteration so the sort starts from a shuffled state.
+    bench(`sort ${(n / 1000).toFixed(0)}K fragments (Array.sort)`, () => {
+      const frags = baseFrags.slice();
+      frags.sort(compareFragments);
+      return frags;
+    });
+
+    // Benchmark 2: SumTree.fromItems() (tree rebuild only, already sorted input).
+    const sortedFrags = baseFrags.slice().sort(compareFragments);
+    bench(`rebuild ${(n / 1000).toFixed(0)}K fragments (SumTree.fromItems)`, () => {
+      return SumTree.fromItems(sortedFrags, fragmentSummaryOps);
+    });
+
+    // Benchmark 3: combined sort + rebuild (mirrors TextBuffer's full slow path).
+    bench(`sort+rebuild ${(n / 1000).toFixed(0)}K fragments (slow path)`, () => {
+      const frags = baseFrags.slice();
+      frags.sort(compareFragments);
+      return SumTree.fromItems(frags, fragmentSummaryOps);
+    });
+  }
 });
 
 // ---------------------------------------------------------------------------
