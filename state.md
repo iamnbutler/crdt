@@ -1,30 +1,23 @@
 ---
-last_updated: 2026-03-29
+last_updated: 2026-03-30
 ---
-
 ## Commands
-- **Test**: `export PATH="$HOME/.bun/bin:$PATH" && bun test`
-- **CI filter**: `--test-name-pattern "^(?!.*(CRDT Property|multiple snapshots|10K sequential inserts))"`
-- **Typecheck/Lint**: `bun run typecheck` / `bun run lint` (run `bun install` first)
-
-## Notes
-- Bun not in PATH; install via `curl -fsSL https://bun.sh/install | bash`
-- perf threshold 250ms (CI variability); pre-existing biome errors in scripts/ (not our fault)
-
+- Test: `PATH="$HOME/.bun/bin:$PATH" bun test`
+- CI: add `--test-name-pattern "^(?!.*(CRDT Property|multiple snapshots|10K sequential inserts))"`
+- Coverage: `bun run test:coverage` / `bun run test:coverage:ci` (added 2026-03-30)
+- Bun: `curl -fsSL https://bun.sh/install | bash`
+## Coverage Gaps
+- protocol/awareness.ts 36%, state-sync.ts 60%, replica-id.ts 57%, op-queue.ts 63%
+- text/fragment.ts 68%, snapshot.ts 85% (lines 383-428), undo-map.ts 90%
 ## Backlog
-- `snapshot.test.ts:218,222` GC assertions always-true; strengthen if semantics allow
-- `perf.test.ts:34` loosened threshold; consider statistical approach
-- New code (op batcher #191, skip list #193, JIT comparators #186) — test post-merge
-
-## Open Test Improver PRs
-- PR #162: locatorBetween Case A/B + split-boundary undo regression tests
-- branch `test-assist/fix-test-smells-139`: fix duplicate describe block + placeholder (addresses #139)
-
-## Monthly Activity Issue
-- Created for March 2026 on 2026-03-29
-
-## Task History
-- 2026-03-26: Task 1+3+7
-- 2026-03-27: Task 2+3+7 (PR #162 created)
-- 2026-03-28: Task 4+7
-- 2026-03-29: Task 3+5+7 (fixed test smells, created Monthly Activity issue)
+1. Protocol tests (awareness,state-sync,replica-id,op-queue) HIGH VALUE
+2. text/fragment.ts mergeFragments edge cases
+3. New code #191 #193 #186 post-merge
+## PRs
+- #162 locatorBetween Case A/B regression (draft)
+- #194 fix test smells (draft)
+- 2026-03-30 branch test-assist/add-coverage-script: coverage scripts
+## Monthly Activity
+- March 2026 created 2026-03-30
+## Tasks
+- 2026-03-26: 1+3+7; 03-27: 2+3+7 PR#162; 03-28: 4+7; 03-29: 3+5+7 PR#194; 03-30: 4+6+7
