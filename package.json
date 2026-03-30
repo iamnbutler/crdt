@@ -47,6 +47,8 @@
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
     "test": "bun test",
+    "test:coverage": "bun test --coverage",
+    "test:coverage:ci": "bun test --coverage --test-name-pattern \"^(?!.*(CRDT Property|multiple snapshots|10K sequential inserts))\"",
     "bench": "bun run benchmarks/index.ts",
     "bench:ci": "bun run benchmarks/index.ts --ci",
     "bench:text": "bun run benchmarks/text-buffer.ts",
