@@ -12,8 +12,10 @@ import { MIN_LOCATOR } from "../text/locator.js";
 import { AwarenessManager, deserializeAwareness, serializeAwareness } from "./awareness.js";
 import { OperationQueue } from "./operation-queue.js";
 import {
+  RESERVED_REPLICA_IDS,
   SequentialReplicaIdAssigner,
   generateRandomReplicaId,
+  generateSecureReplicaId,
   isValidReplicaId,
 } from "./replica-id.js";
 import {
@@ -26,7 +28,13 @@ import {
   serializeOperations,
   serializeSnapshot,
 } from "./serialization.js";
-import { getSnapshotText, requiresFullSync, snapshotsEqual } from "./state-sync.js";
+import {
+  applySnapshot,
+  createSnapshot,
+  getSnapshotText,
+  requiresFullSync,
+  snapshotsEqual,
+} from "./state-sync.js";
 import { type SerializedFragment, type StateSnapshot, ValidationError } from "./types.js";
 import {
   type ValidationContext,
@@ -1202,6 +1210,634 @@ describe("validateOperation edge cases", () => {
     const result = validateOperation(op, context);
     expect(result.valid).toBe(false);
     expect(result.error).toBe(ValidationError.InconsistentVersion);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// AwarenessManager — additional coverage
+// ---------------------------------------------------------------------------
+
+describe("AwarenessManager — expireStale", () => {
+  test("removes states older than timeout and fires onExpire", () => {
+    const manager = new AwarenessManager(replicaId(1), 1000);
+    const expired: ReturnType<typeof replicaId>[] = [];
+    manager.onExpire = (rid) => expired.push(rid);
+
+    const old = Date.now() - 2000;
+    manager.applyRemote({ replicaId: replicaId(2), timestamp: old });
+    manager.applyRemote({ replicaId: replicaId(3), timestamp: Date.now() });
+
+    const result = manager.expireStale();
+
+    expect(result).toEqual([replicaId(2)]);
+    expect(expired).toEqual([replicaId(2)]);
+    expect(manager.remoteCount).toBe(1);
+    expect(manager.getState(replicaId(2))).toBeUndefined();
+    expect(manager.getState(replicaId(3))).toBeDefined();
+  });
+
+  test("returns empty array when no states are stale", () => {
+    const manager = new AwarenessManager(replicaId(1), 1000);
+    manager.applyRemote({ replicaId: replicaId(2), timestamp: Date.now() });
+
+    const result = manager.expireStale();
+    expect(result).toEqual([]);
+    expect(manager.remoteCount).toBe(1);
+  });
+
+  test("fires onUpdate when states expire", () => {
+    const manager = new AwarenessManager(replicaId(1), 1000);
+    let updateCount = 0;
+    manager.onUpdate = () => {
+      updateCount++;
+    };
+
+    const old = Date.now() - 2000;
+    manager.applyRemote({ replicaId: replicaId(2), timestamp: old });
+    updateCount = 0; // reset after applyRemote's onUpdate
+
+    manager.expireStale();
+    expect(updateCount).toBe(1);
+  });
+});
+
+describe("AwarenessManager — clear and remove", () => {
+  test("clear removes all remote states and fires onUpdate", () => {
+    const manager = new AwarenessManager(replicaId(1));
+    let updated = false;
+    manager.onUpdate = () => {
+      updated = true;
+    };
+
+    manager.applyRemote({ replicaId: replicaId(2), timestamp: Date.now() });
+    manager.applyRemote({ replicaId: replicaId(3), timestamp: Date.now() });
+    updated = false;
+
+    manager.clear();
+    expect(manager.remoteCount).toBe(0);
+    expect(updated).toBe(true);
+  });
+
+  test("remove deletes a specific replica and fires onUpdate", () => {
+    const manager = new AwarenessManager(replicaId(1));
+    let updated = false;
+    manager.onUpdate = () => {
+      updated = true;
+    };
+
+    manager.applyRemote({ replicaId: replicaId(2), timestamp: Date.now() });
+    manager.applyRemote({ replicaId: replicaId(3), timestamp: Date.now() });
+    updated = false;
+
+    manager.remove(replicaId(2));
+    expect(manager.remoteCount).toBe(1);
+    expect(manager.getState(replicaId(2))).toBeUndefined();
+    expect(manager.getState(replicaId(3))).toBeDefined();
+    expect(updated).toBe(true);
+  });
+
+  test("remove on unknown replica does not fire onUpdate", () => {
+    const manager = new AwarenessManager(replicaId(1));
+    let updated = false;
+    manager.onUpdate = () => {
+      updated = true;
+    };
+
+    manager.remove(replicaId(99));
+    expect(updated).toBe(false);
+  });
+});
+
+describe("AwarenessManager — getAllStates and getRemoteStates", () => {
+  test("getAllStates includes local and remote", () => {
+    const manager = new AwarenessManager(replicaId(1));
+    manager.setCursor({ offset: 5 });
+    manager.applyRemote({ replicaId: replicaId(2), timestamp: Date.now() });
+
+    const all = manager.getAllStates();
+    expect(all.size).toBe(2);
+    expect(all.has(replicaId(1))).toBe(true);
+    expect(all.has(replicaId(2))).toBe(true);
+  });
+
+  test("getRemoteStates excludes local", () => {
+    const manager = new AwarenessManager(replicaId(1));
+    manager.applyRemote({ replicaId: replicaId(2), timestamp: Date.now() });
+
+    const remote = manager.getRemoteStates();
+    expect(remote.size).toBe(1);
+    expect(remote.has(replicaId(1))).toBe(false);
+    expect(remote.has(replicaId(2))).toBe(true);
+  });
+});
+
+describe("AwarenessManager — setLocalState and setCustom", () => {
+  test("setLocalState merges partial state", () => {
+    const manager = new AwarenessManager(replicaId(1));
+    manager.setCursor({ offset: 5 });
+    manager.setLocalState({ user: { name: "Alice" } });
+
+    const state = manager.getLocalState();
+    expect(state.cursor?.offset).toBe(5);
+    expect(state.user?.name).toBe("Alice");
+  });
+
+  test("setCustom clears custom when undefined", () => {
+    const manager = new AwarenessManager(replicaId(1));
+    manager.setCustom({ typing: true });
+    manager.setCustom(undefined);
+
+    const state = manager.getLocalState();
+    expect(state.custom).toBeUndefined();
+  });
+
+  test("setCursor clears cursor when undefined", () => {
+    const manager = new AwarenessManager(replicaId(1));
+    manager.setCursor({ offset: 10 });
+    manager.setCursor(undefined);
+
+    const state = manager.getLocalState();
+    expect(state.cursor).toBeUndefined();
+  });
+
+  test("setUser clears user when undefined", () => {
+    const manager = new AwarenessManager(replicaId(1));
+    manager.setUser({ name: "Alice" });
+    manager.setUser(undefined);
+
+    const state = manager.getLocalState();
+    expect(state.user).toBeUndefined();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// OperationQueue — additional coverage
+// ---------------------------------------------------------------------------
+
+describe("OperationQueue — flush", () => {
+  test("flush applies all ready pending operations", () => {
+    const queue = new OperationQueue();
+    const applied: Operation[] = [];
+    const localVersion = createVersionVector();
+    const knownFragments = new Set<string>();
+
+    const op: InsertOperation = {
+      type: "insert",
+      id: { replicaId: replicaId(1), counter: 1 },
+      text: "Hello",
+      after: { insertionId: { replicaId: replicaId(1), counter: 0 }, offset: 0 },
+      before: {
+        insertionId: { replicaId: replicaId(0xffffffff), counter: 0xffffffff },
+        offset: 0,
+      },
+      version: new Map([[replicaId(1), 1]]),
+      locator: MIN_LOCATOR,
+    };
+
+    queue.enqueue(
+      op,
+      () => false,
+      () => {
+        /* no-op */
+      },
+      localVersion,
+    );
+    expect(queue.pendingCount).toBe(1);
+
+    knownFragments.add(`${replicaId(1)}:0`);
+    const count = queue.flush(
+      (id) => knownFragments.has(`${id.replicaId}:${id.counter}`),
+      (o) => {
+        applied.push(o);
+        knownFragments.add(`${o.id.replicaId}:${o.id.counter}`);
+      },
+      localVersion,
+    );
+
+    expect(count).toBe(1);
+    expect(applied.length).toBe(1);
+    expect(queue.pendingCount).toBe(0);
+  });
+
+  test("flush returns 0 when nothing is ready", () => {
+    const queue = new OperationQueue();
+    const localVersion = createVersionVector();
+
+    const op: InsertOperation = {
+      type: "insert",
+      id: { replicaId: replicaId(1), counter: 1 },
+      text: "A",
+      after: { insertionId: { replicaId: replicaId(1), counter: 0 }, offset: 0 },
+      before: {
+        insertionId: { replicaId: replicaId(0xffffffff), counter: 0xffffffff },
+        offset: 0,
+      },
+      version: new Map([[replicaId(1), 1]]),
+      locator: MIN_LOCATOR,
+    };
+
+    queue.enqueue(
+      op,
+      () => false,
+      () => {
+        /* no-op */
+      },
+      localVersion,
+    );
+
+    const count = queue.flush(
+      () => false,
+      () => {
+        /* no-op */
+      },
+      localVersion,
+    );
+    expect(count).toBe(0);
+    expect(queue.pendingCount).toBe(1);
+  });
+});
+
+describe("OperationQueue — stats, clear, resetOverflow, getHighestCounter, getPending", () => {
+  test("stats reflects current queue state", () => {
+    const queue = new OperationQueue(5);
+    const localVersion = createVersionVector();
+
+    const op: InsertOperation = {
+      type: "insert",
+      id: { replicaId: replicaId(1), counter: 1 },
+      text: "A",
+      after: { insertionId: { replicaId: replicaId(1), counter: 0 }, offset: 0 },
+      before: {
+        insertionId: { replicaId: replicaId(0xffffffff), counter: 0xffffffff },
+        offset: 0,
+      },
+      version: new Map([[replicaId(1), 1]]),
+      locator: MIN_LOCATOR,
+    };
+
+    queue.enqueue(
+      op,
+      () => false,
+      () => {
+        /* no-op */
+      },
+      localVersion,
+    );
+
+    const stats = queue.stats;
+    expect(stats.pendingCount).toBe(1);
+    expect(stats.deferredReplicaCount).toBe(1);
+    expect(stats.deferredReplicas.has(replicaId(1))).toBe(true);
+    expect(stats.maxSize).toBe(5);
+    expect(stats.overflowed).toBe(false);
+  });
+
+  test("clear removes all pending ops and resets overflow", () => {
+    const queue = new OperationQueue(2);
+    const localVersion = createVersionVector();
+
+    for (let i = 0; i < 3; i++) {
+      const op: InsertOperation = {
+        type: "insert",
+        id: { replicaId: replicaId(1), counter: i + 1 },
+        text: "X",
+        after: { insertionId: { replicaId: replicaId(1), counter: i }, offset: 0 },
+        before: {
+          insertionId: { replicaId: replicaId(0xffffffff), counter: 0xffffffff },
+          offset: 0,
+        },
+        version: new Map([[replicaId(1), i + 1]]),
+        locator: MIN_LOCATOR,
+      };
+      queue.enqueue(
+        op,
+        () => false,
+        () => {
+          /* no-op */
+        },
+        localVersion,
+      );
+    }
+
+    expect(queue.overflowed).toBe(true);
+
+    queue.clear();
+    expect(queue.pendingCount).toBe(0);
+    expect(queue.overflowed).toBe(false);
+    expect(queue.deferredReplicas.size).toBe(0);
+  });
+
+  test("resetOverflow clears overflow flag without clearing pending", () => {
+    const queue = new OperationQueue(1);
+    const localVersion = createVersionVector();
+
+    const op1: InsertOperation = {
+      type: "insert",
+      id: { replicaId: replicaId(1), counter: 1 },
+      text: "A",
+      after: { insertionId: { replicaId: replicaId(1), counter: 0 }, offset: 0 },
+      before: {
+        insertionId: { replicaId: replicaId(0xffffffff), counter: 0xffffffff },
+        offset: 0,
+      },
+      version: new Map([[replicaId(1), 1]]),
+      locator: MIN_LOCATOR,
+    };
+
+    const op2: InsertOperation = {
+      type: "insert",
+      id: { replicaId: replicaId(1), counter: 2 },
+      text: "B",
+      after: { insertionId: { replicaId: replicaId(1), counter: 1 }, offset: 0 },
+      before: {
+        insertionId: { replicaId: replicaId(0xffffffff), counter: 0xffffffff },
+        offset: 0,
+      },
+      version: new Map([[replicaId(1), 2]]),
+      locator: MIN_LOCATOR,
+    };
+
+    queue.enqueue(
+      op1,
+      () => false,
+      () => {
+        /* no-op */
+      },
+      localVersion,
+    );
+    queue.enqueue(
+      op2,
+      () => false,
+      () => {
+        /* no-op */
+      },
+      localVersion,
+    );
+
+    expect(queue.overflowed).toBe(true);
+    expect(queue.pendingCount).toBe(1);
+
+    queue.resetOverflow();
+    expect(queue.overflowed).toBe(false);
+    expect(queue.pendingCount).toBe(1); // pending ops still there
+  });
+
+  test("getHighestCounter tracks maximum counter per replica", () => {
+    const queue = new OperationQueue();
+    const applied: Operation[] = [];
+    const localVersion = createVersionVector();
+
+    expect(queue.getHighestCounter(replicaId(1))).toBe(-1);
+
+    const op: InsertOperation = {
+      type: "insert",
+      id: { replicaId: replicaId(1), counter: 7 },
+      text: "A",
+      after: { insertionId: { replicaId: replicaId(0), counter: 0 }, offset: 0 },
+      before: {
+        insertionId: { replicaId: replicaId(0xffffffff), counter: 0xffffffff },
+        offset: 0,
+      },
+      version: new Map([[replicaId(1), 7]]),
+      locator: MIN_LOCATOR,
+    };
+
+    queue.enqueue(
+      op,
+      () => true,
+      (o) => applied.push(o),
+      localVersion,
+    );
+
+    expect(queue.getHighestCounter(replicaId(1))).toBe(7);
+    expect(queue.getHighestCounter(replicaId(2))).toBe(-1);
+  });
+
+  test("getPending returns current pending operations", () => {
+    const queue = new OperationQueue();
+    const localVersion = createVersionVector();
+
+    const op: InsertOperation = {
+      type: "insert",
+      id: { replicaId: replicaId(1), counter: 1 },
+      text: "A",
+      after: { insertionId: { replicaId: replicaId(1), counter: 0 }, offset: 0 },
+      before: {
+        insertionId: { replicaId: replicaId(0xffffffff), counter: 0xffffffff },
+        offset: 0,
+      },
+      version: new Map([[replicaId(1), 1]]),
+      locator: MIN_LOCATOR,
+    };
+
+    queue.enqueue(
+      op,
+      () => false,
+      () => {
+        /* no-op */
+      },
+      localVersion,
+    );
+
+    const pending = queue.getPending();
+    expect(pending.length).toBe(1);
+    expect(pending[0]?.id.counter).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Replica ID — additional coverage
+// ---------------------------------------------------------------------------
+
+describe("Replica ID — additional", () => {
+  test("generateSecureReplicaId generates valid IDs", () => {
+    for (let i = 0; i < 20; i++) {
+      const id = generateSecureReplicaId();
+      expect(isValidReplicaId(id)).toBe(true);
+      expect(id).toBeGreaterThan(0);
+      expect(id).toBeLessThanOrEqual(0x3fffffff);
+    }
+  });
+
+  test("SequentialReplicaIdAssigner.getReplicaId returns assigned ID or undefined", () => {
+    const assigner = new SequentialReplicaIdAssigner();
+    expect(assigner.getReplicaId("client-1")).toBeUndefined();
+
+    const id = assigner.assign("client-1");
+    expect(assigner.getReplicaId("client-1")).toBe(id);
+  });
+
+  test("SequentialReplicaIdAssigner.releaseByClientId deactivates replica", () => {
+    const assigner = new SequentialReplicaIdAssigner();
+    assigner.assign("client-1");
+
+    expect(assigner.activeCount).toBe(1);
+
+    assigner.releaseByClientId("client-1");
+    expect(assigner.activeCount).toBe(0);
+  });
+
+  test("SequentialReplicaIdAssigner.releaseByClientId is no-op for unknown client", () => {
+    const assigner = new SequentialReplicaIdAssigner();
+    assigner.assign("client-1");
+
+    assigner.releaseByClientId("unknown");
+    expect(assigner.activeCount).toBe(1);
+  });
+
+  test("SequentialReplicaIdAssigner exportState/fromState round-trips", () => {
+    const original = new SequentialReplicaIdAssigner(1);
+    original.assign("client-a");
+    original.assign("client-b");
+
+    const state = original.exportState();
+    const restored = SequentialReplicaIdAssigner.fromState(state);
+
+    expect(restored.assign("client-a")).toBe(original.assign("client-a"));
+    expect(restored.assign("client-b")).toBe(original.assign("client-b"));
+    expect(restored.totalAssigned).toBe(2);
+  });
+
+  test("SequentialReplicaIdAssigner exportState reflects nextId and assignments", () => {
+    const assigner = new SequentialReplicaIdAssigner(10);
+    assigner.assign("c1");
+    assigner.assign("c2");
+
+    const state = assigner.exportState();
+    expect(state.nextId).toBe(12);
+    expect(state.assignments.length).toBe(2);
+  });
+
+  test("RESERVED_REPLICA_IDS MIN is 0 and MAX is 0xffffffff", () => {
+    expect(RESERVED_REPLICA_IDS.MIN).toBe(0);
+    expect(RESERVED_REPLICA_IDS.MAX).toBe(0xffffffff);
+  });
+
+  test("isValidReplicaId rejects zero, negatives, non-integers, and out-of-range", () => {
+    expect(isValidReplicaId(0)).toBe(false);
+    expect(isValidReplicaId(-1)).toBe(false);
+    expect(isValidReplicaId(1.5)).toBe(false);
+    expect(isValidReplicaId(0x40000000)).toBe(false);
+    expect(isValidReplicaId(1)).toBe(true);
+    expect(isValidReplicaId(0x3fffffff)).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// State Sync — createSnapshot and applySnapshot
+// ---------------------------------------------------------------------------
+
+describe("createSnapshot and applySnapshot", () => {
+  test("createSnapshot serializes fragments and version vector", () => {
+    const rid = replicaId(1);
+    const vv = createVersionVector();
+    observeVersion(vv, rid, 3);
+
+    const frag = {
+      insertionId: { replicaId: rid, counter: 0 },
+      insertionOffset: 0,
+      locator: { levels: [0.5] },
+      baseLocator: { levels: [0.5] },
+      length: 5,
+      visible: true,
+      deletions: [] as ReturnType<typeof replicaId>[],
+      text: "Hello",
+      summary: {
+        visibleLen: 5,
+        visibleLines: 0,
+        deletedLen: 0,
+        deletedLines: 0,
+        maxInsertionId: { replicaId: rid, counter: 0 },
+        maxLocator: { levels: [0.5] },
+        itemCount: 1,
+      },
+    };
+
+    const snap = createSnapshot({
+      replicaId: rid,
+      versionVector: vv,
+      fragments: [frag],
+      undoCounts: [],
+    });
+
+    expect(snap.replicaId).toBe(rid);
+    expect(snap.versionVector.get(rid)).toBe(3);
+    expect(snap.fragments.length).toBe(1);
+    expect(snap.fragments[0]?.text).toBe("Hello");
+    expect(snap.fragments[0]?.length).toBe(5);
+    expect(snap.fragments[0]?.visible).toBe(true);
+  });
+
+  test("applySnapshot reconstructs fragments from serialized form", () => {
+    const rid = replicaId(2);
+    const vv = createVersionVector();
+    observeVersion(vv, rid, 5);
+
+    const snapshot = {
+      version: 1 as const,
+      replicaId: rid,
+      versionVector: vv,
+      fragments: [
+        {
+          insertionId: { replicaId: rid, counter: 0 },
+          insertionOffset: 0,
+          locatorLevels: [0.5],
+          baseLocatorLevels: [0.5],
+          length: 5,
+          visible: true,
+          deletions: [] as Array<{ replicaId: ReturnType<typeof replicaId>; counter: number }>,
+          text: "World",
+        },
+      ],
+      undoCounts: [{ operationId: { replicaId: rid, counter: 1 }, count: 2 }],
+    };
+
+    const result = applySnapshot(snapshot);
+
+    expect(result.fragments.length).toBe(1);
+    expect(result.fragments[0]?.text).toBe("World");
+    expect(result.fragments[0]?.visible).toBe(true);
+    expect(result.versionVector.get(rid)).toBe(5);
+    expect(result.undoCounts.get(`${rid}:1`)).toBe(2);
+  });
+
+  test("createSnapshot round-trips through applySnapshot", () => {
+    const rid = replicaId(3);
+    const vv = createVersionVector();
+    observeVersion(vv, rid, 2);
+
+    const frag = {
+      insertionId: { replicaId: rid, counter: 0 },
+      insertionOffset: 0,
+      locator: { levels: [0.25, 0.75] },
+      baseLocator: { levels: [0.25, 0.75] },
+      length: 3,
+      visible: false,
+      deletions: [{ replicaId: rid, counter: 1 }],
+      text: "del",
+      summary: {
+        visibleLen: 0,
+        visibleLines: 0,
+        deletedLen: 3,
+        deletedLines: 0,
+        maxInsertionId: { replicaId: rid, counter: 0 },
+        maxLocator: { levels: [0.25, 0.75] },
+        itemCount: 1,
+      },
+    };
+
+    const snap = createSnapshot({
+      replicaId: rid,
+      versionVector: vv,
+      fragments: [frag],
+      undoCounts: [],
+    });
+
+    const result = applySnapshot(snap);
+
+    expect(result.fragments[0]?.text).toBe("del");
+    expect(result.fragments[0]?.visible).toBe(false);
+    expect(result.fragments[0]?.deletions.length).toBe(1);
   });
 });
 
