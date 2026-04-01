@@ -9,7 +9,7 @@ import {
   versionIncludes,
   versionVectorsEqual,
 } from "./clock.js";
-import { createFragment, splitFragment, withVisibility } from "./fragment.js";
+import { createFragment, deleteFragment, splitFragment, withVisibility } from "./fragment.js";
 import {
   MAX_LOCATOR,
   MIN_LOCATOR,
@@ -870,6 +870,38 @@ describe("UndoMap", () => {
     map.mergeFrom([{ operationId: opId, count: 2 }]);
     expect(map.getCount(opId)).toBe(5); // max-wins
   });
+
+  it("entries returns all stored operations", () => {
+    const map = new UndoMap();
+    expect(map.entries()).toHaveLength(0);
+
+    const a = makeOpId(1, 0);
+    const b = makeOpId(2, 0);
+    map.setCount(a, 1);
+    map.setCount(b, 3);
+
+    const entries = map.entries();
+    expect(entries).toHaveLength(2);
+    const countForA = entries.find((e) => e.operationId.replicaId === a.replicaId)?.count;
+    const countForB = entries.find((e) => e.operationId.replicaId === b.replicaId)?.count;
+    expect(countForA).toBe(1);
+    expect(countForB).toBe(3);
+  });
+
+  it("getCountsFor returns only operations with count > 0", () => {
+    const map = new UndoMap();
+    const a = makeOpId(1, 0);
+    const b = makeOpId(2, 0);
+    const c = makeOpId(3, 0); // never set
+
+    map.setCount(a, 2);
+    map.setCount(b, 1);
+
+    const result = map.getCountsFor([a, b, c]);
+    expect(result).toHaveLength(2); // c excluded (count=0)
+    expect(result.some((e) => e.operationId.replicaId === a.replicaId && e.count === 2)).toBe(true);
+    expect(result.some((e) => e.operationId.replicaId === b.replicaId && e.count === 1)).toBe(true);
+  });
 });
 
 // ---------------------------------------------------------------------------
@@ -921,6 +953,62 @@ describe("Fragment", () => {
     const frag = createFragment(opId, 0, MIN_LOCATOR, "Hello", true);
     const same = withVisibility(frag, true);
     expect(same).toBe(frag); // same reference
+  });
+
+  it("deleteFragment marks fragment invisible and records deletion", () => {
+    const frag = createFragment(opId, 0, MIN_LOCATOR, "Hello", true);
+    const delOpId: OperationId = { replicaId: replicaId(2), counter: 1 };
+    const deleted = deleteFragment(frag, delOpId);
+
+    expect(deleted.visible).toBe(false);
+    expect(deleted.text).toBe("Hello");
+    expect(deleted.locator).toBe(frag.locator);
+    expect(deleted.insertionId).toBe(frag.insertionId);
+    expect(deleted.deletions).toHaveLength(1);
+    expect(deleted.deletions[0]).toEqual(delOpId);
+  });
+
+  it("deleteFragment accumulates multiple deletion ids", () => {
+    const frag = createFragment(opId, 0, MIN_LOCATOR, "Hi", true);
+    const del1: OperationId = { replicaId: replicaId(2), counter: 1 };
+    const del2: OperationId = { replicaId: replicaId(3), counter: 2 };
+    const d1 = deleteFragment(frag, del1);
+    const d2 = deleteFragment(d1, del2);
+
+    expect(d2.deletions).toHaveLength(2);
+    expect(d2.deletions[0]).toEqual(del1);
+    expect(d2.deletions[1]).toEqual(del2);
+  });
+
+  it("splitFragment locators use baseLocator for deterministic ordering", () => {
+    // The KEY invariant: split locators are [...baseLocator.levels, 2*insertionOffset]
+    // This ensures order independence: re-splitting at different offsets yields same locators.
+    const baseLocator = { levels: [100] };
+    const frag = createFragment(opId, 0, baseLocator, "Hello", true);
+    const [left, right] = splitFragment(frag, 3);
+
+    // Left gets [...baseLocator, 2*0] = [100, 0]
+    expect(left.locator.levels).toEqual([100, 0]);
+    // Right gets [...baseLocator, 2*3] = [100, 6]
+    expect(right.locator.levels).toEqual([100, 6]);
+  });
+
+  it("splitFragment both halves inherit parent baseLocator", () => {
+    const baseLocator = { levels: [50, 200] };
+    const frag = createFragment(opId, 0, baseLocator, "abcde", true);
+    const [left, right] = splitFragment(frag, 2);
+
+    // Both split parts use the PARENT's baseLocator (not their new locators)
+    expect(left.baseLocator).toBe(frag.baseLocator);
+    expect(right.baseLocator).toBe(frag.baseLocator);
+  });
+
+  it("splitFragment insertionOffset advances by localOffset for right part", () => {
+    const frag = createFragment(opId, 5, MIN_LOCATOR, "world", true);
+    const [left, right] = splitFragment(frag, 2);
+
+    expect(left.insertionOffset).toBe(5); // parent's insertionOffset
+    expect(right.insertionOffset).toBe(7); // parent offset + localOffset
   });
 });
 
