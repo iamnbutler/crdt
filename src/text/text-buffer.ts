@@ -1446,10 +1446,11 @@ export class TextBuffer {
       this.fragments.insertAtMut(insertIndex, newFrag);
       this.addToFragmentIndex(op.id);
     } else if (this._liveSnapshots === 0) {
-      // Splits needed: use array for splits, then direct tree insertion
+      // Potential splits needed: use array to check and apply splits if required.
       // NOTE: Incremental tree splits were attempted but SumTree.removeAt() has bugs
       // that corrupt the tree structure. Using array-based approach for now.
       const frags = this.fragmentsArray();
+      const preLen = frags.length;
 
       if (needsAfterSplit) {
         this.findRefIndex(frags, op.after, "after");
@@ -1458,9 +1459,12 @@ export class TextBuffer {
         this.findRefIndex(frags, op.before, "before");
       }
 
-      // After splits, re-sort and rebuild tree, then use direct insertion
-      sortFragments(frags);
-      this.setFragments(frags);
+      // Only sort+rebuild if fragments were actually split (refs at exact boundaries
+      // cause no structural change, so we can skip the expensive O(n log n) rebuild).
+      if (frags.length > preLen) {
+        sortFragments(frags);
+        this.setFragments(frags);
+      }
 
       // Now use O(log² n) insertion for the new fragment
       const insertIndex = this.findTreeInsertIndex(newFrag);
