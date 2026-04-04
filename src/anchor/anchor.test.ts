@@ -698,6 +698,75 @@ describe("AnchorSet", () => {
   });
 });
 
+describe("SimpleSnapshot.visitFragments", () => {
+  test("calls visitor for every fragment in order", () => {
+    const doc = createDocument([
+      { replicaId: 1, localSeq: 1, text: "A" },
+      { replicaId: 2, localSeq: 1, text: "B" },
+      { replicaId: 3, localSeq: 1, text: "C" },
+    ]);
+
+    const seen: number[] = [];
+    doc.visitFragments((frag, _pos) => {
+      seen.push(frag.insertionId.replicaId);
+      return true;
+    });
+
+    expect(seen).toEqual([1, 2, 3]);
+  });
+
+  test("stops iteration when visitor returns false", () => {
+    const doc = createDocument([
+      { replicaId: 1, localSeq: 1, text: "A" },
+      { replicaId: 2, localSeq: 1, text: "B" },
+      { replicaId: 3, localSeq: 1, text: "C" },
+    ]);
+
+    const seen: number[] = [];
+    doc.visitFragments((frag, _pos) => {
+      seen.push(frag.insertionId.replicaId);
+      return frag.insertionId.replicaId < 2; // stop after visiting replicaId 2
+    });
+
+    // replicaId 3 must not be visited
+    expect(seen).toEqual([1, 2]);
+  });
+
+  test("provides correct utf16 position for each visible fragment", () => {
+    const doc = createDocument([
+      { replicaId: 1, localSeq: 1, text: "AB" },
+      { replicaId: 2, localSeq: 1, text: "CD" },
+      { replicaId: 3, localSeq: 1, text: "EF" },
+    ]);
+
+    const positions: number[] = [];
+    doc.visitFragments((_frag, pos) => {
+      positions.push(pos.utf16Offset);
+      return true;
+    });
+
+    // Positions are cumulative: AB starts at 0, CD at 2, EF at 4
+    expect(positions).toEqual([0, 2, 4]);
+  });
+
+  test("does not advance position for deleted fragments", () => {
+    const doc = createDocument([
+      { replicaId: 1, localSeq: 1, text: "AB" },
+      { replicaId: 2, localSeq: 1, text: "XX", deleted: true },
+      { replicaId: 3, localSeq: 1, text: "CD" },
+    ]);
+
+    const positions: number[] = [];
+    doc.visitFragments((_frag, pos) => {
+      positions.push(pos.utf16Offset);
+      return true;
+    });
+
+    // Deleted fragment at offset 2, CD still starts at 2 (deleted fragments don't consume space)
+    expect(positions).toEqual([0, 2, 2]);
+  });
+});
+
 describe("edge cases", () => {
   test("handles Unicode surrogate pairs", () => {
     // "Hello 🌍" - the emoji is a surrogate pair (2 UTF-16 code units)

@@ -226,6 +226,67 @@ describe("Binary Serialization", () => {
       expect(deserialized[0]?.type).toBe("insert");
       expect(deserialized[1]?.type).toBe("delete");
     });
+
+    test("concurrent inserts from multiple replicas round-trip through batch serialization", () => {
+      // Two concurrent inserts with no dependency on each other (simulating
+      // a conflict both clients sent at the same logical time)
+      const op1: InsertOperation = {
+        type: "insert",
+        id: { replicaId: replicaId(1), counter: 0 },
+        text: "Hello",
+        after: { insertionId: { replicaId: replicaId(0), counter: 0 }, offset: 0 },
+        before: {
+          insertionId: { replicaId: replicaId(0xffffffff), counter: 0xffffffff },
+          offset: 0,
+        },
+        version: new Map([[replicaId(1), 0]]),
+        locator: { levels: [0.25] },
+      };
+
+      const op2: InsertOperation = {
+        type: "insert",
+        id: { replicaId: replicaId(2), counter: 0 },
+        text: "World",
+        after: { insertionId: { replicaId: replicaId(0), counter: 0 }, offset: 0 },
+        before: {
+          insertionId: { replicaId: replicaId(0xffffffff), counter: 0xffffffff },
+          offset: 0,
+        },
+        version: new Map([[replicaId(2), 0]]),
+        locator: { levels: [0.75] },
+      };
+
+      const bytes = serializeOperations([op1, op2]);
+      const result = deserializeOperations(bytes);
+
+      expect(result.length).toBe(2);
+
+      const r1 = result[0] as InsertOperation;
+      const r2 = result[1] as InsertOperation;
+
+      // Both ops preserved with correct replica attribution
+      expect(r1.type).toBe("insert");
+      expect(r1.id.replicaId).toBe(replicaId(1));
+      expect(r1.id.counter).toBe(0);
+      expect(r1.text).toBe("Hello");
+      expect(r1.locator.levels).toEqual([0.25]);
+
+      expect(r2.type).toBe("insert");
+      expect(r2.id.replicaId).toBe(replicaId(2));
+      expect(r2.id.counter).toBe(0);
+      expect(r2.text).toBe("World");
+      expect(r2.locator.levels).toEqual([0.75]);
+
+      // Both share the same sentinel after-reference (concurrent at doc root)
+      expect(r1.after.insertionId.replicaId).toBe(replicaId(0));
+      expect(r2.after.insertionId.replicaId).toBe(replicaId(0));
+
+      // Version vectors preserved and distinct
+      expect(r1.version.get(replicaId(1))).toBe(0);
+      expect(r1.version.has(replicaId(2))).toBe(false);
+      expect(r2.version.get(replicaId(2))).toBe(0);
+      expect(r2.version.has(replicaId(1))).toBe(false);
+    });
   });
 
   describe("Snapshot Serialization", () => {
@@ -519,6 +580,225 @@ describe("OperationQueue", () => {
     );
     expect(result.overflow).toBe(true);
     expect(queue.overflowed).toBe(true);
+  });
+
+  test("cascades through a three-op chain when root dependency arrives", () => {
+    // Scenario: C depends on B, B depends on A; all queued before A arrives.
+    // When A is enqueued, B should flush immediately, then C.
+    const queue = new OperationQueue();
+    const applied: Operation[] = [];
+    const localVersion = createVersionVector();
+    const knownFragments = new Set<string>();
+
+    const fragKey = (rid: number, ctr: number) => `${rid}:${ctr}`;
+    const fragmentExists = (id: { replicaId: number; counter: number }) =>
+      knownFragments.has(fragKey(id.replicaId, id.counter));
+    const apply = (op: Operation) => {
+      applied.push(op);
+      knownFragments.add(fragKey(op.id.replicaId, op.id.counter));
+    };
+
+    // C: depends on B (after ref = replica 1, counter 1)
+    const opC: InsertOperation = {
+      type: "insert",
+      id: { replicaId: replicaId(1), counter: 2 },
+      text: "C",
+      after: { insertionId: { replicaId: replicaId(1), counter: 1 }, offset: 0 },
+      before: { insertionId: { replicaId: replicaId(0xffffffff), counter: 0xffffffff }, offset: 0 },
+      version: new Map([[replicaId(1), 2]]),
+      locator: MIN_LOCATOR,
+    };
+
+    // B: depends on A (after ref = replica 1, counter 0)
+    const opB: InsertOperation = {
+      type: "insert",
+      id: { replicaId: replicaId(1), counter: 1 },
+      text: "B",
+      after: { insertionId: { replicaId: replicaId(1), counter: 0 }, offset: 0 },
+      before: { insertionId: { replicaId: replicaId(0xffffffff), counter: 0xffffffff }, offset: 0 },
+      version: new Map([[replicaId(1), 1]]),
+      locator: MIN_LOCATOR,
+    };
+
+    // A: no dependencies (after = MIN sentinel)
+    const opA: InsertOperation = {
+      type: "insert",
+      id: { replicaId: replicaId(1), counter: 0 },
+      text: "A",
+      after: { insertionId: { replicaId: replicaId(0), counter: 0 }, offset: 0 },
+      before: { insertionId: { replicaId: replicaId(0xffffffff), counter: 0xffffffff }, offset: 0 },
+      version: new Map([[replicaId(1), 0]]),
+      locator: MIN_LOCATOR,
+    };
+
+    // Enqueue C and B while A is missing — both should defer
+    queue.enqueue(opC, fragmentExists, apply, localVersion);
+    queue.enqueue(opB, fragmentExists, apply, localVersion);
+    expect(applied.length).toBe(0);
+    expect(queue.pendingCount).toBe(2);
+
+    // A arrives: should apply A, flush B, then flush C
+    queue.enqueue(opA, fragmentExists, apply, localVersion);
+
+    expect(applied.length).toBe(3);
+    expect(applied[0]?.id.counter).toBe(0); // A
+    expect(applied[1]?.id.counter).toBe(1); // B
+    expect(applied[2]?.id.counter).toBe(2); // C
+    expect(queue.pendingCount).toBe(0);
+  });
+
+  test("flush() applies pending ops when fragments become available", () => {
+    const queue = new OperationQueue();
+    const applied: Operation[] = [];
+    const localVersion = createVersionVector();
+    const knownFragments = new Set<string>();
+
+    const fragKey = (rid: number, ctr: number) => `${rid}:${ctr}`;
+    const fragmentExists = (id: { replicaId: number; counter: number }) =>
+      knownFragments.has(fragKey(id.replicaId, id.counter));
+
+    // Enqueue two ops that depend on a fragment we don't have yet
+    for (const counter of [1, 2]) {
+      const op: InsertOperation = {
+        type: "insert",
+        id: { replicaId: replicaId(1), counter },
+        text: "X",
+        after: { insertionId: { replicaId: replicaId(1), counter: 0 }, offset: 0 },
+        before: {
+          insertionId: { replicaId: replicaId(0xffffffff), counter: 0xffffffff },
+          offset: 0,
+        },
+        version: new Map([[replicaId(1), counter]]),
+        locator: MIN_LOCATOR,
+      };
+      queue.enqueue(op, fragmentExists, (o) => applied.push(o), localVersion);
+    }
+
+    expect(applied.length).toBe(0);
+    expect(queue.pendingCount).toBe(2);
+
+    // Simulate receiving a snapshot: mark the dependency as known
+    knownFragments.add(fragKey(1, 0));
+
+    // flush() should apply both pending ops
+    const count = queue.flush(fragmentExists, (o) => applied.push(o), localVersion);
+
+    expect(count).toBe(2);
+    expect(applied.length).toBe(2);
+    expect(queue.pendingCount).toBe(0);
+  });
+
+  test("flush() leaves ops pending when dependencies still missing", () => {
+    const queue = new OperationQueue();
+    const applied: Operation[] = [];
+    const localVersion = createVersionVector();
+
+    const op: InsertOperation = {
+      type: "insert",
+      id: { replicaId: replicaId(1), counter: 1 },
+      text: "X",
+      after: { insertionId: { replicaId: replicaId(1), counter: 0 }, offset: 0 },
+      before: { insertionId: { replicaId: replicaId(0xffffffff), counter: 0xffffffff }, offset: 0 },
+      version: new Map([[replicaId(1), 1]]),
+      locator: MIN_LOCATOR,
+    };
+
+    queue.enqueue(
+      op,
+      () => false,
+      (o) => applied.push(o),
+      localVersion,
+    );
+    expect(queue.pendingCount).toBe(1);
+
+    // flush() with still-missing dependency should apply nothing
+    const count = queue.flush(
+      () => false,
+      (o) => applied.push(o),
+      localVersion,
+    );
+
+    expect(count).toBe(0);
+    expect(applied.length).toBe(0);
+    expect(queue.pendingCount).toBe(1);
+  });
+
+  test("clear() removes pending ops and resets overflow; appliedOps preserved for idempotency", () => {
+    const queue = new OperationQueue(2);
+    const localVersion = createVersionVector();
+
+    const makeOp = (counter: number): InsertOperation => ({
+      type: "insert",
+      id: { replicaId: replicaId(1), counter },
+      text: "X",
+      after: { insertionId: { replicaId: replicaId(1), counter: counter - 1 }, offset: 0 },
+      before: { insertionId: { replicaId: replicaId(0xffffffff), counter: 0xffffffff }, offset: 0 },
+      version: new Map([[replicaId(1), counter]]),
+      locator: MIN_LOCATOR,
+    });
+
+    // Fill and overflow the queue
+    queue.enqueue(
+      makeOp(1),
+      () => false,
+      () => {
+        /* no-op */
+      },
+      localVersion,
+    );
+    queue.enqueue(
+      makeOp(2),
+      () => false,
+      () => {
+        /* no-op */
+      },
+      localVersion,
+    );
+    queue.enqueue(
+      makeOp(3),
+      () => false,
+      () => {
+        /* no-op */
+      },
+      localVersion,
+    ); // overflow
+
+    expect(queue.overflowed).toBe(true);
+    expect(queue.pendingCount).toBe(2);
+
+    queue.clear();
+
+    expect(queue.pendingCount).toBe(0);
+    expect(queue.overflowed).toBe(false);
+
+    // After clear(), a previously-applied op should still be rejected (idempotency)
+    const applied: Operation[] = [];
+    const readyOp: InsertOperation = {
+      type: "insert",
+      id: { replicaId: replicaId(1), counter: 10 },
+      text: "Y",
+      after: { insertionId: { replicaId: replicaId(0), counter: 0 }, offset: 0 },
+      before: { insertionId: { replicaId: replicaId(0xffffffff), counter: 0xffffffff }, offset: 0 },
+      version: new Map([[replicaId(1), 10]]),
+      locator: MIN_LOCATOR,
+    };
+    // Apply once
+    queue.enqueue(
+      readyOp,
+      () => true,
+      (o) => applied.push(o),
+      localVersion,
+    );
+    expect(applied.length).toBe(1);
+    // Apply again — should be rejected
+    const result = queue.enqueue(
+      readyOp,
+      () => true,
+      (o) => applied.push(o),
+      localVersion,
+    );
+    expect(result.accepted).toBe(false);
+    expect(applied.length).toBe(1);
   });
 });
 
