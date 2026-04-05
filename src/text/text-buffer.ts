@@ -1394,11 +1394,13 @@ export class TextBuffer {
   // ---------------------------------------------------------------------------
 
   private recomputeVisibility(): void {
-    const frags = this.fragmentsArray();
-    let changed = false;
     const newFrags: Fragment[] = [];
+    let changed = false;
 
-    for (const frag of frags) {
+    // Use forEach instead of toArray() to avoid creating an intermediate array.
+    // Visibility changes never add/remove fragments, so we can skip the
+    // _fragmentIds rebuild that setFragments() would do.
+    this.fragments.forEach((frag) => {
       const shouldBeVisible = this.undoMap.isVisible(frag.insertionId, frag.deletions);
       if (shouldBeVisible !== frag.visible) {
         newFrags.push(withVisibility(frag, shouldBeVisible));
@@ -1406,10 +1408,11 @@ export class TextBuffer {
       } else {
         newFrags.push(frag);
       }
-    }
+    });
 
     if (changed) {
-      this.setFragments(newFrags);
+      // Skip _fragmentIds rebuild: fragment identities are unchanged by visibility.
+      this.fragments = SumTree.fromItems(newFrags, fragmentSummaryOps);
     }
   }
 
