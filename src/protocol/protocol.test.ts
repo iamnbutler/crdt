@@ -1206,6 +1206,149 @@ describe("validateOperation edge cases", () => {
 });
 
 // ---------------------------------------------------------------------------
+// BinaryWriter/BinaryReader — missing primitives
+// ---------------------------------------------------------------------------
+
+describe("BinaryWriter/BinaryReader — additional primitives", () => {
+  test("writeF64/readF64 round-trips floats exactly", () => {
+    const writer = new BinaryWriter();
+    writer.writeF64(0.0);
+    writer.writeF64(1.5);
+    writer.writeF64(-1.5);
+    writer.writeF64(Number.MAX_SAFE_INTEGER);
+    writer.writeF64(Number.MIN_SAFE_INTEGER);
+
+    const reader = new BinaryReader(writer.finish());
+    expect(reader.readF64()).toBe(0.0);
+    expect(reader.readF64()).toBe(1.5);
+    expect(reader.readF64()).toBe(-1.5);
+    expect(reader.readF64()).toBe(Number.MAX_SAFE_INTEGER);
+    expect(reader.readF64()).toBe(Number.MIN_SAFE_INTEGER);
+  });
+
+  test("writeBytes/readBytes round-trips raw bytes", () => {
+    const writer = new BinaryWriter();
+    writer.writeBytes(new Uint8Array([]));
+    writer.writeBytes(new Uint8Array([1, 2, 3, 255]));
+
+    const reader = new BinaryReader(writer.finish());
+    expect(Array.from(reader.readBytes())).toEqual([]);
+    expect(Array.from(reader.readBytes())).toEqual([1, 2, 3, 255]);
+  });
+
+  test("position getter tracks write and read offset", () => {
+    const writer = new BinaryWriter();
+    expect(writer.position).toBe(0);
+    writer.writeU8(42);
+    expect(writer.position).toBe(1);
+    writer.writeU32(0xdeadbeef);
+    expect(writer.position).toBe(5);
+
+    const reader = new BinaryReader(writer.finish());
+    expect(reader.position).toBe(0);
+    reader.readU8();
+    expect(reader.position).toBe(1);
+    reader.readU32();
+    expect(reader.position).toBe(5);
+  });
+
+  test("hasMore and remaining getters", () => {
+    const writer = new BinaryWriter();
+    writer.writeU8(1);
+    writer.writeU8(2);
+    writer.writeU8(3);
+
+    const reader = new BinaryReader(writer.finish());
+    expect(reader.hasMore).toBe(true);
+    expect(reader.remaining).toBe(3);
+    reader.readU8();
+    expect(reader.hasMore).toBe(true);
+    expect(reader.remaining).toBe(2);
+    reader.readU8();
+    reader.readU8();
+    expect(reader.hasMore).toBe(false);
+    expect(reader.remaining).toBe(0);
+  });
+
+  test("BinaryReader throws on buffer underflow for readU8", () => {
+    const reader = new BinaryReader(new Uint8Array(0));
+    expect(() => reader.readU8()).toThrow("Buffer underflow");
+  });
+
+  test("BinaryReader throws on buffer underflow for readU32", () => {
+    const reader = new BinaryReader(new Uint8Array(3)); // only 3 bytes, need 4
+    expect(() => reader.readU32()).toThrow("Buffer underflow");
+  });
+
+  test("BinaryWriter auto-grows when initial capacity is exceeded", () => {
+    // Start small, write more than initial capacity
+    const writer = new BinaryWriter(4); // 4-byte initial buffer
+    for (let i = 0; i < 100; i++) {
+      writer.writeU8(i % 256);
+    }
+    const buf = writer.finish();
+    expect(buf.length).toBe(100);
+    // Verify the data is correct after growth
+    const reader = new BinaryReader(buf);
+    for (let i = 0; i < 100; i++) {
+      expect(reader.readU8()).toBe(i % 256);
+    }
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Serialization error paths
+// ---------------------------------------------------------------------------
+
+describe("Serialization error paths", () => {
+  test("deserializeOperation throws on invalid magic bytes", () => {
+    const bad = new Uint8Array(10); // all zeros, magic would be 0
+    expect(() => deserializeOperation(bad)).toThrow(/magic/i);
+  });
+
+  test("deserializeOperation throws on unsupported protocol version", () => {
+    const writer = new BinaryWriter();
+    writer.writeU32(0x43524454); // PROTOCOL_MAGIC = "CRDT"
+    writer.writeU8(99); // version 99 is unsupported
+    expect(() => deserializeOperation(writer.finish())).toThrow(/version/i);
+  });
+
+  test("deserializeSnapshot throws on wrong message type", () => {
+    // Serialize an operation (type 1) then try to deserialize as snapshot
+    const op: InsertOperation = {
+      type: "insert",
+      id: { replicaId: replicaId(1), counter: 0 },
+      text: "x",
+      after: { insertionId: { replicaId: replicaId(0), counter: 0 }, offset: 0 },
+      before: { insertionId: { replicaId: replicaId(0xffffffff), counter: 0xffffffff }, offset: 0 },
+      version: new Map([[replicaId(1), 0]]),
+      locator: MIN_LOCATOR,
+    };
+    const bytes = serializeOperation(op);
+    expect(() => deserializeSnapshot(bytes)).toThrow();
+  });
+
+  test("serializeOperations empty batch round-trips", () => {
+    const bytes = serializeOperations([]);
+    const ops = deserializeOperations(bytes);
+    expect(ops).toEqual([]);
+  });
+
+  test("deserializeOperations throws on snapshot message type", () => {
+    // serializeSnapshot uses message type 2 — not a valid operation batch header (type 1)
+    const snapshot = {
+      version: 1,
+      replicaId: replicaId(1),
+      versionVector: new Map<number, number>(),
+      fragments: [],
+      undoCounts: [],
+    };
+    const bytes = serializeSnapshot(snapshot);
+    expect(() => deserializeOperations(bytes)).toThrow();
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
