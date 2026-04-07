@@ -269,11 +269,11 @@ export class TextBuffer {
   /** Get the visible text content. */
   getText(): string {
     const parts: string[] = [];
-    for (const frag of this.fragmentsArray()) {
+    this.fragments.forEach((frag) => {
       if (frag.visible) {
         parts.push(frag.text);
       }
-    }
+    });
     return parts.join("");
   }
 

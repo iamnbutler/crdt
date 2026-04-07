@@ -30,17 +30,19 @@ export const MAX_LOCATOR: Locator = { levels: [MAX_VALUE] };
 /**
  * Lexicographic comparison of two Locators.
  * Returns <0 if a < b, 0 if a === b, >0 if a > b.
+ *
+ * Hot path: called O(n log n) per sort and O(log n) per summary combine.
+ * Use arithmetic diff instead of three separate boolean checks per level.
  */
 export function compareLocators(a: Locator, b: Locator): number {
-  const minLen = Math.min(a.levels.length, b.levels.length);
+  const aLevels = a.levels;
+  const bLevels = b.levels;
+  const minLen = Math.min(aLevels.length, bLevels.length);
   for (let i = 0; i < minLen; i++) {
-    const aLevel = a.levels[i];
-    const bLevel = b.levels[i];
-    if (aLevel !== undefined && bLevel !== undefined && aLevel !== bLevel) {
-      return aLevel - bLevel;
-    }
+    const diff = (aLevels[i] ?? 0) - (bLevels[i] ?? 0);
+    if (diff !== 0) return diff;
   }
-  return a.levels.length - b.levels.length;
+  return aLevels.length - bLevels.length;
 }
 
 /**
