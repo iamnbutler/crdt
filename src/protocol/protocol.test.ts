@@ -793,6 +793,117 @@ describe("Awareness Protocol", () => {
     // biome-ignore lint/complexity/useLiteralKeys: index signature requires bracket access
     expect(deserialized.custom?.["typing"]).toBe(true);
   });
+
+  test("serializeAwareness/deserializeAwareness with minimal state (no optional fields)", () => {
+    const state = { replicaId: replicaId(7), timestamp: 1_700_000_000_000 };
+    const bytes = serializeAwareness(state);
+    const result = deserializeAwareness(bytes);
+    expect(result.replicaId).toBe(replicaId(7));
+    expect(result.timestamp).toBe(1_700_000_000_000);
+    expect(result.cursor).toBeUndefined();
+    expect(result.user).toBeUndefined();
+    expect(result.custom).toBeUndefined();
+  });
+
+  test("deserializeAwareness rejects invalid magic number", () => {
+    const bad = new Uint8Array(16); // all zeros — magic will be 0
+    expect(() => deserializeAwareness(bad)).toThrow(/magic/i);
+  });
+
+  test("AwarenessManager.getAllStates includes the local replica", () => {
+    const rid = replicaId(1);
+    const manager = new AwarenessManager(rid);
+    manager.setCursor({ offset: 5 });
+    manager.applyRemote({ replicaId: replicaId(2), cursor: { offset: 10 }, timestamp: Date.now() });
+
+    const all = manager.getAllStates();
+    expect(all.size).toBe(2);
+    expect(all.has(rid)).toBe(true);
+    expect(all.has(replicaId(2))).toBe(true);
+  });
+
+  test("AwarenessManager.getRemoteStates excludes local replica", () => {
+    const rid = replicaId(1);
+    const manager = new AwarenessManager(rid);
+    manager.applyRemote({ replicaId: replicaId(2), timestamp: Date.now() });
+
+    const remote = manager.getRemoteStates();
+    expect(remote.has(rid)).toBe(false);
+    expect(remote.has(replicaId(2))).toBe(true);
+    expect(remote.size).toBe(1);
+  });
+
+  test("AwarenessManager.remove deletes a specific replica and fires onUpdate", () => {
+    const manager = new AwarenessManager(replicaId(1));
+    const updateSizes: number[] = [];
+    manager.onUpdate = (states) => updateSizes.push(states.size);
+
+    manager.applyRemote({ replicaId: replicaId(2), timestamp: Date.now() });
+    manager.applyRemote({ replicaId: replicaId(3), timestamp: Date.now() });
+    expect(manager.remoteCount).toBe(2);
+
+    manager.remove(replicaId(2));
+    expect(manager.remoteCount).toBe(1);
+    expect(manager.getState(replicaId(2))).toBeUndefined();
+    // onUpdate fires for each applyRemote (2×) plus the remove (1×)
+    expect(updateSizes).toStrictEqual([1, 2, 1]);
+  });
+
+  test("AwarenessManager.remove is a no-op for unknown replicas", () => {
+    const manager = new AwarenessManager(replicaId(1));
+    let calls = 0;
+    manager.onUpdate = () => { calls++; };
+
+    manager.remove(replicaId(99));
+    expect(calls).toBe(0);
+    expect(manager.remoteCount).toBe(0);
+  });
+
+  test("AwarenessManager.clear removes all remote states and fires onUpdate", () => {
+    const manager = new AwarenessManager(replicaId(1));
+    const updateSizes: number[] = [];
+    manager.onUpdate = (states) => updateSizes.push(states.size);
+
+    manager.applyRemote({ replicaId: replicaId(2), timestamp: Date.now() });
+    manager.applyRemote({ replicaId: replicaId(3), timestamp: Date.now() });
+    manager.clear();
+
+    expect(manager.remoteCount).toBe(0);
+    expect(updateSizes.at(-1)).toBe(0);
+  });
+
+  test("AwarenessManager.expireStale removes states older than timeout", () => {
+    const manager = new AwarenessManager(replicaId(1), 500); // 500 ms timeout
+    const expiredIds: number[] = [];
+    manager.onExpire = (rid) => expiredIds.push(rid);
+
+    const staleTimestamp = Date.now() - 1000; // 1 second ago — well past 500 ms timeout
+    manager.applyRemote({
+      replicaId: replicaId(2),
+      cursor: { offset: 5 },
+      timestamp: staleTimestamp,
+    });
+    manager.applyRemote({ replicaId: replicaId(3), cursor: { offset: 10 }, timestamp: Date.now() });
+
+    const removed = manager.expireStale();
+    expect(removed).toHaveLength(1);
+    expect(removed[0]).toBe(replicaId(2));
+    expect(expiredIds).toStrictEqual([replicaId(2)]);
+    expect(manager.getState(replicaId(2))).toBeUndefined();
+    expect(manager.getState(replicaId(3))).toBeDefined();
+  });
+
+  test("AwarenessManager.onUpdate not called when stale applyRemote is rejected", () => {
+    const manager = new AwarenessManager(replicaId(1));
+    let calls = 0;
+    manager.onUpdate = () => { calls++; };
+
+    const now = Date.now();
+    manager.applyRemote({ replicaId: replicaId(2), timestamp: now });
+    manager.applyRemote({ replicaId: replicaId(2), timestamp: now - 100 }); // older → rejected
+
+    expect(calls).toBe(1); // only the first update fires onUpdate
+  });
 });
 
 // ---------------------------------------------------------------------------
