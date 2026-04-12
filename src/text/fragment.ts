@@ -137,8 +137,11 @@ export const itemCountDimension: Dimension<FragmentSummary, number> = {
 // Fragment construction
 // ---------------------------------------------------------------------------
 
-/** Count newlines in a string. Uses regex match for best performance on large strings. */
+/** Count newlines in a string. Fast path for short strings, regex for long strings. */
 function countNewlines(text: string): number {
+  if (text.length <= 1) {
+    return text.length === 1 && text.charCodeAt(0) === 10 ? 1 : 0;
+  }
   const matches = text.match(/\n/g);
   return matches ? matches.length : 0;
 }

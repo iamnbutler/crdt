@@ -300,7 +300,10 @@ export class TextBuffer {
       };
     }
 
-    const normalized = text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+    // Only normalize if \r characters are present (rare case)
+    const normalized = text.includes("\r")
+      ? text.replace(/\r\n/g, "\n").replace(/\r/g, "\n")
+      : text;
     return this.insertInternal(offset, normalized);
   }
 
@@ -714,10 +717,11 @@ export class TextBuffer {
 
     // Fastest path: inserting at end of document with no splits needed
     // Skip when there are live snapshots (mutations would corrupt them)
-    const totalVisibleLen = this.fragments.summary().visibleLen;
-    if (offset === totalVisibleLen && !this.fragments.isEmpty() && this._liveSnapshots === 0) {
+    // Single summary() call covers visibleLen + itemCount (avoids separate isEmpty/length calls)
+    const treeSum = this.fragments.summary();
+    if (offset === treeSum.visibleLen && treeSum.itemCount > 0 && this._liveSnapshots === 0) {
       // Get the last fragment to compute locator
-      const lastIdx = this.fragments.length() - 1;
+      const lastIdx = treeSum.itemCount - 1;
       const lastFrag = this.fragments.get(lastIdx);
 
       if (lastFrag) {
