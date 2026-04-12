@@ -750,6 +750,52 @@ describe("VersionVector", () => {
     expect(vv.get(rid)).toBe(5);
     expect(clone.get(rid)).toBe(10);
   });
+
+  it("happenedBefore returns false for two empty vectors", () => {
+    const a = createVersionVector();
+    const b = createVersionVector();
+    expect(happenedBefore(a, b)).toBe(false);
+    expect(happenedBefore(b, a)).toBe(false);
+  });
+
+  it("happenedBefore returns false for equal non-empty vectors", () => {
+    const a = createVersionVector();
+    const b = createVersionVector();
+    const rid1 = replicaId(1);
+    const rid2 = replicaId(2);
+
+    observeVersion(a, rid1, 3);
+    observeVersion(a, rid2, 7);
+    observeVersion(b, rid1, 3);
+    observeVersion(b, rid2, 7);
+
+    expect(happenedBefore(a, b)).toBe(false);
+    expect(happenedBefore(b, a)).toBe(false);
+  });
+
+  it("happenedBefore(empty, nonEmpty) is true — empty vector precedes all operations", () => {
+    const empty = createVersionVector();
+    const nonEmpty = createVersionVector();
+    const rid = replicaId(1);
+    observeVersion(nonEmpty, rid, 1);
+
+    expect(happenedBefore(empty, nonEmpty)).toBe(true);
+    expect(happenedBefore(nonEmpty, empty)).toBe(false);
+  });
+
+  it("happenedBefore returns false when a has a replica not in b", () => {
+    const a = createVersionVector();
+    const b = createVersionVector();
+    const rid1 = replicaId(1);
+    const rid2 = replicaId(2);
+
+    observeVersion(a, rid1, 5);
+    observeVersion(a, rid2, 3); // rid2 only in a
+    observeVersion(b, rid1, 7);
+
+    // b doesn't know about rid2, so b didn't causally follow a
+    expect(happenedBefore(a, b)).toBe(false);
+  });
 });
 
 // ---------------------------------------------------------------------------

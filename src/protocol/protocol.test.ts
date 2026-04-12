@@ -9,7 +9,12 @@ import { replicaId, transactionId } from "../text/types.js";
 import type { DeleteOperation, InsertOperation, Operation, UndoOperation } from "../text/types.js";
 
 import { MIN_LOCATOR } from "../text/locator.js";
-import { AwarenessManager, deserializeAwareness, serializeAwareness } from "./awareness.js";
+import {
+  AwarenessBroadcaster,
+  AwarenessManager,
+  deserializeAwareness,
+  serializeAwareness,
+} from "./awareness.js";
 import { OperationQueue } from "./operation-queue.js";
 import {
   SequentialReplicaIdAssigner,
@@ -792,6 +797,120 @@ describe("Awareness Protocol", () => {
     expect(deserialized.user?.color).toBe("#00ff00");
     // biome-ignore lint/complexity/useLiteralKeys: index signature requires bracket access
     expect(deserialized.custom?.["typing"]).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// AwarenessBroadcaster Tests
+// ---------------------------------------------------------------------------
+
+describe("AwarenessBroadcaster", () => {
+  test("broadcast() sends serialized local state to the send callback", () => {
+    const manager = new AwarenessManager(replicaId(1));
+    manager.setCursor({ offset: 42 });
+
+    let sendCount = 0;
+    let sentReplicaId: number | undefined;
+    let sentCursorOffset: number | undefined;
+
+    const broadcaster = new AwarenessBroadcaster(manager, (data) => {
+      sendCount++;
+      const deserialized = deserializeAwareness(data);
+      sentReplicaId = deserialized.replicaId;
+      sentCursorOffset = deserialized.cursor?.offset;
+    });
+
+    broadcaster.broadcast();
+
+    expect(sendCount).toBe(1);
+    expect(sentReplicaId).toBe(replicaId(1));
+    expect(sentCursorOffset).toBe(42);
+  });
+
+  test("receive() deserializes data and applies remote state to manager", () => {
+    const manager = new AwarenessManager(replicaId(1));
+    const broadcaster = new AwarenessBroadcaster(manager, () => {
+      /* no-op send */
+    });
+
+    const remoteState = {
+      replicaId: replicaId(2),
+      cursor: { offset: 99 },
+      timestamp: Date.now(),
+    };
+    const bytes = serializeAwareness(remoteState);
+
+    broadcaster.receive(bytes);
+
+    const applied = manager.getState(replicaId(2));
+    expect(applied?.cursor?.offset).toBe(99);
+  });
+
+  test("isActive is false before start()", () => {
+    const manager = new AwarenessManager(replicaId(1));
+    const broadcaster = new AwarenessBroadcaster(manager, () => {
+      /* no-op send */
+    });
+    expect(broadcaster.isActive).toBe(false);
+  });
+
+  test("start() broadcasts immediately and sets isActive", () => {
+    const manager = new AwarenessManager(replicaId(1));
+    const sent: Uint8Array[] = [];
+    const broadcaster = new AwarenessBroadcaster(manager, (data) => {
+      sent.push(data);
+    });
+
+    broadcaster.start();
+    expect(broadcaster.isActive).toBe(true);
+    expect(sent).toHaveLength(1); // immediate broadcast on start
+    broadcaster.stop();
+  });
+
+  test("stop() clears isActive", () => {
+    const manager = new AwarenessManager(replicaId(1));
+    const broadcaster = new AwarenessBroadcaster(manager, () => {
+      /* no-op send */
+    });
+
+    broadcaster.start();
+    expect(broadcaster.isActive).toBe(true);
+
+    broadcaster.stop();
+    expect(broadcaster.isActive).toBe(false);
+  });
+
+  test("stop() before start() is safe (no-op)", () => {
+    const manager = new AwarenessManager(replicaId(1));
+    const broadcaster = new AwarenessBroadcaster(manager, () => {
+      /* no-op send */
+    });
+    expect(() => broadcaster.stop()).not.toThrow();
+    expect(broadcaster.isActive).toBe(false);
+  });
+
+  test("start() is idempotent — double start does not create extra broadcasts", () => {
+    const manager = new AwarenessManager(replicaId(1));
+    const sent: Uint8Array[] = [];
+    const broadcaster = new AwarenessBroadcaster(manager, (data) => {
+      sent.push(data);
+    });
+
+    broadcaster.start();
+    const countAfterFirst = sent.length;
+    broadcaster.start(); // second call should be a no-op
+    expect(sent.length).toBe(countAfterFirst); // no additional immediate broadcast
+    expect(broadcaster.isActive).toBe(true);
+    broadcaster.stop();
+  });
+
+  test("receive() throws on invalid protocol magic", () => {
+    const manager = new AwarenessManager(replicaId(1));
+    const broadcaster = new AwarenessBroadcaster(manager, () => {
+      /* no-op send */
+    });
+    const garbage = new Uint8Array([0, 1, 2, 3, 4, 5, 6, 7]);
+    expect(() => broadcaster.receive(garbage)).toThrow();
   });
 });
 
