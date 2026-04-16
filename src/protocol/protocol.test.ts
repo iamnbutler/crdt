@@ -6,7 +6,13 @@ import { describe, expect, test } from "bun:test";
 import { cloneVersionVector, createVersionVector, observeVersion } from "../text/clock.js";
 import { TextBuffer } from "../text/text-buffer.js";
 import { replicaId, transactionId } from "../text/types.js";
-import type { DeleteOperation, InsertOperation, Operation, UndoOperation } from "../text/types.js";
+import type {
+  DeleteOperation,
+  InsertOperation,
+  Operation,
+  UndoOperation,
+  VersionVector,
+} from "../text/types.js";
 
 import { MIN_LOCATOR } from "../text/locator.js";
 import { AwarenessManager, deserializeAwareness, serializeAwareness } from "./awareness.js";
@@ -1202,6 +1208,211 @@ describe("validateOperation edge cases", () => {
     const result = validateOperation(op, context);
     expect(result.valid).toBe(false);
     expect(result.error).toBe(ValidationError.InconsistentVersion);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// validateOperation — counter sequence edge cases
+// ---------------------------------------------------------------------------
+
+describe("validateOperation — counter sequence", () => {
+  const baseInsert = (counter: number): InsertOperation => ({
+    type: "insert",
+    id: { replicaId: replicaId(1), counter },
+    text: "x",
+    after: { insertionId: { replicaId: replicaId(0), counter: 0 }, offset: 0 },
+    before: { insertionId: { replicaId: replicaId(0xffffffff), counter: 0xffffffff }, offset: 0 },
+    version: new Map([[replicaId(1), counter]]),
+    locator: MIN_LOCATOR,
+  });
+
+  test("accepts first operation from a replica (no prior counter tracked)", () => {
+    const context: ValidationContext = {
+      replicaCounters: new Map(), // replica 1 has no recorded counter
+      localVersion: createVersionVector(),
+      fragmentExists: () => true,
+    };
+    const result = validateOperation(baseInsert(5), context);
+    expect(result.valid).toBe(true);
+  });
+
+  test("accepts next sequential counter (lastCounter + 1)", () => {
+    const context: ValidationContext = {
+      replicaCounters: new Map([[replicaId(1), 5]]),
+      localVersion: createVersionVector(),
+      fragmentExists: () => true,
+    };
+    const result = validateOperation(baseInsert(6), context);
+    expect(result.valid).toBe(true);
+  });
+
+  test("accepts duplicate counter for idempotency (counter === lastCounter)", () => {
+    const context: ValidationContext = {
+      replicaCounters: new Map([[replicaId(1), 5]]),
+      localVersion: createVersionVector(),
+      fragmentExists: () => true,
+    };
+    const result = validateOperation(baseInsert(5), context);
+    expect(result.valid).toBe(true);
+  });
+
+  test("accepts old counter for idempotency (counter < lastCounter)", () => {
+    const context: ValidationContext = {
+      replicaCounters: new Map([[replicaId(1), 10]]),
+      localVersion: createVersionVector(),
+      fragmentExists: () => true,
+    };
+    const result = validateOperation(baseInsert(3), context);
+    expect(result.valid).toBe(true);
+  });
+
+  test("version vector entry equaling counter is valid (senderVersion === counter)", () => {
+    // The check is senderVersion < counter — equality is explicitly allowed.
+    const op: InsertOperation = baseInsert(7);
+    const context: ValidationContext = {
+      replicaCounters: new Map(),
+      localVersion: createVersionVector(),
+      fragmentExists: () => true,
+    };
+    const result = validateOperation(op, context);
+    expect(result.valid).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// validateOperation — delete edge cases
+// ---------------------------------------------------------------------------
+
+describe("validateOperation — delete edge cases", () => {
+  test("accepts delete with zero ranges (no-op)", () => {
+    const op: DeleteOperation = {
+      type: "delete",
+      id: { replicaId: replicaId(1), counter: 1 },
+      ranges: [],
+      version: new Map([[replicaId(1), 1]]),
+    };
+    const context: ValidationContext = {
+      replicaCounters: new Map(),
+      localVersion: createVersionVector(),
+      fragmentExists: () => false, // irrelevant — no ranges
+    };
+    const result = validateOperation(op, context);
+    expect(result.valid).toBe(true);
+  });
+
+  test("rejects delete range with negative length", () => {
+    const op: DeleteOperation = {
+      type: "delete",
+      id: { replicaId: replicaId(1), counter: 1 },
+      ranges: [{ insertionId: { replicaId: replicaId(1), counter: 0 }, offset: 0, length: -1 }],
+      version: new Map([[replicaId(1), 1]]),
+    };
+    const context: ValidationContext = {
+      replicaCounters: new Map(),
+      localVersion: createVersionVector(),
+      fragmentExists: () => true,
+    };
+    const result = validateOperation(op, context);
+    expect(result.valid).toBe(false);
+    expect(result.error).toBe(ValidationError.InvalidDeleteRange);
+  });
+
+  test("rejects second invalid range in multi-range delete (unknown fragment)", () => {
+    const op: DeleteOperation = {
+      type: "delete",
+      id: { replicaId: replicaId(1), counter: 2 },
+      ranges: [
+        { insertionId: { replicaId: replicaId(1), counter: 0 }, offset: 0, length: 1 }, // exists
+        { insertionId: { replicaId: replicaId(1), counter: 99 }, offset: 0, length: 1 }, // missing
+      ],
+      version: new Map([[replicaId(1), 2]]),
+    };
+    const context: ValidationContext = {
+      replicaCounters: new Map(),
+      localVersion: createVersionVector(),
+      fragmentExists: (id) => id.counter === 0, // only counter 0 exists
+    };
+    const result = validateOperation(op, context);
+    expect(result.valid).toBe(false);
+    expect(result.error).toBe(ValidationError.UnknownReference);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// validateOperation — undo edge cases
+// ---------------------------------------------------------------------------
+
+describe("validateOperation — undo edge cases", () => {
+  test("accepts undo with empty counts (no-op undo)", () => {
+    const op: UndoOperation = {
+      type: "undo",
+      id: { replicaId: replicaId(1), counter: 1 },
+      transactionId: transactionId(1),
+      counts: [],
+      version: new Map([[replicaId(1), 1]]),
+    };
+    const context: ValidationContext = {
+      replicaCounters: new Map(),
+      localVersion: createVersionVector(),
+      fragmentExists: () => true,
+    };
+    const result = validateOperation(op, context);
+    expect(result.valid).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// isCausallyReady — edge cases
+// ---------------------------------------------------------------------------
+
+describe("isCausallyReady — edge cases", () => {
+  const baseOp = (version: VersionVector): InsertOperation => ({
+    type: "insert",
+    id: { replicaId: replicaId(1), counter: 0 },
+    text: "x",
+    after: { insertionId: { replicaId: replicaId(0), counter: 0 }, offset: 0 },
+    before: { insertionId: { replicaId: replicaId(0xffffffff), counter: 0xffffffff }, offset: 0 },
+    version,
+    locator: MIN_LOCATOR,
+  });
+
+  test("returns true for operation with empty version vector", () => {
+    const op = baseOp(new Map());
+    const localVersion = createVersionVector();
+    expect(isCausallyReady(op, localVersion)).toBe(true);
+  });
+
+  test("returns true when version vector only references own replica (own replica is skipped)", () => {
+    const op = baseOp(new Map([[replicaId(1), 999]]));
+    const localVersion = createVersionVector(); // local hasn't seen replica 1 — but it's skipped
+    expect(isCausallyReady(op, localVersion)).toBe(true);
+  });
+
+  test("returns true when all deps are exactly satisfied (local === required)", () => {
+    const op = baseOp(
+      new Map([
+        [replicaId(1), 0], // own replica — skipped
+        [replicaId(2), 3], // requires exactly counter 3
+        [replicaId(3), 7], // requires exactly counter 7
+      ]),
+    );
+    const localVersion = createVersionVector();
+    observeVersion(localVersion, replicaId(2), 3);
+    observeVersion(localVersion, replicaId(3), 7);
+    expect(isCausallyReady(op, localVersion)).toBe(true);
+  });
+
+  test("returns false when one of multiple deps is unsatisfied", () => {
+    const op = baseOp(
+      new Map([
+        [replicaId(2), 3],
+        [replicaId(3), 7],
+      ]),
+    );
+    const localVersion = createVersionVector();
+    observeVersion(localVersion, replicaId(2), 3); // satisfied
+    // replica 3 not in localVersion — unsatisfied
+    expect(isCausallyReady(op, localVersion)).toBe(false);
   });
 });
 
