@@ -324,6 +324,37 @@ group("text-apply-remote", () => {
 });
 
 // ---------------------------------------------------------------------------
+// Delete Under Live Snapshot (exercises deleteInternalSlow sort-skip)
+// ---------------------------------------------------------------------------
+
+group("text-delete-snapshot", () => {
+  // deleteInternalSlow is used when _liveSnapshots > 0 (even when no splits
+  // needed). Previously it always called sortFragments; now it skips it when
+  // the delete boundaries align with fragment boundaries (no splits).
+  for (const size of ["tiny", "small", "medium"] as const) {
+    const buf = buffers[size];
+    if (buf === undefined) continue;
+
+    bench(`delete char at start under snapshot (${size})`, () => {
+      const snap = buf.snapshot();
+      buf.delete(0, 1);
+      snap.release();
+      buf.insert(0, "x");
+      return buf;
+    });
+
+    bench(`delete char at middle under snapshot (${size})`, () => {
+      const snap = buf.snapshot();
+      const mid = Math.floor(buf.length / 2);
+      if (mid > 0) buf.delete(mid - 1, mid);
+      snap.release();
+      buf.insert(mid > 0 ? mid - 1 : 0, "x");
+      return buf;
+    });
+  }
+});
+
+// ---------------------------------------------------------------------------
 // Run all benchmarks
 // ---------------------------------------------------------------------------
 

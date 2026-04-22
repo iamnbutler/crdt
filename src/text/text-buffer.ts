@@ -1303,6 +1303,7 @@ export class TextBuffer {
     const ranges: Array<{ insertionId: OperationId; offset: number; length: number }> = [];
 
     let visibleOffset = 0;
+    let hadSplits = false;
 
     for (let i = 0; i < frags.length; i++) {
       const frag = frags[i];
@@ -1344,6 +1345,7 @@ export class TextBuffer {
           offset: deletedPart.insertionOffset,
           length: deletedPart.length,
         });
+        hadSplits = true;
       } else if (fragStart < start) {
         // Delete range overlaps the end of this fragment
         const splitPoint = start - fragStart;
@@ -1357,6 +1359,7 @@ export class TextBuffer {
           offset: deletedPart.insertionOffset,
           length: deletedPart.length,
         });
+        hadSplits = true;
       } else {
         // Delete range overlaps the start of this fragment (fragEnd > end)
         const splitPoint = end - fragStart;
@@ -1370,15 +1373,17 @@ export class TextBuffer {
           offset: deletedPart.insertionOffset,
           length: deletedPart.length,
         });
+        hadSplits = true;
       }
 
       visibleOffset = fragEnd;
     }
 
-    // Sort fragments after splits to maintain canonical order.
-    // Split fragments get child locators that must interleave correctly
-    // with fragments from other operations at the same parent locator.
-    sortFragments(newFrags);
+    // Sort only when splits occurred: new child locators must be ordered relative
+    // to sibling fragments. Pure deletions (no splits) never change fragment order.
+    if (hadSplits) {
+      sortFragments(newFrags);
+    }
     this.setFragments(newFrags);
 
     return {
