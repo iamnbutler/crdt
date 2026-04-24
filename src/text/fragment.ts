@@ -23,6 +23,8 @@ import type { Fragment, FragmentSummary, Locator, OperationId } from "./types.js
  * combine() sums all fields; identity() returns all zeros.
  */
 export const fragmentSummaryOps: Summary<FragmentSummary> = {
+  commutative: true,
+
   identity(): FragmentSummary {
     return {
       visibleLen: 0,

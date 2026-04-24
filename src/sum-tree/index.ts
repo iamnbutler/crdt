@@ -25,6 +25,12 @@ export interface Summary<S> {
    * If not provided, falls back to O(n) recursive counting.
    */
   getItemCount?(summary: S): number;
+  /**
+   * Optional: when true, combine is commutative — combine(a,b) === combine(b,a).
+   * Enables O(depth) incremental summary propagation on insert instead of O(B×depth).
+   * Only set this if your monoid truly is commutative (all operations are order-independent).
+   */
+  commutative?: boolean;
 }
 
 /**
@@ -778,8 +784,11 @@ export class SumTree<T extends Summarizable<S>, S> {
     // Check for overflow and split if needed
     if (items.length > this.branchingFactor) {
       this.splitAndPropagate(path);
+    } else if (this.summaryOps.commutative) {
+      // Fast path for commutative monoids: O(depth) combines instead of O(B×depth).
+      // Each ancestor's summary = combine(old_summary, new_item_summary).
+      this.updateSummariesUpWithDelta(path, item.summary());
     } else {
-      // Just update summaries up the path
       this.updateSummariesUp(path);
     }
   }
@@ -820,8 +829,9 @@ export class SumTree<T extends Summarizable<S>, S> {
     // Check for overflow and split if needed
     if (items.length > newTree.branchingFactor) {
       newTree.splitAndPropagate(clonedPath);
+    } else if (newTree.summaryOps.commutative) {
+      newTree.updateSummariesUpWithDelta(clonedPath, item.summary());
     } else {
-      // Just update summaries up the path
       newTree.updateSummariesUp(clonedPath);
     }
 
@@ -1927,6 +1937,32 @@ export class SumTree<T extends Summarizable<S>, S> {
       const entry = path[i];
       if (entry === undefined) continue;
       this.updateSummary(entry.nodeId);
+    }
+  }
+
+  /**
+   * O(depth) summary propagation for commutative monoids: combine each ancestor's
+   * existing summary with the delta rather than recomputing from all children.
+   *
+   * Correctness: for a commutative+associative monoid, adding one item with summary
+   * `delta` to a subtree is equivalent to `combine(old_subtree_summary, delta)` at
+   * every level, because commutativity lets us factor the new item out regardless of
+   * where it was inserted.
+   */
+  private updateSummariesUpWithDelta(
+    path: Array<{ nodeId: NodeId; indexInNode: number }>,
+    delta: S,
+  ): void {
+    for (let i = path.length - 1; i >= 0; i--) {
+      const entry = path[i];
+      if (entry === undefined) continue;
+      const nodeId = entry.nodeId;
+      const old = this.summaries.get(nodeId);
+      if (old !== undefined) {
+        this.summaries.set(nodeId, this.summaryOps.combine(old, delta));
+      } else {
+        this.updateSummary(nodeId);
+      }
     }
   }
 
