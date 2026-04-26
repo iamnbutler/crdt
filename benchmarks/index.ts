@@ -468,6 +468,44 @@ group("text-apply-remote", () => {
 });
 
 // ---------------------------------------------------------------------------
+// TextBuffer: Apply Remote Delete Operations (applyRemoteDelete baseline)
+// ---------------------------------------------------------------------------
+
+group("text-apply-remote-delete", () => {
+  // Source replica: generate 100 multi-char insert ops
+  const insertSrc = TextBuffer.create();
+  const remoteInsertOps: ReturnType<typeof insertSrc.insert>[] = [];
+  for (let i = 0; i < 100; i++) {
+    remoteInsertOps.push(insertSrc.insert(insertSrc.length, `Line ${i}\n`));
+  }
+
+  // Delete source: apply same inserts, then generate 100 single-char deletes.
+  // Each delete(0, 1) falls inside a multi-char fragment, exercising the split
+  // path in applyRemoteDelete on the target (the O(n) worklist hot path).
+  const deleteSrc = TextBuffer.create();
+  for (const op of remoteInsertOps) {
+    deleteSrc.applyRemote(op);
+  }
+  const remoteDeleteOps: ReturnType<typeof deleteSrc.delete>[] = [];
+  for (let i = 0; i < 100; i++) {
+    if (deleteSrc.length > 0) {
+      remoteDeleteOps.push(deleteSrc.delete(0, 1));
+    }
+  }
+
+  bench("apply 100 remote delete ops (target: <200us each)", () => {
+    const target = TextBuffer.create();
+    for (const op of remoteInsertOps) {
+      target.applyRemote(op);
+    }
+    for (const op of remoteDeleteOps) {
+      target.applyRemote(op);
+    }
+    return target;
+  });
+});
+
+// ---------------------------------------------------------------------------
 // Synthetic Document Generation
 // ---------------------------------------------------------------------------
 
