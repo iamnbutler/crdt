@@ -137,31 +137,25 @@ export const itemCountDimension: Dimension<FragmentSummary, number> = {
 // Fragment construction
 // ---------------------------------------------------------------------------
 
-/** Count newlines in a string. Uses regex match for best performance on large strings. */
+/** Count newlines in a string. Uses early-exit for the common no-newline case. */
 function countNewlines(text: string): number {
+  if (!text.includes("\n")) return 0;
   const matches = text.match(/\n/g);
-  return matches ? matches.length : 0;
+  return matches !== null ? matches.length : 0;
 }
 
-/**
- * Create a Fragment with a precomputed summary.
- *
- * @param baseLocator The Locator from the original InsertOperation. If not
- *   provided, defaults to the fragment's locator (for new insertions).
- */
-export function createFragment(
+/** Build a Fragment with a pre-computed line count, avoiding redundant scanning. */
+function buildFragment(
   insertionId: OperationId,
   insertionOffset: number,
   locator: Locator,
+  baseLocator: Locator,
   text: string,
   visible: boolean,
-  deletions: ReadonlyArray<OperationId> = [],
-  baseLocator?: Locator,
+  deletions: ReadonlyArray<OperationId>,
+  lines: number,
 ): Fragment {
-  const lines = countNewlines(text);
   const len = text.length;
-  const base = baseLocator ?? locator;
-
   const summaryValue: FragmentSummary = visible
     ? {
         visibleLen: len,
@@ -181,12 +175,11 @@ export function createFragment(
         maxLocator: locator,
         itemCount: 1,
       };
-
   return {
     insertionId,
     insertionOffset,
     locator,
-    baseLocator: base,
+    baseLocator,
     length: len,
     visible,
     deletions,
@@ -195,6 +188,33 @@ export function createFragment(
       return summaryValue;
     },
   };
+}
+
+/**
+ * Create a Fragment with a precomputed summary.
+ *
+ * @param baseLocator The Locator from the original InsertOperation. If not
+ *   provided, defaults to the fragment's locator (for new insertions).
+ */
+export function createFragment(
+  insertionId: OperationId,
+  insertionOffset: number,
+  locator: Locator,
+  text: string,
+  visible: boolean,
+  deletions: ReadonlyArray<OperationId> = [],
+  baseLocator?: Locator,
+): Fragment {
+  return buildFragment(
+    insertionId,
+    insertionOffset,
+    locator,
+    baseLocator ?? locator,
+    text,
+    visible,
+    deletions,
+    countNewlines(text),
+  );
 }
 
 /**
@@ -220,36 +240,45 @@ export function splitFragment(fragment: Fragment, localOffset: number): [Fragmen
   // previous splits. This is the KEY to order independence.
   const parentLocator = fragment.baseLocator;
 
+  // Count newlines once for the left part; derive right count from the stored total
+  // to avoid scanning rightText separately.
+  const prevSummary = fragment.summary();
+  const totalLines = prevSummary.visibleLines + prevSummary.deletedLines;
+  const leftLines = countNewlines(leftText);
+  const rightLines = totalLines - leftLines;
+
   // Left: [...baseLocator, 2*insertionOffset]
   const leftInsertionOffset = fragment.insertionOffset;
   const leftLocator: Locator = {
     levels: [...parentLocator.levels, 2 * leftInsertionOffset],
   };
 
-  const left = createFragment(
+  const left = buildFragment(
     fragment.insertionId,
     leftInsertionOffset,
     leftLocator,
+    fragment.baseLocator,
     leftText,
     fragment.visible,
     fragment.deletions,
-    fragment.baseLocator,
+    leftLines,
   );
 
-  // Right: [...baseLocator, 2*insertionOffset] for the right part
+  // Right: [...baseLocator, 2*rightInsertionOffset]
   const rightInsertionOffset = fragment.insertionOffset + localOffset;
   const rightLocator: Locator = {
     levels: [...parentLocator.levels, 2 * rightInsertionOffset],
   };
 
-  const right = createFragment(
+  const right = buildFragment(
     fragment.insertionId,
     rightInsertionOffset,
     rightLocator,
+    fragment.baseLocator,
     rightText,
     fragment.visible,
     fragment.deletions,
-    fragment.baseLocator,
+    rightLines,
   );
 
   return [left, right];
@@ -258,31 +287,39 @@ export function splitFragment(fragment: Fragment, localOffset: number): [Fragmen
 /**
  * Create a new fragment that is a "deleted" version of the given fragment.
  * Adds the deleting operation's ID to the deletions set.
+ * Reuses the existing summary's line count to avoid rescanning unchanged text.
  */
 export function deleteFragment(fragment: Fragment, deletionId: OperationId): Fragment {
-  return createFragment(
+  const prevSummary = fragment.summary();
+  const lines = prevSummary.visibleLines + prevSummary.deletedLines;
+  return buildFragment(
     fragment.insertionId,
     fragment.insertionOffset,
     fragment.locator,
+    fragment.baseLocator,
     fragment.text,
     false,
     [...fragment.deletions, deletionId],
-    fragment.baseLocator,
+    lines,
   );
 }
 
 /**
  * Rebuild a fragment with updated visibility (used after undo/redo).
+ * Reuses the existing summary's line count to avoid rescanning unchanged text.
  */
 export function withVisibility(fragment: Fragment, visible: boolean): Fragment {
   if (fragment.visible === visible) return fragment;
-  return createFragment(
+  const prevSummary = fragment.summary();
+  const lines = prevSummary.visibleLines + prevSummary.deletedLines;
+  return buildFragment(
     fragment.insertionId,
     fragment.insertionOffset,
     fragment.locator,
+    fragment.baseLocator,
     fragment.text,
     visible,
     fragment.deletions,
-    fragment.baseLocator,
+    lines,
   );
 }
