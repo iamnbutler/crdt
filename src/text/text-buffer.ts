@@ -1395,11 +1395,11 @@ export class TextBuffer {
   // ---------------------------------------------------------------------------
 
   private recomputeVisibility(): void {
-    // Use forEach to avoid materializing an intermediate Fragment[] via fragmentsArray().
+    const frags = this.fragmentsArray();
     let changed = false;
     const newFrags: Fragment[] = [];
-    // biome-ignore lint/complexity/noForEach: SumTree.forEach traverses without materializing a Fragment[]
-    this.fragments.forEach((frag) => {
+
+    for (const frag of frags) {
       const shouldBeVisible = this.undoMap.isVisible(frag.insertionId, frag.deletions);
       if (shouldBeVisible !== frag.visible) {
         newFrags.push(withVisibility(frag, shouldBeVisible));
@@ -1407,7 +1407,8 @@ export class TextBuffer {
       } else {
         newFrags.push(frag);
       }
-    });
+    }
+
     if (changed) {
       this.setFragments(newFrags);
     }
