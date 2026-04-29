@@ -269,11 +269,12 @@ export class TextBuffer {
   /** Get the visible text content. */
   getText(): string {
     const parts: string[] = [];
-    for (const frag of this.fragmentsArray()) {
+    // biome-ignore lint/complexity/noForEach: SumTree.forEach traverses without materializing a Fragment[]
+    this.fragments.forEach((frag) => {
       if (frag.visible) {
         parts.push(frag.text);
       }
-    }
+    });
     return parts.join("");
   }
 
@@ -1394,11 +1395,11 @@ export class TextBuffer {
   // ---------------------------------------------------------------------------
 
   private recomputeVisibility(): void {
-    const frags = this.fragmentsArray();
+    // Use forEach to avoid materializing an intermediate Fragment[] via fragmentsArray().
     let changed = false;
     const newFrags: Fragment[] = [];
-
-    for (const frag of frags) {
+    // biome-ignore lint/complexity/noForEach: SumTree.forEach traverses without materializing a Fragment[]
+    this.fragments.forEach((frag) => {
       const shouldBeVisible = this.undoMap.isVisible(frag.insertionId, frag.deletions);
       if (shouldBeVisible !== frag.visible) {
         newFrags.push(withVisibility(frag, shouldBeVisible));
@@ -1406,8 +1407,7 @@ export class TextBuffer {
       } else {
         newFrags.push(frag);
       }
-    }
-
+    });
     if (changed) {
       this.setFragments(newFrags);
     }
