@@ -1451,11 +1451,15 @@ export class TextBuffer {
       // that corrupt the tree structure. Using array-based approach for now.
       const frags = this.fragmentsArray();
 
-      if (needsAfterSplit) {
-        this.findRefIndex(frags, op.after, "after");
-      }
-      if (needsBeforeSplit) {
-        this.findRefIndex(frags, op.before, "before");
+      if (needsAfterSplit && needsBeforeSplit) {
+        this.findRefIndexBoth(frags, op.after, op.before);
+      } else {
+        if (needsAfterSplit) {
+          this.findRefIndex(frags, op.after, "after");
+        }
+        if (needsBeforeSplit) {
+          this.findRefIndex(frags, op.before, "before");
+        }
       }
 
       // After splits, re-sort and rebuild tree, then use direct insertion
@@ -1470,11 +1474,15 @@ export class TextBuffer {
       // Snapshot safety fallback: use full array-based approach
       const frags = this.fragmentsArray();
 
-      if (needsAfterSplit) {
-        this.findRefIndex(frags, op.after, "after");
-      }
-      if (needsBeforeSplit) {
-        this.findRefIndex(frags, op.before, "before");
+      if (needsAfterSplit && needsBeforeSplit) {
+        this.findRefIndexBoth(frags, op.after, op.before);
+      } else {
+        if (needsAfterSplit) {
+          this.findRefIndex(frags, op.after, "after");
+        }
+        if (needsBeforeSplit) {
+          this.findRefIndex(frags, op.before, "before");
+        }
       }
 
       sortFragments(frags);
@@ -1672,6 +1680,124 @@ export class TextBuffer {
     }
 
     return null; // Reference not found
+  }
+
+  /**
+   * Combined single-pass variant of findRefIndex for the common case where both
+   * after-ref and before-ref have distinct insertionIds (i.e., they reference
+   * different original insertions).
+   *
+   * Instead of two sequential O(n) scans through the fragment array, this
+   * performs one O(n) scan that collects matching indices for both refs
+   * simultaneously, then processes splits with index adjustment.
+   *
+   * Falls back to sequential findRefIndex calls when both refs share the same
+   * insertionId (e.g., the insert lands between two parts of a split fragment).
+   */
+  private findRefIndexBoth(
+    frags: Fragment[],
+    afterRef: { insertionId: OperationId; offset: number },
+    beforeRef: { insertionId: OperationId; offset: number },
+  ): void {
+    if (operationIdsEqual(afterRef.insertionId, beforeRef.insertionId)) {
+      // Same insertionId: sequential approach is safe and simpler
+      this.findRefIndex(frags, afterRef, "after");
+      this.findRefIndex(frags, beforeRef, "before");
+      return;
+    }
+
+    // Single O(n) pass: collect match indices for both refs
+    const afterMatches: number[] = [];
+    const beforeMatches: number[] = [];
+    for (let i = 0; i < frags.length; i++) {
+      const frag = frags[i];
+      if (frag === undefined) continue;
+      if (operationIdsEqual(frag.insertionId, afterRef.insertionId)) {
+        afterMatches.push(i);
+      } else if (operationIdsEqual(frag.insertionId, beforeRef.insertionId)) {
+        beforeMatches.push(i);
+      }
+    }
+
+    // Process after-ref first, tracking any splice so we can adjust before-ref indices
+    const afterSpliceAt =
+      afterMatches.length > 0
+        ? this.applyRefSplitFromMatches(frags, afterRef, afterMatches, "after")
+        : -1;
+
+    if (beforeMatches.length > 0) {
+      // Adjust before-ref indices: a splice at afterSpliceAt shifts all
+      // subsequent positions by +1 (1 element replaced by 2)
+      const adjustedBefore =
+        afterSpliceAt >= 0
+          ? beforeMatches.map((i) => (i > afterSpliceAt ? i + 1 : i))
+          : beforeMatches;
+      this.applyRefSplitFromMatches(frags, beforeRef, adjustedBefore, "before");
+    }
+  }
+
+  /**
+   * Apply split logic for a single ref against pre-collected matching indices.
+   * Mirrors the inner logic of findRefIndex but takes matches as input instead
+   * of re-scanning the array.
+   *
+   * Returns the index where a splice occurred, or -1 if no splice was needed.
+   */
+  private applyRefSplitFromMatches(
+    frags: Fragment[],
+    ref: { insertionId: OperationId; offset: number },
+    matchingIndices: number[],
+    type: "after" | "before",
+  ): number {
+    for (const i of matchingIndices) {
+      const frag = frags[i];
+      if (frag === undefined) continue;
+      const fragEnd = frag.insertionOffset + frag.length;
+
+      if (ref.offset > frag.insertionOffset && ref.offset < fragEnd) {
+        const [leftPart, rightPart] = splitFragment(frag, ref.offset - frag.insertionOffset);
+        frags.splice(i, 1, leftPart, rightPart);
+        return i;
+      }
+
+      if (type === "after" && fragEnd === ref.offset) {
+        return -1;
+      }
+      if (type === "before" && frag.insertionOffset === ref.offset && frag.length > 0) {
+        return -1;
+      }
+    }
+
+    // Edge cases: zero-length splits
+    if (type === "after") {
+      const firstIdx = matchingIndices[0];
+      if (firstIdx === undefined) return -1;
+      const firstFrag = frags[firstIdx];
+      if (
+        firstFrag !== undefined &&
+        firstFrag.insertionOffset === ref.offset &&
+        firstFrag.length > 0
+      ) {
+        const [leftPart, rightPart] = splitFragment(firstFrag, 0);
+        frags.splice(firstIdx, 1, leftPart, rightPart);
+        return firstIdx;
+      }
+    }
+    if (type === "before") {
+      const lastIdx = matchingIndices[matchingIndices.length - 1];
+      if (lastIdx === undefined) return -1;
+      const lastFrag = frags[lastIdx];
+      if (lastFrag !== undefined) {
+        const lastEnd = lastFrag.insertionOffset + lastFrag.length;
+        if (lastEnd === ref.offset && lastFrag.length > 0) {
+          const [leftPart, rightPart] = splitFragment(lastFrag, lastFrag.length);
+          frags.splice(lastIdx, 1, leftPart, rightPart);
+          return lastIdx;
+        }
+      }
+    }
+
+    return -1;
   }
 
   /**

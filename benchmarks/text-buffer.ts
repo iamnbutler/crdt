@@ -321,6 +321,24 @@ group("text-apply-remote", () => {
     }
     return target;
   });
+
+  // Mid-document inserts exercise the findRefIndexBoth path: both after and
+  // before refs are non-sentinel when inserting inside existing content.
+  const midDoc = generateSyntheticDocument("small");
+  const midSource = TextBuffer.fromString(midDoc);
+  const midOps: ReturnType<typeof midSource.insert>[] = [];
+  const midLen = midSource.length;
+  for (let i = 0; i < 50; i++) {
+    midOps.push(midSource.insert(Math.floor(midLen / 2), "x"));
+  }
+
+  bench("apply 50 mid-document remote insert ops", () => {
+    const target = TextBuffer.fromString(midDoc);
+    for (const op of midOps) {
+      target.applyRemote(op);
+    }
+    return target;
+  });
 });
 
 // ---------------------------------------------------------------------------
