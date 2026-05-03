@@ -740,11 +740,92 @@ export class SumTree<T extends Summarizable<S>, S> {
   }
 
   /**
+   * Get the last item in the tree without a full counting traversal.
+   * O(log n) - follows rightmost child pointers directly.
+   * Returns undefined if the tree is empty.
+   */
+  last(): T | undefined {
+    if (this.isEmpty()) {
+      return undefined;
+    }
+
+    let current = this._root;
+    while (this.arena.isInternal(current)) {
+      const count = this.arena.getCount(current);
+      const lastChild = this.arena.getChild(current, count - 1);
+      if (lastChild === INVALID_NODE_ID) break;
+      current = lastChild;
+    }
+
+    const data = this.arena.getItem(current);
+    const items = data?.items ?? [];
+    return items[items.length - 1];
+  }
+
+  /**
    * Push an item to the end of the tree, mutating in place.
-   * O(log n) - finds rightmost leaf and inserts directly.
+   * O(log n) - follows rightmost child pointers directly, avoiding
+   * per-sibling summary lookups used by the general insertAtMut path.
+   * Uses incremental leaf summary update: O(1) combine instead of O(B).
    */
   pushMut(item: T): void {
-    this.insertAtMut(this.length(), item);
+    if (this.isEmpty()) {
+      // Reuse existing empty root leaf rather than creating a new one
+      const leafData = this.arena.getItem(this._root);
+      const items = leafData?.items ?? [];
+      items.push(item);
+      this.arena.setItem(this._root, { items });
+      this.arena.setCount(this._root, 1);
+      this.summaries.set(this._root, item.summary());
+      return;
+    }
+
+    // Walk directly to the rightmost leaf using child counts only.
+    // This avoids the per-sibling summaries.get() calls in findLeafForIndex.
+    const path: Array<{ nodeId: NodeId; indexInNode: number }> = [];
+    let current = this._root;
+
+    while (this.arena.isInternal(current)) {
+      const count = this.arena.getCount(current);
+      const lastIdx = count - 1;
+      path.push({ nodeId: current, indexInNode: lastIdx });
+      const lastChild = this.arena.getChild(current, lastIdx);
+      if (lastChild === INVALID_NODE_ID) break;
+      current = lastChild;
+    }
+
+    // current is the rightmost leaf
+    const leafData = this.arena.getItem(current);
+    const items = leafData?.items ?? [];
+
+    // Capture old leaf summary for incremental update below
+    const oldLeafSummary = this.summaries.get(current);
+    items.push(item);
+
+    path.push({ nodeId: current, indexInNode: items.length - 1 });
+    this.arena.setItem(current, { items });
+    this.arena.setCount(current, items.length);
+
+    if (items.length > this.branchingFactor) {
+      this.splitAndPropagate(path);
+    } else {
+      // Incremental leaf summary: combine(oldLeafSummary, newItemSummary)
+      // instead of recomputing from all B items (updateSummary scans every item).
+      const newItemSummary = item.summary();
+      const newLeafSummary =
+        oldLeafSummary !== undefined
+          ? this.summaryOps.combine(oldLeafSummary, newItemSummary)
+          : newItemSummary;
+      this.summaries.set(current, newLeafSummary);
+
+      // Update parent summaries (each internal node recomputes from its children)
+      for (let i = path.length - 2; i >= 0; i--) {
+        const entry = path[i];
+        if (entry !== undefined) {
+          this.updateSummary(entry.nodeId);
+        }
+      }
+    }
   }
 
   /**

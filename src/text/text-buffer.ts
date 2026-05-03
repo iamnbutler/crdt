@@ -716,9 +716,9 @@ export class TextBuffer {
     // Skip when there are live snapshots (mutations would corrupt them)
     const totalVisibleLen = this.fragments.summary().visibleLen;
     if (offset === totalVisibleLen && !this.fragments.isEmpty() && this._liveSnapshots === 0) {
-      // Get the last fragment to compute locator
-      const lastIdx = this.fragments.length() - 1;
-      const lastFrag = this.fragments.get(lastIdx);
+      // Use last() instead of get(length-1): goes directly to rightmost leaf
+      // without the per-sibling summary lookups in findLeafForIndex.
+      const lastFrag = this.fragments.last();
 
       if (lastFrag) {
         const locator = locatorBetween(lastFrag.locator, MAX_LOCATOR);
