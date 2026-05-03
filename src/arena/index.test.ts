@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { Arena, INVALID_NODE_ID, nodeId } from "./index.js";
+import { Arena, INVALID_NODE_ID, epoch, nodeId } from "./index.js";
 
 describe("Arena", () => {
   describe("allocation", () => {
@@ -208,6 +208,258 @@ describe("Arena", () => {
       expect(arena.allocated).toBe(0);
       expect(arena.isAllocated(id1)).toBe(false);
       expect(arena.isAllocated(id2)).toBe(false);
+    });
+  });
+
+  describe("epoch tracking", () => {
+    it("starts at epoch 1 with minLiveEpoch equal to currentEpoch", () => {
+      const arena = new Arena();
+      expect(arena.currentEpoch).toBe(epoch(1));
+      expect(arena.minLiveEpoch).toBe(epoch(1));
+    });
+
+    it("advanceEpoch increments currentEpoch and returns new value", () => {
+      const arena = new Arena();
+      const e2 = arena.advanceEpoch();
+      expect(e2).toBe(epoch(2));
+      expect(arena.currentEpoch).toBe(epoch(2));
+      const e3 = arena.advanceEpoch();
+      expect(e3).toBe(epoch(3));
+    });
+
+    it("getEpoch returns the epoch when a node was allocated", () => {
+      const arena = new Arena();
+      const id1 = arena.allocate();
+      arena.advanceEpoch();
+      const id2 = arena.allocate();
+
+      expect(arena.getEpoch(id1)).toBe(epoch(1));
+      expect(arena.getEpoch(id2)).toBe(epoch(2));
+    });
+
+    it("retainEpoch and releaseEpoch track ref counts", () => {
+      const arena = new Arena();
+      const e = arena.currentEpoch;
+
+      arena.retainEpoch(e);
+      expect(arena.minLiveEpoch).toBe(e);
+
+      const released = arena.releaseEpoch(e);
+      expect(released).toBe(true);
+    });
+
+    it("multiple retains require multiple releases", () => {
+      const arena = new Arena();
+      const e = arena.currentEpoch;
+
+      arena.retainEpoch(e);
+      arena.retainEpoch(e);
+
+      const firstRelease = arena.releaseEpoch(e);
+      expect(firstRelease).toBe(false);
+
+      const secondRelease = arena.releaseEpoch(e);
+      expect(secondRelease).toBe(true);
+    });
+
+    it("minLiveEpoch tracks the minimum retained epoch", () => {
+      const arena = new Arena();
+      const e1 = arena.currentEpoch;
+      arena.retainEpoch(e1);
+      arena.advanceEpoch();
+      const e2 = arena.currentEpoch;
+      arena.retainEpoch(e2);
+
+      expect(arena.minLiveEpoch).toBe(e1);
+
+      arena.releaseEpoch(e1);
+      expect(arena.minLiveEpoch).toBe(e2);
+
+      arena.releaseEpoch(e2);
+      expect(arena.minLiveEpoch).toBe(arena.currentEpoch);
+    });
+
+    it("reset clears epoch state back to initial", () => {
+      const arena = new Arena();
+      arena.advanceEpoch();
+      arena.advanceEpoch();
+      const e = arena.currentEpoch;
+      arena.retainEpoch(e);
+
+      arena.reset();
+
+      expect(arena.currentEpoch).toBe(epoch(1));
+      expect(arena.minLiveEpoch).toBe(epoch(1));
+    });
+  });
+
+  describe("mark-sweep garbage collection", () => {
+    it("markReachable finds all descendants from a root", () => {
+      const arena = new Arena<unknown>();
+      const leaf1 = arena.allocate();
+      const leaf2 = arena.allocate();
+      const leaf3 = arena.allocate();
+      const internal = arena.allocate();
+      const root = arena.allocate();
+
+      arena.setLeaf(leaf1, 1);
+      arena.setLeaf(leaf2, 1);
+      arena.setLeaf(leaf3, 1);
+      arena.setInternal(internal, 2, [leaf1, leaf2]);
+      arena.setInternal(root, 2, [internal, leaf3]);
+
+      const live = arena.markReachable([root]);
+
+      expect(live.has(root)).toBe(true);
+      expect(live.has(internal)).toBe(true);
+      expect(live.has(leaf1)).toBe(true);
+      expect(live.has(leaf2)).toBe(true);
+      expect(live.has(leaf3)).toBe(true);
+      expect(live.size).toBe(5);
+    });
+
+    it("markReachable does not include unreachable (orphan) nodes", () => {
+      const arena = new Arena<unknown>();
+      const root = arena.allocate();
+      const orphan = arena.allocate();
+      arena.setLeaf(root, 1);
+      arena.setLeaf(orphan, 1);
+
+      const live = arena.markReachable([root]);
+
+      expect(live.has(root)).toBe(true);
+      expect(live.has(orphan)).toBe(false);
+      expect(live.size).toBe(1);
+    });
+
+    it("markReachable handles INVALID_NODE_ID in roots without panic", () => {
+      const arena = new Arena<unknown>();
+      const root = arena.allocate();
+      arena.setLeaf(root, 1);
+
+      const live = arena.markReachable([INVALID_NODE_ID, root]);
+
+      expect(live.has(root)).toBe(true);
+      expect(live.size).toBe(1);
+    });
+
+    it("markReachable returns empty set for no roots", () => {
+      const arena = new Arena<unknown>();
+      arena.allocate();
+
+      const live = arena.markReachable([]);
+      expect(live.size).toBe(0);
+    });
+
+    it("sweepBefore frees unreachable old-epoch nodes", () => {
+      const arena = new Arena<unknown>();
+      const id1 = arena.allocate();
+      arena.advanceEpoch();
+      const id2 = arena.allocate();
+
+      const liveSet = new Set([id2]);
+      const freed = arena.sweepBefore(epoch(2), liveSet);
+
+      expect(freed).toBe(1);
+      expect(arena.isAllocated(id1)).toBe(false);
+      expect(arena.isAllocated(id2)).toBe(true);
+    });
+
+    it("sweepBefore does not free nodes allocated at or after the epoch", () => {
+      const arena = new Arena<unknown>();
+      arena.advanceEpoch();
+      const id = arena.allocate();
+
+      const freed = arena.sweepBefore(epoch(2), new Set());
+
+      expect(freed).toBe(0);
+      expect(arena.isAllocated(id)).toBe(true);
+    });
+
+    it("sweepBefore does not free live-set nodes even if old", () => {
+      const arena = new Arena<unknown>();
+      const id = arena.allocate();
+
+      const freed = arena.sweepBefore(epoch(999), new Set([id]));
+
+      expect(freed).toBe(0);
+      expect(arena.isAllocated(id)).toBe(true);
+    });
+
+    it("collectGarbage frees orphans before minLiveEpoch, keeps reachable nodes", () => {
+      const arena = new Arena<unknown>();
+
+      const orphan = arena.allocate();
+      const root = arena.allocate();
+      arena.setLeaf(orphan, 1);
+      arena.setLeaf(root, 1);
+
+      arena.advanceEpoch();
+      const liveEpoch = arena.currentEpoch;
+      arena.retainEpoch(liveEpoch);
+
+      const newNode = arena.allocate();
+      arena.setLeaf(newNode, 1);
+
+      const freed = arena.collectGarbage([root]);
+
+      expect(freed).toBe(1);
+      expect(arena.isAllocated(orphan)).toBe(false);
+      expect(arena.isAllocated(root)).toBe(true);
+      expect(arena.isAllocated(newNode)).toBe(true);
+    });
+
+    it("collectGarbage frees nothing when no snapshots and all nodes reachable", () => {
+      const arena = new Arena<unknown>();
+      const leaf = arena.allocate();
+      const root = arena.allocate();
+      arena.setLeaf(leaf, 1);
+      arena.setInternal(root, 1, [leaf]);
+
+      const freed = arena.collectGarbage([root]);
+      expect(freed).toBe(0);
+    });
+  });
+
+  describe("utilization", () => {
+    it("reports zero stats for empty arena", () => {
+      const arena = new Arena();
+      const stats = arena.utilization();
+      expect(stats.allocated).toBe(0);
+      expect(stats.free).toBe(0);
+      expect(stats.total).toBe(0);
+      expect(stats.liveEpochs).toBe(0);
+      expect(stats.currentEpoch).toBe(epoch(1));
+      expect(stats.minLiveEpoch).toBe(epoch(1));
+    });
+
+    it("tracks allocated and freed counts", () => {
+      const arena = new Arena();
+      const id1 = arena.allocate();
+      arena.allocate();
+      arena.allocate();
+      arena.free(id1);
+
+      const stats = arena.utilization();
+      expect(stats.allocated).toBe(2);
+      expect(stats.free).toBe(1);
+      expect(stats.total).toBe(3);
+    });
+
+    it("tracks live epoch count", () => {
+      const arena = new Arena();
+      const e = arena.currentEpoch;
+      arena.retainEpoch(e);
+
+      expect(arena.utilization().liveEpochs).toBe(1);
+
+      arena.releaseEpoch(e);
+      expect(arena.utilization().liveEpochs).toBe(0);
+    });
+
+    it("utilizationRatio is 0 for empty arena", () => {
+      const arena = new Arena();
+      expect(arena.utilization().utilizationRatio).toBe(0);
     });
   });
 });
