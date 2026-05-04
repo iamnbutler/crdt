@@ -8,6 +8,7 @@ import { TextBuffer } from "../text/text-buffer.js";
 import { replicaId, transactionId } from "../text/types.js";
 import type { DeleteOperation, InsertOperation, Operation, UndoOperation } from "../text/types.js";
 
+import { createFragment } from "../text/fragment.js";
 import { MIN_LOCATOR } from "../text/locator.js";
 import { AwarenessManager, deserializeAwareness, serializeAwareness } from "./awareness.js";
 import { OperationQueue } from "./operation-queue.js";
@@ -26,8 +27,8 @@ import {
   serializeOperations,
   serializeSnapshot,
 } from "./serialization.js";
-import { getSnapshotText, requiresFullSync, snapshotsEqual } from "./state-sync.js";
-import { type SerializedFragment, type StateSnapshot, ValidationError } from "./types.js";
+import { applySnapshot, createSnapshot, getSnapshotText, requiresFullSync, snapshotsEqual } from "./state-sync.js";
+import { MAX_QUEUE_SIZE, type SerializedFragment, type StateSnapshot, ValidationError } from "./types.js";
 import {
   type ValidationContext,
   isCausallyReady,
@@ -1202,6 +1203,454 @@ describe("validateOperation edge cases", () => {
     const result = validateOperation(op, context);
     expect(result.valid).toBe(false);
     expect(result.error).toBe(ValidationError.InconsistentVersion);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// OperationQueue: Additional Methods
+// ---------------------------------------------------------------------------
+
+describe("OperationQueue: flush()", () => {
+  test("flush applies all pending operations when dependencies become available", () => {
+    const queue = new OperationQueue();
+    const applied: Operation[] = [];
+    const localVersion = createVersionVector();
+
+    const op: InsertOperation = {
+      type: "insert",
+      id: { replicaId: replicaId(1), counter: 1 },
+      text: "Deferred",
+      after: { insertionId: { replicaId: replicaId(1), counter: 0 }, offset: 0 },
+      before: { insertionId: { replicaId: replicaId(0xffffffff), counter: 0xffffffff }, offset: 0 },
+      version: new Map([[replicaId(1), 1]]),
+      locator: MIN_LOCATOR,
+    };
+
+    queue.enqueue(op, () => false, (o) => applied.push(o), localVersion);
+    expect(queue.pendingCount).toBe(1);
+    expect(applied.length).toBe(0);
+
+    const count = queue.flush(
+      (id) => id.replicaId === replicaId(1) && id.counter === 0,
+      (o) => applied.push(o),
+      localVersion,
+    );
+
+    expect(count).toBe(1);
+    expect(applied.length).toBe(1);
+    expect(applied[0]?.id.counter).toBe(1);
+    expect(queue.pendingCount).toBe(0);
+  });
+
+  test("flush returns 0 and leaves unresolvable ops pending", () => {
+    const queue = new OperationQueue();
+    const applied: Operation[] = [];
+    const localVersion = createVersionVector();
+
+    const op: InsertOperation = {
+      type: "insert",
+      id: { replicaId: replicaId(1), counter: 1 },
+      text: "Still waiting",
+      after: { insertionId: { replicaId: replicaId(1), counter: 0 }, offset: 0 },
+      before: { insertionId: { replicaId: replicaId(0xffffffff), counter: 0xffffffff }, offset: 0 },
+      version: new Map([[replicaId(1), 1]]),
+      locator: MIN_LOCATOR,
+    };
+
+    queue.enqueue(op, () => false, (o) => applied.push(o), localVersion);
+
+    const count = queue.flush(() => false, (o) => applied.push(o), localVersion);
+
+    expect(count).toBe(0);
+    expect(applied.length).toBe(0);
+    expect(queue.pendingCount).toBe(1);
+  });
+
+  test("flush applies a chain of dependent operations when root becomes available", () => {
+    const queue = new OperationQueue();
+    const applied: Operation[] = [];
+    const localVersion = createVersionVector();
+    const known = new Set<string>();
+
+    // op2 depends on op1; op1 depends on op0 (not yet known)
+    const op1: InsertOperation = {
+      type: "insert",
+      id: { replicaId: replicaId(1), counter: 1 },
+      text: "B",
+      after: { insertionId: { replicaId: replicaId(1), counter: 0 }, offset: 0 },
+      before: { insertionId: { replicaId: replicaId(0xffffffff), counter: 0xffffffff }, offset: 0 },
+      version: new Map([[replicaId(1), 1]]),
+      locator: MIN_LOCATOR,
+    };
+    const op2: InsertOperation = {
+      type: "insert",
+      id: { replicaId: replicaId(1), counter: 2 },
+      text: "C",
+      after: { insertionId: { replicaId: replicaId(1), counter: 1 }, offset: 0 },
+      before: { insertionId: { replicaId: replicaId(0xffffffff), counter: 0xffffffff }, offset: 0 },
+      version: new Map([[replicaId(1), 2]]),
+      locator: MIN_LOCATOR,
+    };
+
+    queue.enqueue(
+      op1,
+      (id) => known.has(`${id.replicaId}:${id.counter}`),
+      (o) => {
+        applied.push(o);
+        known.add(`${o.id.replicaId}:${o.id.counter}`);
+      },
+      localVersion,
+    );
+    queue.enqueue(
+      op2,
+      (id) => known.has(`${id.replicaId}:${id.counter}`),
+      (o) => {
+        applied.push(o);
+        known.add(`${o.id.replicaId}:${o.id.counter}`);
+      },
+      localVersion,
+    );
+    expect(queue.pendingCount).toBe(2);
+
+    // Make op0 known, then flush
+    known.add(`${replicaId(1)}:0`);
+    const count = queue.flush(
+      (id) => known.has(`${id.replicaId}:${id.counter}`),
+      (o) => {
+        applied.push(o);
+        known.add(`${o.id.replicaId}:${o.id.counter}`);
+      },
+      localVersion,
+    );
+
+    expect(count).toBe(2);
+    expect(applied.length).toBe(2);
+    expect(applied[0]?.id.counter).toBe(1);
+    expect(applied[1]?.id.counter).toBe(2);
+    expect(queue.pendingCount).toBe(0);
+  });
+});
+
+describe("OperationQueue: stats, clear, resetOverflow, getPending, getHighestCounter", () => {
+  test("stats reflects initial empty state", () => {
+    const queue = new OperationQueue();
+    const stats = queue.stats;
+
+    expect(stats.pendingCount).toBe(0);
+    expect(stats.deferredReplicaCount).toBe(0);
+    expect(stats.deferredReplicas.size).toBe(0);
+    expect(stats.maxSize).toBe(MAX_QUEUE_SIZE);
+    expect(stats.overflowed).toBe(false);
+  });
+
+  test("stats updates when operations are deferred", () => {
+    const queue = new OperationQueue();
+    const localVersion = createVersionVector();
+
+    const op: InsertOperation = {
+      type: "insert",
+      id: { replicaId: replicaId(7), counter: 1 },
+      text: "X",
+      after: { insertionId: { replicaId: replicaId(7), counter: 0 }, offset: 0 },
+      before: { insertionId: { replicaId: replicaId(0xffffffff), counter: 0xffffffff }, offset: 0 },
+      version: new Map([[replicaId(7), 1]]),
+      locator: MIN_LOCATOR,
+    };
+
+    queue.enqueue(op, () => false, () => { /* no-op */ }, localVersion);
+
+    const stats = queue.stats;
+    expect(stats.pendingCount).toBe(1);
+    expect(stats.deferredReplicaCount).toBe(1);
+    expect(stats.deferredReplicas.has(replicaId(7))).toBe(true);
+  });
+
+  test("clear removes all pending operations and resets overflow", () => {
+    const queue = new OperationQueue(2);
+    const localVersion = createVersionVector();
+
+    const makePendingOp = (counter: number): InsertOperation => ({
+      type: "insert",
+      id: { replicaId: replicaId(1), counter },
+      text: "X",
+      after: { insertionId: { replicaId: replicaId(1), counter: counter + 100 }, offset: 0 },
+      before: { insertionId: { replicaId: replicaId(0xffffffff), counter: 0xffffffff }, offset: 0 },
+      version: new Map([[replicaId(1), counter]]),
+      locator: MIN_LOCATOR,
+    });
+
+    queue.enqueue(makePendingOp(0), () => false, () => { /* no-op */ }, localVersion);
+    queue.enqueue(makePendingOp(1), () => false, () => { /* no-op */ }, localVersion);
+    queue.enqueue(makePendingOp(2), () => false, () => { /* no-op */ }, localVersion); // triggers overflow
+    expect(queue.pendingCount).toBe(2);
+    expect(queue.overflowed).toBe(true);
+
+    queue.clear();
+
+    expect(queue.pendingCount).toBe(0);
+    expect(queue.deferredReplicas.size).toBe(0);
+    expect(queue.overflowed).toBe(false);
+  });
+
+  test("clear preserves applied set for idempotency", () => {
+    const queue = new OperationQueue();
+    const applied: Operation[] = [];
+    const localVersion = createVersionVector();
+
+    const op: InsertOperation = {
+      type: "insert",
+      id: { replicaId: replicaId(1), counter: 0 },
+      text: "Applied",
+      after: { insertionId: { replicaId: replicaId(0), counter: 0 }, offset: 0 },
+      before: { insertionId: { replicaId: replicaId(0xffffffff), counter: 0xffffffff }, offset: 0 },
+      version: new Map([[replicaId(1), 0]]),
+      locator: MIN_LOCATOR,
+    };
+
+    queue.enqueue(op, () => true, (o) => applied.push(o), localVersion);
+    expect(applied.length).toBe(1);
+
+    queue.clear();
+
+    // The same op should still be rejected as a duplicate after clear()
+    const result = queue.enqueue(op, () => true, (o) => applied.push(o), localVersion);
+    expect(result.accepted).toBe(false);
+    expect(applied.length).toBe(1);
+  });
+
+  test("resetOverflow clears overflow flag without clearing pending ops", () => {
+    const queue = new OperationQueue(1);
+    const localVersion = createVersionVector();
+
+    const op1: InsertOperation = {
+      type: "insert",
+      id: { replicaId: replicaId(1), counter: 1 },
+      text: "A",
+      after: { insertionId: { replicaId: replicaId(1), counter: 0 }, offset: 0 },
+      before: { insertionId: { replicaId: replicaId(0xffffffff), counter: 0xffffffff }, offset: 0 },
+      version: new Map([[replicaId(1), 1]]),
+      locator: MIN_LOCATOR,
+    };
+    const op2: InsertOperation = {
+      type: "insert",
+      id: { replicaId: replicaId(1), counter: 2 },
+      text: "B",
+      after: { insertionId: { replicaId: replicaId(1), counter: 1 }, offset: 0 },
+      before: { insertionId: { replicaId: replicaId(0xffffffff), counter: 0xffffffff }, offset: 0 },
+      version: new Map([[replicaId(1), 2]]),
+      locator: MIN_LOCATOR,
+    };
+
+    queue.enqueue(op1, () => false, () => { /* no-op */ }, localVersion);
+    queue.enqueue(op2, () => false, () => { /* no-op */ }, localVersion); // overflow
+
+    expect(queue.overflowed).toBe(true);
+    expect(queue.pendingCount).toBe(1);
+
+    queue.resetOverflow();
+
+    expect(queue.overflowed).toBe(false);
+    expect(queue.pendingCount).toBe(1); // pending ops remain
+  });
+
+  test("getHighestCounter returns -1 for unknown replica", () => {
+    const queue = new OperationQueue();
+    expect(queue.getHighestCounter(replicaId(99))).toBe(-1);
+  });
+
+  test("getHighestCounter tracks highest applied counter and never decreases", () => {
+    const queue = new OperationQueue();
+    const localVersion = createVersionVector();
+
+    const op5: InsertOperation = {
+      type: "insert",
+      id: { replicaId: replicaId(1), counter: 5 },
+      text: "A",
+      after: { insertionId: { replicaId: replicaId(0), counter: 0 }, offset: 0 },
+      before: { insertionId: { replicaId: replicaId(0xffffffff), counter: 0xffffffff }, offset: 0 },
+      version: new Map([[replicaId(1), 5]]),
+      locator: MIN_LOCATOR,
+    };
+    const op3: InsertOperation = {
+      type: "insert",
+      id: { replicaId: replicaId(1), counter: 3 },
+      text: "B",
+      after: { insertionId: { replicaId: replicaId(0), counter: 0 }, offset: 0 },
+      before: { insertionId: { replicaId: replicaId(0xffffffff), counter: 0xffffffff }, offset: 0 },
+      version: new Map([[replicaId(1), 3]]),
+      locator: MIN_LOCATOR,
+    };
+
+    queue.enqueue(op5, () => true, () => { /* no-op */ }, localVersion);
+    expect(queue.getHighestCounter(replicaId(1))).toBe(5);
+
+    // Applying an earlier op should not lower the counter
+    queue.enqueue(op3, () => true, () => { /* no-op */ }, localVersion);
+    expect(queue.getHighestCounter(replicaId(1))).toBe(5);
+  });
+
+  test("getPending returns read-only view of deferred operations", () => {
+    const queue = new OperationQueue();
+    const localVersion = createVersionVector();
+
+    expect(queue.getPending().length).toBe(0);
+
+    const op: InsertOperation = {
+      type: "insert",
+      id: { replicaId: replicaId(1), counter: 1 },
+      text: "Pending",
+      after: { insertionId: { replicaId: replicaId(1), counter: 0 }, offset: 0 },
+      before: { insertionId: { replicaId: replicaId(0xffffffff), counter: 0xffffffff }, offset: 0 },
+      version: new Map([[replicaId(1), 1]]),
+      locator: MIN_LOCATOR,
+    };
+
+    queue.enqueue(op, () => false, () => { /* no-op */ }, localVersion);
+
+    const pending = queue.getPending();
+    expect(pending.length).toBe(1);
+    expect(pending[0]?.id.counter).toBe(1);
+    expect(pending[0]?.type).toBe("insert");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// State Sync: createSnapshot / applySnapshot
+// ---------------------------------------------------------------------------
+
+describe("createSnapshot / applySnapshot", () => {
+  test("createSnapshot serializes a visible fragment into snapshot", () => {
+    const rid = replicaId(1);
+    const opId = { replicaId: rid, counter: 0 };
+    const fragment = createFragment(opId, 0, MIN_LOCATOR, "Hello", true);
+    const versionVector = new Map([[rid, 0]]);
+
+    const snapshot = createSnapshot({
+      replicaId: rid,
+      versionVector,
+      fragments: [fragment],
+      undoCounts: [],
+    });
+
+    expect(snapshot.version).toBe(1);
+    expect(snapshot.replicaId).toBe(rid);
+    expect(snapshot.fragments.length).toBe(1);
+    expect(snapshot.fragments[0]?.text).toBe("Hello");
+    expect(snapshot.fragments[0]?.visible).toBe(true);
+    expect(snapshot.fragments[0]?.length).toBe(5);
+    expect(snapshot.versionVector.get(rid)).toBe(0);
+    expect(snapshot.undoCounts.length).toBe(0);
+  });
+
+  test("applySnapshot reconstructs fragments from snapshot", () => {
+    const rid = replicaId(1);
+    const opId = { replicaId: rid, counter: 0 };
+    const fragment = createFragment(opId, 0, MIN_LOCATOR, "World", true);
+    const versionVector = new Map([[rid, 5]]);
+
+    const snapshot = createSnapshot({
+      replicaId: rid,
+      versionVector,
+      fragments: [fragment],
+      undoCounts: [{ operationId: opId, count: 1 }],
+    });
+
+    const result = applySnapshot(snapshot);
+
+    expect(result.fragments.length).toBe(1);
+    expect(result.fragments[0]?.text).toBe("World");
+    expect(result.fragments[0]?.visible).toBe(true);
+    expect(result.versionVector.get(rid)).toBe(5);
+    expect(result.undoCounts.get(`${rid}:0`)).toBe(1);
+  });
+
+  test("round-trip preserves visible and deleted fragments", () => {
+    const rid1 = replicaId(1);
+    const rid2 = replicaId(2);
+    const opId1 = { replicaId: rid1, counter: 0 };
+    const opId2 = { replicaId: rid2, counter: 0 };
+
+    const frag1 = createFragment(opId1, 0, MIN_LOCATOR, "Hello", true);
+    const frag2 = createFragment(opId2, 0, { levels: [0.5] }, " World", false, [opId1]);
+
+    const versionVector = new Map([[rid1, 0], [rid2, 0]]);
+
+    const snapshot = createSnapshot({
+      replicaId: rid1,
+      versionVector,
+      fragments: [frag1, frag2],
+      undoCounts: [{ operationId: opId1, count: 2 }],
+    });
+
+    const result = applySnapshot(snapshot);
+
+    expect(result.fragments.length).toBe(2);
+    expect(result.fragments[0]?.text).toBe("Hello");
+    expect(result.fragments[0]?.visible).toBe(true);
+    expect(result.fragments[0]?.deletions.length).toBe(0);
+    expect(result.fragments[1]?.text).toBe(" World");
+    expect(result.fragments[1]?.visible).toBe(false);
+    expect(result.fragments[1]?.deletions.length).toBe(1);
+    expect(result.versionVector.get(rid1)).toBe(0);
+    expect(result.versionVector.get(rid2)).toBe(0);
+    expect(result.undoCounts.get(`${rid1}:0`)).toBe(2);
+  });
+
+  test("round-trip on empty document produces empty result", () => {
+    const rid = replicaId(1);
+
+    const snapshot = createSnapshot({
+      replicaId: rid,
+      versionVector: createVersionVector(),
+      fragments: [],
+      undoCounts: [],
+    });
+
+    expect(snapshot.fragments.length).toBe(0);
+    expect(snapshot.undoCounts.length).toBe(0);
+
+    const result = applySnapshot(snapshot);
+    expect(result.fragments.length).toBe(0);
+    expect(result.undoCounts.size).toBe(0);
+    expect(result.versionVector.size).toBe(0);
+  });
+
+  test("createSnapshot clones version vector (mutations do not affect snapshot)", () => {
+    const rid = replicaId(1);
+    const versionVector = new Map([[rid, 3]]);
+
+    const snapshot = createSnapshot({
+      replicaId: rid,
+      versionVector,
+      fragments: [],
+      undoCounts: [],
+    });
+
+    // Mutate the original version vector
+    versionVector.set(rid, 999);
+
+    // Snapshot should be unaffected
+    expect(snapshot.versionVector.get(rid)).toBe(3);
+  });
+
+  test("applySnapshot max-wins undo counts deduplicate by operationId", () => {
+    const rid = replicaId(1);
+    const opId = { replicaId: rid, counter: 0 };
+
+    const snapshot = createSnapshot({
+      replicaId: rid,
+      versionVector: createVersionVector(),
+      fragments: [],
+      undoCounts: [
+        { operationId: opId, count: 3 },
+        { operationId: { replicaId: rid, counter: 1 }, count: 1 },
+      ],
+    });
+
+    const result = applySnapshot(snapshot);
+    expect(result.undoCounts.get(`${rid}:0`)).toBe(3);
+    expect(result.undoCounts.get(`${rid}:1`)).toBe(1);
+    expect(result.undoCounts.size).toBe(2);
   });
 });
 
