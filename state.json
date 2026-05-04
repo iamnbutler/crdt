@@ -1,1 +1,1 @@
-{"m":"2026-05","t":"2026-05-03","tasks":"T2,T3,T6,T7","bl":["lazy-vv","fragment-sort-bench-#187","O(n)-alloc-#39"],"note":"Fixed perf.test.ts (10K inserts 107->89ms). SumTree.last()+pushMut() rightmost-path. PR:perf-assist/sumtree-rightmost-path. Next:T1,T4,T5,T7."}
+{"m":"2026-05","t":"2026-05-04","tasks":"T1,T4,T5,T7","bl":["lazy-vv","O(n)-alloc","sumtree-removeAt"],"n":"15 open draft PRs. #298 dupe of #299. bun missing in CI. Created May monthly issue. Next:T2,T3,T6,T7."}
