@@ -1,1 +1,1 @@
-{"m":"2026-05","t":"2026-05-04","tasks":"T1,T4,T5,T7","bl":["lazy-vv","O(n)-alloc","sumtree-removeAt"],"n":"15 open draft PRs. #298 dupe of #299. bun missing in CI. Created May monthly issue. Next:T2,T3,T6,T7."}
+{"m":"2026-05","t":"2026-05-05","tasks":"T2,T4,T7","bl":["lazy-vv","O(n)-alloc","sumtree-removeAt"],"n":"15 open PI draft PRs (none merged). #298 dupes #299. No open issues. Monthly issue re-created. Next:T1,T3,T5,T6,T7. Restrain new PRs."}
