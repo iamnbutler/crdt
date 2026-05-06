@@ -1,1 +1,1 @@
-{"m":"2026-05","t":"2026-05-05","tasks":"T2,T4,T7","bl":["lazy-vv","O(n)-alloc","sumtree-removeAt"],"n":"15 open PI draft PRs (none merged). #298 dupes #299. No open issues. Monthly issue re-created. Next:T1,T3,T5,T6,T7. Restrain new PRs."}
+{"m":"2026-05","t":"2026-05-06","tasks":"T4,T7","bl":["lazy-vv","O(n)-alloc","sumtree-removeAt"],"n":"18 open PI PRs, 0 merged. Dupes:#298/#299,#172/#173,#160. All on main 9ffb0f3. No issues. May issue created. Easy wins:#276,#291,#216. Restrain new PRs."}
