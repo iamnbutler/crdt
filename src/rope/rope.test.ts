@@ -1,6 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import { Rope } from "./rope.js";
-import { computeTextSummary, createTextChunk, textSummaryOps } from "./summary.js";
+import { byteLength, computeTextSummary, createTextChunk, textSummaryOps } from "./summary.js";
 import { CHUNK_TARGET } from "./types.js";
 
 describe("Rope", () => {
@@ -619,6 +619,166 @@ describe("Rope", () => {
       expect(summary.lines).toBe(0);
       expect(summary.utf16Len).toBe(0);
       expect(summary.lastLineLen).toBe(0);
+    });
+  });
+
+  describe("byteLength (UTF-8 byte counting)", () => {
+    it("returns 0 for empty string", () => {
+      expect(byteLength("")).toBe(0);
+    });
+
+    it("counts ASCII as 1 byte per char", () => {
+      expect(byteLength("hello")).toBe(5);
+      expect(byteLength("a")).toBe(1);
+    });
+
+    it("counts 2-byte UTF-8 sequences (Latin-1 supplement)", () => {
+      // "é" is U+00E9, encoded as 2 bytes in UTF-8 (C3 A9)
+      expect(byteLength("é")).toBe(2);
+      expect(byteLength("café")).toBe(5); // 3 ASCII + 2-byte é
+    });
+
+    it("counts 3-byte UTF-8 sequences (CJK ideographs)", () => {
+      // Each CJK char in BMP encodes to 3 bytes in UTF-8
+      expect(byteLength("你")).toBe(3); // 你
+      expect(byteLength("你好世界")).toBe(12); // 你好世界
+    });
+
+    it("counts 4-byte UTF-8 sequences (supplementary plane / emoji)", () => {
+      // Grinning face U+1F600 → 4 bytes in UTF-8
+      expect(byteLength("\u{1F600}")).toBe(4);
+      expect(byteLength("\u{1F600}\u{1F601}")).toBe(8);
+    });
+
+    it("counts mixed ASCII, multibyte, and emoji together", () => {
+      // "a" (1) + "é" (2) + "你" (3) + emoji (4) = 10 bytes
+      expect(byteLength("aé你\u{1F600}")).toBe(10);
+    });
+
+    it("counts newlines as a single byte", () => {
+      expect(byteLength("a\nb")).toBe(3);
+      expect(byteLength("\n")).toBe(1);
+    });
+  });
+
+  describe("computeTextSummary byte tracking", () => {
+    it("ASCII bytes equal utf16Len", () => {
+      const s = computeTextSummary("hello world");
+      expect(s.bytes).toBe(11);
+      expect(s.utf16Len).toBe(11);
+      expect(s.lastLineBytes).toBe(11);
+      expect(s.lastLineLen).toBe(11);
+    });
+
+    it("CJK bytes are larger than utf16Len", () => {
+      // "你好" → 2 UTF-16 code units, 6 UTF-8 bytes
+      const s = computeTextSummary("你好");
+      expect(s.utf16Len).toBe(2);
+      expect(s.bytes).toBe(6);
+      expect(s.lastLineBytes).toBe(6);
+      expect(s.lastLineLen).toBe(2);
+    });
+
+    it("emoji bytes account for 4-byte UTF-8 encoding", () => {
+      // U+1F600 → 2 UTF-16 code units (surrogate pair), 4 UTF-8 bytes
+      const s = computeTextSummary("\u{1F600}");
+      expect(s.utf16Len).toBe(2);
+      expect(s.bytes).toBe(4);
+      expect(s.lastLineBytes).toBe(4);
+    });
+
+    it("multi-line bytes split correctly between lines", () => {
+      // "abc\ndef" → 3 + 1 (newline) + 3 = 7 bytes total, last line = "def" = 3 bytes
+      const s = computeTextSummary("abc\ndef");
+      expect(s.bytes).toBe(7);
+      expect(s.lastLineBytes).toBe(3);
+      expect(s.lines).toBe(1);
+    });
+
+    it("trailing newline gives empty last line with 0 bytes", () => {
+      // "abc\n" → last line is "" → 0 bytes/utf16
+      const s = computeTextSummary("abc\n");
+      expect(s.bytes).toBe(4);
+      expect(s.lastLineBytes).toBe(0);
+      expect(s.lastLineLen).toBe(0);
+    });
+
+    it("multi-byte chars after newline only counted in lastLineBytes", () => {
+      // "abc\n你好" → first line "abc" (3 bytes), newline (1), "你好" (6 bytes) = 10 total
+      const s = computeTextSummary("abc\n你好");
+      expect(s.bytes).toBe(10);
+      expect(s.lastLineBytes).toBe(6);
+      expect(s.lastLineLen).toBe(2);
+    });
+
+    it("empty string has zero bytes", () => {
+      const s = computeTextSummary("");
+      expect(s.bytes).toBe(0);
+      expect(s.lastLineBytes).toBe(0);
+    });
+
+    it("only newlines: each newline is one byte", () => {
+      const s = computeTextSummary("\n\n\n");
+      expect(s.bytes).toBe(3);
+      expect(s.lines).toBe(3);
+      expect(s.lastLineBytes).toBe(0);
+      expect(s.lastLineLen).toBe(0);
+    });
+  });
+
+  describe("textSummaryOps.combine byte tracking", () => {
+    it("adds bytes when combining two summaries", () => {
+      const left = computeTextSummary("abc");
+      const right = computeTextSummary("def");
+      const combined = textSummaryOps.combine(left, right);
+      expect(combined.bytes).toBe(6);
+    });
+
+    it("preserves bytes for multibyte content across combine", () => {
+      // Combining "你" + "好" should give the same summary as "你好"
+      const piecewise = textSummaryOps.combine(computeTextSummary("你"), computeTextSummary("好"));
+      const direct = computeTextSummary("你好");
+      expect(piecewise.bytes).toBe(direct.bytes);
+      expect(piecewise.lastLineBytes).toBe(direct.lastLineBytes);
+    });
+
+    it("right-side newline resets lastLineBytes", () => {
+      // left = "abc" (lastLineBytes=3), right = "def\nghi" (lastLineBytes=3, lines=1)
+      // After combine: lines=1, lastLineBytes should equal right.lastLineBytes (3)
+      const left = computeTextSummary("abc");
+      const right = computeTextSummary("def\nghi");
+      const combined = textSummaryOps.combine(left, right);
+      expect(combined.lastLineBytes).toBe(3);
+      expect(combined.bytes).toBe(left.bytes + right.bytes);
+    });
+
+    it("no newlines on either side: lastLineBytes = left.lastLineBytes + right.lastLineBytes", () => {
+      // Use multibyte to make this non-trivial
+      const left = computeTextSummary("你"); // 3 bytes, no newline
+      const right = computeTextSummary("好"); // 3 bytes, no newline
+      const combined = textSummaryOps.combine(left, right);
+      expect(combined.lastLineBytes).toBe(6);
+    });
+
+    it("combine is associative for byte tracking", () => {
+      const a = computeTextSummary("abc\n");
+      const b = computeTextSummary("你"); // 3-byte CJK
+      const c = computeTextSummary("\ndef");
+
+      const leftFirst = textSummaryOps.combine(textSummaryOps.combine(a, b), c);
+      const rightFirst = textSummaryOps.combine(a, textSummaryOps.combine(b, c));
+
+      expect(leftFirst.bytes).toBe(rightFirst.bytes);
+      expect(leftFirst.lastLineBytes).toBe(rightFirst.lastLineBytes);
+    });
+
+    it("identity preserves byte fields", () => {
+      const s = computeTextSummary("你\nhello");
+      const identity = textSummaryOps.identity();
+      expect(textSummaryOps.combine(identity, s).bytes).toBe(s.bytes);
+      expect(textSummaryOps.combine(s, identity).bytes).toBe(s.bytes);
+      expect(textSummaryOps.combine(identity, s).lastLineBytes).toBe(s.lastLineBytes);
+      expect(textSummaryOps.combine(s, identity).lastLineBytes).toBe(s.lastLineBytes);
     });
   });
 
