@@ -1,9 +1,11 @@
-u:2026-05-11
+u:2026-05-12
 ci-broken-main:lint-record-bench-PR276-fixes
 prs17:302,308,312=315,218,221,225,231,234,237,243,251,254,264,268,194d,320
 i139:1+4-dup,2=#243,3-pending
-monthly:#316(dups313,309,306,303)
-runs:05-11:4+5+7|05-10:4|05-08:2+3+7|05-07:4+5+7|05-06:4+6+7|05-05:1+3+7
-rid:05-11:25652170774
+monthly:#316(dups313,309,306,303-still-open)
+runs:05-12:1+6+7|05-11:4+5+7|05-10:4|05-08:2+3+7|05-07:4+5+7|05-06:4+6+7|05-05:1+3+7
+rid:05-12:25715197934
 base:9ffb0f3
 backlog:#225=locBetween;anchor-bind-rmt-del
+infra:no-shared-test-utils-but-164-TextBuffer-create-sites;defer-while-PRs-stalled
+test-status:3965pass/1fail(10K-seq-flaky=#139item3)
