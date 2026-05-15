@@ -1,11 +1,11 @@
-u:2026-05-14|base:9ffb0f3|rid:25843562606
+u:2026-05-15|base:9ffb0f3|rid:25902069457
 ci:lint-broken-main-PR276-fixes
 prs17:194,218,221,225,231,234,237,243,251,254,264,268,302,308,312=315,320(clean,no-maint-activity)
 i139:1+4-dup,2=#243,3-pending(perf-threshold)
 monthly:#316;dups303,306,309,313-open
-runs:14:7|13:4+2+7|12:1+6+7|11:4+5+7|10:4|08:2+3+7|07:4+5+7|06:4+6+7
+runs:15:4+5+7|14:7|13:4+2+7|12:1+6+7|11:4+5+7|10:4|08:2+3+7|07:4+5+7|06:4+6+7
 backlog:#225locBetween;anchor-bind-rmt-del
 infra:164-TextBuf-sites-no-utils-defer
 test:3965p/1f(10K-flaky=#139.3)
-restraint-streak:5
-mcp-quirk:list+search=empty-use-curl
+restraint-streak:6
+mcp-quirk:list+search+status+checkruns=empty-use-curl
