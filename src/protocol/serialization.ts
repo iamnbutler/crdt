@@ -27,6 +27,12 @@ import {
   type StateSnapshot,
 } from "./types.js";
 
+// Shared codec instances. TextEncoder/TextDecoder are stateless wrappers, so a
+// single instance can be reused across all reads and writes — this avoids one
+// allocation per string read/write on hot serialization paths.
+const TEXT_ENCODER = new TextEncoder();
+const TEXT_DECODER = new TextDecoder();
+
 // ---------------------------------------------------------------------------
 // Binary Writer
 // ---------------------------------------------------------------------------
@@ -105,7 +111,7 @@ export class BinaryWriter {
 
   /** Write a length-prefixed UTF-8 string. */
   writeString(str: string): void {
-    const encoded = new TextEncoder().encode(str);
+    const encoded = TEXT_ENCODER.encode(str);
     this.writeVarUint(encoded.length);
     this.ensureCapacity(encoded.length);
     this.buffer.set(encoded, this.offset);
@@ -210,9 +216,11 @@ export class BinaryReader {
     if (this.offset + length > this.buffer.length) {
       throw new Error("Buffer underflow");
     }
-    const bytes = this.buffer.slice(this.offset, this.offset + length);
+    // subarray is a view (no copy); the decoder reads the bytes immediately
+    // and we don't retain the view, so this is safe.
+    const bytes = this.buffer.subarray(this.offset, this.offset + length);
     this.offset += length;
-    return new TextDecoder().decode(bytes);
+    return TEXT_DECODER.decode(bytes);
   }
 
   /** Read raw bytes with length prefix. */
