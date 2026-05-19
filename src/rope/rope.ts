@@ -7,9 +7,15 @@ import { CHUNK_TARGET, type TextChunk } from "./types.js";
 
 /**
  * Normalize line endings: replace \r\n and lone \r with \n.
+ *
+ * Most text never contains a carriage return, so we short-circuit on that
+ * common case to skip the regex scan entirely. When normalization is
+ * required, a single `\r\n?` pattern handles both CRLF and lone CR in one
+ * pass instead of the two scans the previous implementation needed.
  */
 function normalizeLineEndings(text: string): string {
-  return text.replace(/\r\n/g, "\n").replace(/\r/g, "\n");
+  if (!text.includes("\r")) return text;
+  return text.replace(/\r\n?/g, "\n");
 }
 
 /**
