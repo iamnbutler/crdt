@@ -1,9 +1,9 @@
-u:2026-05-19|base:9ffb0f3|rid:26078339038|restraint:10
+u:2026-05-20|base:9ffb0f3|rid:26143499474|restraint:11
 ci:lint-broken-main-PR276-fixes
 prs18:162,194,218,221,225,231,234,237,243,251,254,264,268,302,308,312,315,320(clean)
 i139:2=#243;3-pending
 monthly:#316;dups:303,306,309,313
-runs:19:7|18:7|17:7|16:7|15:457|14:7|13:42|12:16|11:457|10:4|08:237|07:457
+runs:20:4+7|19:7|18:7|17:7|16:7|15:457|14:7|13:42|12:16|11:457|10:4|08:237|07:457
 backlog:locBetween#225+#162;anchor-defer;164TextBuf-defer
 test:3965p/1f(#139.3)
 mcp:list/search/issue_read/reviews/comments=empty→WebFetch
