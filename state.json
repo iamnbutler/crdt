@@ -1,1 +1,1 @@
-{"m":"2026-05","t":"2026-05-19","tasks":"T1T2T3T7","bl":["lazy-vv","Onalloc","st-rm","perfCI","encbin2x"],"n":"16 PI PRs. Bun via curl. lint fails record-benchmarks.ts. computeTextSummary JS-loop regress. Next:T4T5T6T7"}
+{"m":"2026-05","t":"2026-05-20","tasks":"T4T5T6T7","bl":["lazy-vv","Onalloc","perfCI"],"n":"12 PI PRs open. #310,#323 done. #298/#299 dupe getText. No issues. No human comments. Created May summary. Next:T1T2T3T7"}
