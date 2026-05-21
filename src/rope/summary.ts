@@ -30,27 +30,54 @@ export function byteLength(str: string): number {
 
 /**
  * Compute the TextSummary for a given string.
+ *
+ * Single-pass scan: counts newlines, finds the last-line start, and detects
+ * whether the string is pure ASCII. When ASCII, UTF-8 byte counts equal UTF-16
+ * lengths and no TextEncoder.encode pass is needed. When the text has no
+ * newline, lastLine metrics equal the whole-string metrics — no second encode.
  */
 export function computeTextSummary(text: string): TextSummary {
+  const utf16Len = text.length;
   let lines = 0;
   let lastLineStart = 0;
+  let isAscii = true;
 
-  for (let i = 0; i < text.length; i++) {
-    if (text.charCodeAt(i) === 0x0a) {
-      // '\n'
+  for (let i = 0; i < utf16Len; i++) {
+    const code = text.charCodeAt(i);
+    if (code === 0x0a) {
       lines++;
       lastLineStart = i + 1;
+    } else if (code > 0x7f) {
+      isAscii = false;
     }
   }
 
-  const lastLineText = text.slice(lastLineStart);
+  if (isAscii) {
+    // ASCII: 1 char === 1 UTF-8 byte. No encoder calls needed.
+    const lastLineLen = utf16Len - lastLineStart;
+    return {
+      lines,
+      utf16Len,
+      bytes: utf16Len,
+      lastLineLen,
+      lastLineBytes: lastLineLen,
+    };
+  }
 
+  const bytes = textEncoder.encode(text).byteLength;
+  if (lastLineStart === 0) {
+    // No newline: lastLine metrics are the whole-string metrics. Avoid the
+    // second encode of an identical slice.
+    return { lines, utf16Len, bytes, lastLineLen: utf16Len, lastLineBytes: bytes };
+  }
+
+  const lastLineText = text.slice(lastLineStart);
   return {
     lines,
-    utf16Len: text.length,
-    bytes: byteLength(text),
+    utf16Len,
+    bytes,
     lastLineLen: lastLineText.length,
-    lastLineBytes: byteLength(lastLineText),
+    lastLineBytes: textEncoder.encode(lastLineText).byteLength,
   };
 }
 
