@@ -105,11 +105,13 @@ export function happenedBefore(a: VersionVector, b: VersionVector): boolean {
     }
   }
 
-  // Also check entries in b that are not in a — they make b strictly greater.
-  for (const [rid] of b) {
-    if (!a.has(rid)) {
-      strictlyLess = true;
-    }
+  // The first loop established that every key in `a` exists in `b` with
+  // `aCounter <= bCounter`, so `a`'s keys are a subset of `b`'s keys.
+  // If `b` has more keys than `a`, at least one entry in `b` is missing
+  // from `a` and makes `b` strictly greater. Otherwise (equal sizes), no
+  // key in `b` is missing from `a`, so no iteration is needed.
+  if (b.size > a.size) {
+    return true;
   }
 
   return strictlyLess;
