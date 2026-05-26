@@ -1,1 +1,1 @@
-{"m":"2026-05","t":"2026-05-25","last":"T4567","bl":["perfCI","lazy-vv","Onalloc","opqueue-inplace"],"openPRs":22,"dups":[298,173,160],"n":"22 open PRs - hold off new ones. regression.ts unused. Next: T123."}
+{"m":"2026-05","t":"2026-05-26","last":"T1234","openPerfPRs":22,"dups":[298,173,160],"n":"22 PerfImprover PRs open - DO NOT create new ones. Dups 298/173/160. Main lint fails record-benchmarks.ts (PR#276 fixes). perf.test 10K seq insert 108ms vs 100ms."}
