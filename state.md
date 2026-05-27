@@ -1,9 +1,9 @@
-u:26-05-26|rid:26434273173|restraint:17|monthly:#316|last-maint:26-03-29(58d)
+u:26-05-27|rid:26493145966|restraint:18|monthly:#316|last-maint:26-03-29(59d)
 prs18:162,194,218,221,225,231,234,237,243,251,254,264,268,302,308,312,315,320
 dups:303,306,309,313|ci:lint-PR276
-runs:26:7|25:127|24:47|23:7|22:7|21:47|20:47|19-13:7|12:16|11:457|10:4|08:237|07:457
+runs:27:7|26:7|25:127|24:47|23:7|22:7|21:47|20:47|19-13:7|12:16|11:457|10:4
 backlog:locBet#225+#162;anchor;TextBuf
-test:3965p/1f-perf10K@118ms(69→103→118,skip-26)
-mcp:l/s/ir=∅→WebFetch+curl|bun:OK
+test:3965p/1f-perf10K@118ms(skip2d-from-26)
+mcp:search/issues=empty→raw-curl-api|bun:installable-not-preinstalled
 i139:3pend|clean:#231,#320
 hold:maintainer-silent
