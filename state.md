@@ -1,9 +1,7 @@
-u:26-05-28|rid:26556841260|restraint:19|monthly:#316|last-maint:26-03-29(60d)
-prs18:162,194,218,221,225,231,234,237,243,251,254,264,268,302,308,312,315,320
-dups:303,306,309,313|ci:lint-PR276
-runs:28-26:7|25:127|24:47|23-22:7|21-20:47|19-13:7|12:16|11:457|10:4
-backlog:locBet#225+#162;anchor;TextBuf
-test:3965p/1f-perf10K@118ms(skip3d-from-26)
-mcp:search/issues=empty→raw-curl-api|bun:installable-not-preinstalled
-i139:3pend|clean:#231,#320|hold:maintainer-silent
-spotchk26-05-28:276,320,162,194,225=all-clean
+u:26-05-29|rid:26620241891|restraint:20|monthly:#316|last-maint:26-03-29(61d)
+HOLD:maintainer-silent-61d→no-new-PRs/comments,monthly-only
+prs18open:162,194,218,221,225,231,234,237,243,251,254,264,268,302,308,312,315,320
+mainHEAD:9ffb0f3(unchanged,nothing-merged)|68openPRs-total|dups303,306,309,313=open
+ci:lint-broken-main-PR276-unmerged-day63|test:3965p/1f-perf10K@118ms(full26-05-25;skip26-29)
+i139:item3-pend(perf-threshold);items1,2-done|backlog:locBet#225+#162;anchor;TextBuf
+mcp:list/search/issue_read=ALL-empty→raw-curl-api-works|bun:installable-via-curl
