@@ -1,8 +1,11 @@
-u:26-05-31|rid:26704544438|restraint:22|monthly:#316|maint-silent:26-03-29(63d)
-HOLD:no-new-PRs/comments,monthly-only(18-TI-PRs-stale,none-merged)
-main:9ffb0f3(unchanged)|dups303,306,309,313=open|PR276lintfix=open/draft
-ci:lint-broken-day65|test:3965p/1f@118ms(val26-05-25;skip26-31=6x)
-i139item3-pend(perf69→103→118ms)|backlog-deferred-til-18PRs-clear
-TIprs18:320,315,312,308,302,268,264,254,251,243,237,234,231,225,221,218,194,162
-mcp:issue_read=empty;list_PRs=huge(jq);curl=works;bun=curl-install
-push_repo_memory=FALSE-POS:reports31KB regardless of file(530B);env/pack overhead,not content;auto-push works anyway,dont fight it
+u:26-06-01|rid:26737661647|restraint:23|monthly:#316(renamed→June)|maint-silent:26-03-29(64d)
+HOLD:no-new-PRs/comments,monthly-only(17-TI-PRs-stale,none-merged;#162 dropped off list)
+**DUP-EXPLOSION**:37 open "Monthly Activity" issues(daily-created,not-updated)!root=MCP issue_read/search_issues/list_issues ALL return empty→run cant find existing→creates new daily
+this-run:repurposed #316→2026-06(rename+replace body)instead of 38th dup;Suggested-Actions=bulk-close dups+triage17PRs
+DUPS-may:313,309,306,303|apr:296,293,290,288,285,283,280,278,275,273,271,266,261,259,257,255,252,248,246,244,240,238,232,228,226,222|mar:219,215,195,170,163,129 (36 to close;keep #316)
+main:9ffb0f3(unchanged)|test:3965p/1f@last-val26-05-25(bun NOT installed this run,tree unchanged→status holds;skip-count7x)
+TIprs17:320,315,312,308,302,268,264,254,251,243,237,234,231,225,221,218,194
+i139item3-pend(perf69→103→118ms)|1-failing-test-uninvestigated(surface,dont-spawn-bug-issue under HOLD)
+mcp:issue_read=empty,search_issues=empty,list_issues=empty ALL BROKEN;use curl(works,unauth public reads);list_PRs=huge(jq file)
+push_repo_memory=FALSE-POS(reports~31KB regardless;env overhead;auto-push works,dont fight)
+NOTE:renaming #316 wont stop tomorrows run making new June dup(workflow bug,cant fix from here);surfaced to maintainer
