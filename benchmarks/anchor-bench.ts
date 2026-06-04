@@ -300,6 +300,26 @@ const removeResult = runBenchmark(
 );
 console.log(formatResult(removeResult));
 
+// findByAnchor: lookup an anchor among many entries.
+// Uses the byInsertionId index, so cost is independent of total entry count.
+const lookupSet = new AnchorSet<number>();
+let lookupTarget = createAnchor(batchDoc, 0, Bias.Left);
+for (let i = 0; i < OP_COUNT; i++) {
+  const offset = Math.floor(Math.random() * batchDoc.length);
+  const anchor = createAnchor(batchDoc, offset, Bias.Left);
+  lookupSet.add(anchor, i);
+  if (i === OP_COUNT - 1) lookupTarget = anchor;
+}
+
+const findResult = runBenchmark(
+  `findByAnchor in ${OP_COUNT.toLocaleString()} entries`,
+  () => {
+    lookupSet.findByAnchor(lookupTarget);
+  },
+  OP_COUNT,
+);
+console.log(formatResult(findResult));
+
 console.log();
 
 // -----------------------------------------------------------------

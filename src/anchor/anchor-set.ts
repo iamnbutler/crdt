@@ -317,13 +317,23 @@ export class AnchorSet<T> {
   /**
    * Find entries that reference a specific anchor.
    *
+   * Two anchors can only be equal if they share the same insertion ID
+   * (see {@link anchorsEqual}), so this narrows the search to entries indexed
+   * under that insertion ID instead of scanning the entire set. Complexity is
+   * O(k) in the number of entries sharing the insertion ID rather than O(n) in
+   * the total entry count.
+   *
    * @param anchor - The anchor to search for
    * @returns Array of entry IDs with matching anchors
    */
   findByAnchor(anchor: Anchor): EntryId[] {
+    const candidates = this.byInsertionId.get(operationIdKey(anchor.insertionId));
+    if (!candidates) return [];
+
     const result: EntryId[] = [];
-    for (const [id, entry] of this.entries) {
-      if (anchorsEqual(entry.anchor, anchor)) {
+    for (const id of candidates) {
+      const entry = this.entries.get(id);
+      if (entry && anchorsEqual(entry.anchor, anchor)) {
         result.push(id);
       }
     }

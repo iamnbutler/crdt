@@ -651,6 +651,41 @@ describe("AnchorSet", () => {
     expect(found).toContain(id2);
   });
 
+  test("findByAnchor returns empty for unknown insertion id", () => {
+    const set = new AnchorSet<string>();
+    set.add({ insertionId: { replicaId: 1, localSeq: 1 }, offset: 0, bias: Bias.Left }, "a");
+
+    const found = set.findByAnchor({
+      insertionId: { replicaId: 9, localSeq: 9 },
+      offset: 0,
+      bias: Bias.Left,
+    });
+    expect(found).toHaveLength(0);
+  });
+
+  test("findByAnchor distinguishes offset and bias within same insertion id", () => {
+    const set = new AnchorSet<string>();
+    const base = { insertionId: { replicaId: 1, localSeq: 1 }, offset: 5, bias: Bias.Left };
+    const id = set.add(base, "match");
+    set.add({ ...base, offset: 6 }, "other-offset");
+    set.add({ ...base, bias: Bias.Right }, "other-bias");
+
+    const found = set.findByAnchor(base);
+    expect(found).toEqual([id]);
+  });
+
+  test("findByAnchor reflects updateAnchor re-indexing", () => {
+    const set = new AnchorSet<string>();
+    const oldAnchor = { insertionId: { replicaId: 1, localSeq: 1 }, offset: 0, bias: Bias.Left };
+    const newAnchor = { insertionId: { replicaId: 2, localSeq: 7 }, offset: 3, bias: Bias.Right };
+    const id = set.add(oldAnchor, "moves");
+
+    set.updateAnchor(id, newAnchor);
+
+    expect(set.findByAnchor(oldAnchor)).toHaveLength(0);
+    expect(set.findByAnchor(newAnchor)).toEqual([id]);
+  });
+
   test("clear removes all entries", () => {
     const set = new AnchorSet<string>();
     set.add({ insertionId: { replicaId: 1, localSeq: 1 }, offset: 0, bias: Bias.Left }, "a");
