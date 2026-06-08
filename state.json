@@ -1,1 +1,16 @@
-{"m":"2026-06","t":"2026-06-07","last":["T4","T7"],"next":["T3","T5","T6"],"juneIssue":339,"merge":[276],"dups":{"prs":[[299,298],[173,172],[160,172]],"mayIssues":[326,328,330,331,332,335,336,337,338]},"clusters":{"redistributeNodes":[160,172,173,176,185],"getTextMaterialize":[298,299,241],"bulkSortBench":[204,205,216]},"cmds":"bun NOT preinstalled;curl bun.sh install hits firewall(exit56)SOME runs->blocks measurement(see#334);when up:install/typecheck/test(~3969)OK;lint FAILS on main(2 Biome errs scripts/record-benchmarks.ts,fixed by#276)","prs":"69 open total/23 PerfImprover=SATURATION->NO new PRs.open:341,329,327,324,323,310,304,299,298,294,291,286,281,276,256,241,235,229,223,216,173,172,160.HEAD main=9ffb0f3(#168)=NONE merged","mcp":"BROKEN:issue_read/pull_request_read/list_issues all return[];search_issues unreliable(returns[]even for matching#339);actions_list truncates.WORKS:list_pull_requests(saved-file+python);WebFetch on public issue/PR pages=reliable read path.WRITE:update_issue safeoutput works(title must start[Perf Improver])","backlog":"anchor:findByAnchor done(PR341);resolveInRange()still open(early-out before full resolveAll O(nlogn)sort).open perf issues maybe unstarted:#210 RLE inserts,#211 elim O(n)split,#212 range-compressed delete(many covered by drafts)","n":"06-07:Run27106141132.Triage+tracker only.WebFetch verified:9 May dup trackers open(#321/#325 closed since);#334 tracks bun/exit56 CI fail.Bun unavailable->no measurement->no PR.Refreshed#339 body via update_issue replace.Prior 06-06 consolidation comment NOT landed(last#339 activity=06-04 PR341 comment)"}
+{
+"m": "2026-06",
+"t": "2026-06-08",
+"last": ["T1","T4","T7"],
+"next": ["T3","T5","T6"],
+"juneIssue": 339,
+"merge": [276],
+"dupPRs": [[299,298],[173,172],[160,172]],
+"mayTrackers": [326,328,330,331,332,335,336,337,338],
+"cmds": "bun NOT preinstalled; curl bun.sh install usually works (exit56 firewall SOME runs, #334). 06-08: bun1.3.14 install/typecheck/test(3966 pass ~3.6s) OK; lint FAILS on main (2 Biome errs scripts/record-benchmarks.ts:333). #276 fix VERIFIED 06-08 (biome --write --unsafe -> lint exit0).",
+"prs": "69 open/23 PerfImprover=SATURATION->NO new PRs til triaged. HEAD main=9ffb0f3(#168)=NONE merged (confirmed 06-08). open perf: 341,329,327,324,323,310,304,299,298,294,291,286,281,276,256,241,235,229,223,216,173,172,160.",
+"mcp": "list_pull_requests works but huge(230k chars)->parse saved file w/python. issue_read/list_issues return[]. RELIABLE: WebFetch on public issue/PR pages. WRITE: update_issue safeoutput works (title must start [Perf Improver]).",
+"memWarn": "push_repo_memory validation is BROKEN: reports ~31-33KB total even for a 32-byte file (measures fixed pack/history overhead, not content). Ignore its error; real git diff stays ~2-3KB, well under 10KB; auto-push works.",
+"backlog": "resolveInRange() in src/anchor/anchor-set.ts calls resolveAll()=full O(nlogn) sort before range-filter; early-out candidate BUT hold(saturation). findByAnchor done(PR341). #210 RLE, #211 elim O(n) split (labeled DUPLICATE no comments-dont comment), #212 range-compressed delete.",
+"n": "06-08 Run27170349661: Bun installed ok (measurement possible). Did T1(revalidate)+T4(verified #276 unblocks lint CI)+T7(refreshed #339). HELD new PRs (saturation). Skipped T5 (#211 duplicate=spam). Next high-value when queue clears: resolveInRange early-out w/bench."
+}
