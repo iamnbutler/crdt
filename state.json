@@ -1,16 +1,16 @@
 {
 "m": "2026-06",
-"t": "2026-06-08",
-"last": ["T1","T4","T7"],
-"next": ["T3","T5","T6"],
+"t": "2026-06-09",
+"last": ["T3","T7"],
+"next": ["T5","T6","T1"],
 "juneIssue": 339,
 "merge": [276],
 "dupPRs": [[299,298],[173,172],[160,172]],
 "mayTrackers": [326,328,330,331,332,335,336,337,338],
-"cmds": "bun NOT preinstalled; curl bun.sh install usually works (exit56 firewall SOME runs, #334). 06-08: bun1.3.14 install/typecheck/test(3966 pass ~3.6s) OK; lint FAILS on main (2 Biome errs scripts/record-benchmarks.ts:333). #276 fix VERIFIED 06-08 (biome --write --unsafe -> lint exit0).",
-"prs": "69 open/23 PerfImprover=SATURATION->NO new PRs til triaged. HEAD main=9ffb0f3(#168)=NONE merged (confirmed 06-08). open perf: 341,329,327,324,323,310,304,299,298,294,291,286,281,276,256,241,235,229,223,216,173,172,160.",
-"mcp": "list_pull_requests works but huge(230k chars)->parse saved file w/python. issue_read/list_issues return[]. RELIABLE: WebFetch on public issue/PR pages. WRITE: update_issue safeoutput works (title must start [Perf Improver]).",
-"memWarn": "push_repo_memory validation is BROKEN: reports ~31-33KB total even for a 32-byte file (measures fixed pack/history overhead, not content). Ignore its error; real git diff stays ~2-3KB, well under 10KB; auto-push works.",
-"backlog": "resolveInRange() in src/anchor/anchor-set.ts calls resolveAll()=full O(nlogn) sort before range-filter; early-out candidate BUT hold(saturation). findByAnchor done(PR341). #210 RLE, #211 elim O(n) split (labeled DUPLICATE no comments-dont comment), #212 range-compressed delete.",
-"n": "06-08 Run27170349661: Bun installed ok (measurement possible). Did T1(revalidate)+T4(verified #276 unblocks lint CI)+T7(refreshed #339). HELD new PRs (saturation). Skipped T5 (#211 duplicate=spam). Next high-value when queue clears: resolveInRange early-out w/bench."
+"cmds": "bun NOT preinstalled; curl bun.sh install usually works (exit56 firewall SOME runs, #334). 06-08: bun1.3.14 install/typecheck/test(3966 pass ~3.6s) OK; lint FAILS on main (2 Biome errs scripts/record-benchmarks.ts:333). #276 fix VERIFIED 06-08.",
+"prs": "69 open/23 PerfImprover=SATURATION->NO new PRs/comments til triaged. HEAD main=9ffb0f3(#168)=NONE merged (confirmed 06-09). open perf: 341,329,327,324,323,310,304,299,298,294,291,286,281,276,256,241,235,229,223,216,173,172,160.",
+"mcp": "list_pull_requests works but huge(230k)->parse saved file w/python (json.load). issue_read/list_issues/search_issues return []. RELIABLE: WebFetch on public issue/PR pages. WRITE: update_issue safeoutput works (title must start [Perf Improver]).",
+"memWarn": "push_repo_memory validation BROKEN: reports ~31-33KB even for tiny file (counts pack overhead). Ignore its error; real git diff ~2-3KB; auto-push works.",
+"backlog": "resolveInRange() src/anchor/anchor-set.ts L308: calls resolveAll()(full traverse+O(nlogn)sort) then O(n).filter(). resolveAll output is offset-SORTED already -> replace filter w/ binary-search slice = O(logn+k) vs O(n). LOW-RISK but MODEST (resolveAll dominates). HOLD(saturation). findByAnchor done(PR341). #210 RLE,#211 elim split(DUPLICATE-dont comment),#212 range-compressed delete.",
+"n": "06-09 Run27239251110: state UNCHANGED since 06-08 (no merges/closes, no maintainer comments on #339). Did T3(analysis-only,no PR: refined resolveInRange->binary-search slice) + T7(refreshed #339, prepended run entry). Held PRs/comments(saturation+anti-spam). Next when queue clears: implement resolveInRange binary-search slice w/bench, OR T5 if genuine non-dup uncommented perf issue appears."
 }
