@@ -1,7 +1,7 @@
 {
 "m": "2026-06",
-"t": "2026-06-10",
-"last": ["T1","T7"],
+"t": "2026-06-11",
+"last": ["T1","T2","T7"],
 "next": ["T5","T6","T2"],
 "juneIssue": 339,
 "merge": [276],
@@ -12,5 +12,5 @@
 "mcp": "list_pull_requests works but huge(230k)->parse saved file w/python. issue_read/list_issues/search_issues return []. RELIABLE: WebFetch on public issue/PR pages. WRITE: update_issue safeoutput works (title must start [Perf Improver]).",
 "memWarn": "push_repo_memory validation BROKEN: reports ~31-33KB even for tiny file (counts pack overhead). Ignore its error; real git diff ~2-3KB; auto-push works.",
 "backlog": "resolveInRange() src/anchor/anchor-set.ts L308: calls resolveAll()(full traverse+O(nlogn)sort) then O(n).filter(). resolveAll output offset-SORTED already -> replace filter w/ binary-search slice = O(logn+k) vs O(n). LOW-RISK MODEST (resolveAll dominates). HOLD(saturation). findByAnchor done(PR341). #210 RLE,#211 elim split(DUP-dont comment),#212 range-compressed delete.",
-"n": "06-10 Run27310121554: state UNCHANGED since 06-08 (no merges/closes, no maintainer comments/checkboxes on #339). Did T1(re-validated: bun install OK this run, typecheck OK, test 3966 pass, lint still fails on main=#276 blocker) + T7(prepended run entry to #339). Held PRs/comments(saturation+anti-spam). Next when queue clears: implement resolveInRange binary-search slice w/bench, OR T5 if genuine non-dup uncommented perf issue appears."
+"n": "06-11 Run27381049080: state UNCHANGED (HEAD main still 9ffb0f3=#168, nothing merged/closed, NO maintainer comments/checkboxes on #339). Did T1(re-validated bun1.3.14: install+typecheck OK, lint STILL FAILS on main=#276 blocker confirmed) + T2(verified resolveInRange backlog item still present in code, held) + T7(FULLY REWROTE #339 body to canonical format - prior body had duplicate+corrupted RunHistory sections w/all 06-08..06-01 links wrongly pointing to run27310121554; fixed links from authoritative first section). Held PRs/comments(saturation+anti-spam). Next when queue clears: implement resolveInRange binary-search slice w/bench, OR T5 if genuine non-dup uncommented perf issue appears."
 }
