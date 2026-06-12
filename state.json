@@ -1,16 +1,16 @@
 {
 "m": "2026-06",
-"t": "2026-06-11",
-"last": ["T1","T2","T7"],
-"next": ["T5","T6","T2"],
+"t": "2026-06-12",
+"last": ["T7"],
+"next": ["T1","T2","T4"],
 "juneIssue": 339,
 "merge": [276],
 "dupPRs": [[299,298],[173,172],[160,172]],
 "mayTrackers": [326,328,330,331,332,335,336,337,338],
-"cmds": "bun NOT preinstalled; curl bun.sh install OK this run(06-10, exit0). 06-10: bun1.3.14 install/typecheck OK; test 3966 pass 0 fail ~3.5s (10K inserts 88ms, 1K remote 168ms); lint FAILS on main (2 Biome errs scripts/record-benchmarks.ts ~L356 git-commit formatting). #276 fixes this.",
-"prs": "69 open/23 PerfImprover=SATURATION->NO new PRs/comments til triaged. HEAD main=9ffb0f3(#168)=NONE merged (confirmed 06-10). open perf: 341,329,327,324,323,310,304,299,298,294,291,286,281,276,256,241,235,229,223,216,173,172,160.",
+"cmds": "bun NOT preinstalled; curl bun.sh install OK. bun1.3.14: install/typecheck OK; test 3966 pass 0 fail ~3.5s; lint FAILS on main (2 Biome errs scripts/record-benchmarks.ts ~L356). #276 fixes. Last full re-validate 06-11.",
+"prs": "69 open/23 PerfImprover=SATURATION->NO new PRs/comments til triaged. HEAD main=9ffb0f3(#168)=NONE merged. open perf: 341,329,327,324,323,310,304,299,298,294,291,286,281,276,256,241,235,229,223,216,173,172,160.",
 "mcp": "list_pull_requests works but huge(230k)->parse saved file w/python. issue_read/list_issues/search_issues return []. RELIABLE: WebFetch on public issue/PR pages. WRITE: update_issue safeoutput works (title must start [Perf Improver]).",
 "memWarn": "push_repo_memory validation BROKEN: reports ~31-33KB even for tiny file (counts pack overhead). Ignore its error; real git diff ~2-3KB; auto-push works.",
-"backlog": "resolveInRange() src/anchor/anchor-set.ts L308: calls resolveAll()(full traverse+O(nlogn)sort) then O(n).filter(). resolveAll output offset-SORTED already -> replace filter w/ binary-search slice = O(logn+k) vs O(n). LOW-RISK MODEST (resolveAll dominates). HOLD(saturation). findByAnchor done(PR341). #210 RLE,#211 elim split(DUP-dont comment),#212 range-compressed delete.",
-"n": "06-11 Run27381049080: state UNCHANGED (HEAD main still 9ffb0f3=#168, nothing merged/closed, NO maintainer comments/checkboxes on #339). Did T1(re-validated bun1.3.14: install+typecheck OK, lint STILL FAILS on main=#276 blocker confirmed) + T2(verified resolveInRange backlog item still present in code, held) + T7(FULLY REWROTE #339 body to canonical format - prior body had duplicate+corrupted RunHistory sections w/all 06-08..06-01 links wrongly pointing to run27310121554; fixed links from authoritative first section). Held PRs/comments(saturation+anti-spam). Next when queue clears: implement resolveInRange binary-search slice w/bench, OR T5 if genuine non-dup uncommented perf issue appears."
+"backlog": "resolveInRange() src/anchor/anchor-set.ts L308: resolveAll()(full traverse+O(nlogn)sort) then O(n).filter(). output offset-SORTED -> binary-search slice = O(logn+k). LOW-RISK MODEST. HOLD(saturation). findByAnchor done(PR341). #210 RLE,#211 elim split(DUP-dont comment),#212 range-compressed delete.",
+"n": "06-12 Run27446062962: state UNCHANGED again (HEAD main still 9ffb0f3=#168=#168; nothing merged/closed; NO human comments/checkboxes on #339). bun NOT installed this run; main SHA identical to 06-11 validation -> lint blocker persists by deduction, SKIPPED redundant bun reinstall+retest (no new info). Did ONLY T7 (prepended this-run entry to #339 RunHistory, kept canonical format + Suggested Actions all-pending). HELD all PRs/comments (saturation 23 drafts + anti-spam). DEGENERATE HOLD LOOP since 06-05 (last PR #341 on 06-04); maintainer not engaging. Next when queue clears OR maintainer comments: implement resolveInRange binary-search slice w/bench, OR T4 maintain PRs if #276 merged unblocks CI."
 }
