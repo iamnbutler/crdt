@@ -1,16 +1,16 @@
 {
 "m": "2026-06",
-"t": "2026-06-13",
-"last": ["T7"],
-"next": ["T1","T2","T4"],
+"t": "2026-06-14",
+"last": ["T7-held"],
+"next": ["T4-if-276-merged","T3-resolveInRange"],
 "juneIssue": 339,
 "merge": [276],
-"dupPRs": [[299,298],[173,172],[160,172]],
+"dupPRs": [[299,298],[173,172],[160,172],[204,205],[178,179]],
 "mayTrackers": [326,328,330,331,332,335,336,337,338],
 "cmds": "bun NOT preinstalled; curl bun.sh install OK. bun1.3.14: install/typecheck OK; test 3966 pass 0 fail ~3.5s; lint FAILS on main (2 Biome errs scripts/record-benchmarks.ts ~L356). #276 fixes. Last full re-validate 06-11 (same SHA 9ffb0f3 since).",
-"prs": "23 PerfImprover drafts open=SATURATION->NO new PRs/comments til triaged. HEAD main=9ffb0f3(#168)=NONE merged. newest PR #341(06-04). open perf:341,329,327,324,323,310,304,299,298,294,291,286,281,276,256,241,235,229,223,216,173,172,160.",
-"mcp": "list_pull_requests works but huge(68k)->parse saved file w/python json. issue_read/list_issues/search_issues return []. RELIABLE: WebFetch public issue/PR pages (but refuses verbatim>125char->ask for summary). WRITE: update_issue safeoutput works (title must start [Perf Improver]).",
+"prs": "69 open total; 23 PerfImprover drafts=SATURATION->NO new PRs/comments til triaged. HEAD main=9ffb0f3(#168)=NONE merged. newest PerfImprover PR #341(06-04). open perf:341,329,327,324,323,310,304,299,298,294,291,286,281,276,256,241,235,229,223,216,173,172,160.",
+"mcp": "list_pull_requests works but huge(230k)->parse saved file w/python json. issue_read/list_issues/search_issues return []. RELIABLE: WebFetch public issue/PR pages (refuses verbatim>125char->ask summary). WRITE: update_issue safeoutput works (title must start [Perf Improver]).",
 "memWarn": "push_repo_memory validation BROKEN: reports ~31-33KB even tiny file (counts pack overhead). Ignore its error; real git diff ~2-3KB; auto-push works.",
 "backlog": "resolveInRange() src/anchor/anchor-set.ts L308: resolveAll()(full traverse+O(nlogn)sort) then O(n).filter(). output offset-SORTED -> binary-search slice=O(logn+k). LOW-RISK MODEST. HOLD(saturation). findByAnchor done(PR341). #210 RLE,#211 elim split(DUP-dont comment),#212 range-compressed delete.",
-"n": "06-13 Run27480438586: state UNCHANGED yet again (main=9ffb0f3=#168; nothing merged/closed; ZERO human comments/checkboxes on #339; newest PR still #341 06-04). bun NOT installed; same SHA as 06-11 validation -> SKIPPED redundant reinstall+retest (no new info). Did ONLY T7: full canonical replace of #339 body, prepended this-run RunHistory entry, Suggested Actions all-pending. HELD all PRs/comments (23 draft saturation + anti-spam). DEGENERATE HOLD LOOP since 06-05 (last real PR #341 06-04); maintainer not engaging since June started. Next when queue clears OR maintainer comments: implement resolveInRange binary-search slice w/bench, OR T4 maintain PRs if #276 merged unblocks CI lint."
+"n": "06-14 Run27513460563: state IDENTICAL to 06-13 (main=9ffb0f3=#168; 0 merged/closed; #339 ZERO human comments/checkboxes; newest PR #341 06-04; 23 drafts; lint red on main). Verified via list_pull_requests(saved file) + WebFetch #339. DEGENERATE HOLD LOOP since 06-05 (last real PR #341 06-04). This run: deliberately did NOT churn #339 (per 'do not update if nothing done' + restraint/anti-spam; #339 body already accurate). Called noop. NO new PRs/comments (saturation). Break loop ONLY when: maintainer merges #276/triages drafts, OR posts comment/checkbox on #339. Then: T4 maintain PRs (CI unblock), or T3 resolveInRange binary-search slice w/bench."
 }
