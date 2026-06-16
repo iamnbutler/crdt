@@ -1,6 +1,6 @@
 {
 "m": "2026-06",
-"t": "2026-06-15",
+"t": "2026-06-16",
 "last": ["T7-held"],
 "next": ["T4-if-276-merged","T3-resolveInRange"],
 "juneIssue": 339,
@@ -8,9 +8,9 @@
 "dupPRs": [[299,298],[173,172],[160,172],[204,205],[178,179]],
 "mayTrackers": [326,328,330,331,332,335,336,337,338],
 "cmds": "bun NOT preinstalled; curl bun.sh install OK. bun1.3.14: install/typecheck OK; test 3966 pass 0 fail ~3.5s; lint FAILS on main (2 Biome errs scripts/record-benchmarks.ts ~L356). #276 fixes. Last full re-validate 06-11 (same SHA 9ffb0f3 since).",
-"prs": "69 open total; 23 PerfImprover drafts=SATURATION->NO new PRs/comments til triaged. HEAD main=9ffb0f3(#168)=NONE merged. newest PerfImprover PR #341(06-04). open perf:341,329,327,324,323,310,304,299,298,294,291,286,281,276,256,241,235,229,223,216,173,172,160.",
-"mcp": "list_pull_requests works but huge(67k+)->parse saved file w/python json (top15 newest=341..294 all draft). issue_read/pull_request_read(get)/list_issues/search_issues return []. RELIABLE: WebFetch public issue/PR pages (refuses verbatim>125char->ask summary). WRITE: update_issue safeoutput works (title must start [Perf Improver]).",
+"prs": "70 open total; 23 PerfImprover drafts=SATURATION->NO new PRs/comments til triaged. HEAD main=9ffb0f3(#168)=NONE merged. newest PerfImprover PR #341(06-04). open perf:341,329,327,324,323,310,304,299,298,294,291,286,281,276,256,241,235,229,223,216,173,172,160.",
+"mcp": "list_pull_requests works but huge(67k+)->parse saved file w/python json. issue_read/pull_request_read(get)/list_issues/search_issues return []. RELIABLE: WebFetch public issue/PR/pulls pages (refuses verbatim>125char->ask summary). WRITE: update_issue safeoutput works (title must start [Perf Improver]).",
 "memWarn": "push_repo_memory validation BROKEN: reports ~31-33KB even tiny file (counts pack overhead). Ignore its error; real git diff ~2-3KB; auto-push works.",
 "backlog": "resolveInRange() src/anchor/anchor-set.ts L308: resolveAll()(full traverse+O(nlogn)sort) then O(n).filter(). output offset-SORTED -> binary-search slice=O(logn+k). LOW-RISK MODEST. HOLD(saturation). findByAnchor done(PR341). #210 RLE,#211 elim split(DUP-dont comment),#212 range-compressed delete.",
-"n": "06-15 Run27580507791: state STILL IDENTICAL (main=9ffb0f3=#168; 0 merged/closed; #339 ZERO human comments/checkboxes confirmed via WebFetch; newest PR #341 06-04 confirmed via list_pull_requests saved-file parse; 23 drafts; lint red on main). DEGENERATE HOLD LOOP since 06-05 (last real PR #341 06-04), now ~10 days. This run: did NOT churn #339 (body accurate, nothing done) + NO new PRs/comments (saturation+anti-spam). Called noop. Break loop ONLY when: maintainer merges #276/triages drafts, OR posts comment/checkbox on #339. Then: T4 maintain PRs (CI unblock once #276 in), or T3 resolveInRange binary-search slice w/bench. Note: NO safe-output tool can close PRs->cannot self-prune dup queue; only update_issue/add_comment/create_* available."
+"n": "06-16 Run27652081922: state STILL IDENTICAL (main=9ffb0f3=#168; 0 merged/closed; #339 ZERO human comments/checkboxes confirmed WebFetch; #276 still open draft NOT merged; newest perf PR #341 06-04; pulls page=70 open all-newest bot drafts). DEGENERATE HOLD LOOP since 06-05, now ~12 days. This run: verified main/271/339/pulls, did NOT churn #339, NO new PRs/comments (saturation+anti-spam). Called noop. Break loop ONLY when: maintainer merges #276/triages drafts, OR posts comment/checkbox on #339. Then: T4 maintain PRs (CI unblock once #276 in), or T3 resolveInRange binary-search slice w/bench. Note: NO safe-output can close PRs->cannot self-prune dup queue."
 }
