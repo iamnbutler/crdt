@@ -1,6 +1,6 @@
 {
 "m": "2026-06",
-"t": "2026-06-16",
+"t": "2026-06-17",
 "last": ["T7-held"],
 "next": ["T4-if-276-merged","T3-resolveInRange"],
 "juneIssue": 339,
@@ -12,5 +12,5 @@
 "mcp": "list_pull_requests works but huge(67k+)->parse saved file w/python json. issue_read/pull_request_read(get)/list_issues/search_issues return []. RELIABLE: WebFetch public issue/PR/pulls pages (refuses verbatim>125char->ask summary). WRITE: update_issue safeoutput works (title must start [Perf Improver]).",
 "memWarn": "push_repo_memory validation BROKEN: reports ~31-33KB even tiny file (counts pack overhead). Ignore its error; real git diff ~2-3KB; auto-push works.",
 "backlog": "resolveInRange() src/anchor/anchor-set.ts L308: resolveAll()(full traverse+O(nlogn)sort) then O(n).filter(). output offset-SORTED -> binary-search slice=O(logn+k). LOW-RISK MODEST. HOLD(saturation). findByAnchor done(PR341). #210 RLE,#211 elim split(DUP-dont comment),#212 range-compressed delete.",
-"n": "06-16 Run27652081922: state STILL IDENTICAL (main=9ffb0f3=#168; 0 merged/closed; #339 ZERO human comments/checkboxes confirmed WebFetch; #276 still open draft NOT merged; newest perf PR #341 06-04; pulls page=70 open all-newest bot drafts). DEGENERATE HOLD LOOP since 06-05, now ~12 days. This run: verified main/271/339/pulls, did NOT churn #339, NO new PRs/comments (saturation+anti-spam). Called noop. Break loop ONLY when: maintainer merges #276/triages drafts, OR posts comment/checkbox on #339. Then: T4 maintain PRs (CI unblock once #276 in), or T3 resolveInRange binary-search slice w/bench. Note: NO safe-output can close PRs->cannot self-prune dup queue."
+"n": "06-17 Run27723370187: state STILL IDENTICAL (main=9ffb0f3=#168; 0 merged/closed; #339 WebFetch confirms ZERO human comments/checkboxes, last body update 06-13; #276 still open NOT merged; 23 perf drafts saturated). DEGENERATE HOLD LOOP since 06-05 = ~13 days. This run: verified main HEAD + #339 via WebFetch, did NOT churn #339, NO new PRs/comments (saturation+anti-spam). Called noop. Break loop ONLY when: maintainer merges #276/triages drafts, OR posts comment/checkbox on #339. Then: T4 maintain PRs (CI unblock once #276 in), or T3 resolveInRange binary-search slice w/bench. NO safe-output closes PRs->cannot self-prune dup queue."
 }
