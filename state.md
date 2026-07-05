@@ -1,12 +1,12 @@
-u:26-07-04|rid:28696225391|run:56|monthly-canonical:#342(July,verified live run56,0 comments no maint engagement)|maint-silent~90d(last~03-29)
-RUN56:CLOSE#240(lowest April dup)+transparency comment(aw_RnDFysNq). Verified live via REST:#240 open/0comments/bot before close,#342=0 comments no checkbox changes,HEAD 9ffb0f3,rate_limit 60 start. Spent 1/run update_issue on close. Did NOT refresh #342(alternating cadence;run57 refreshes w/ run56+run57 entries).
-RUN55:REFRESH#342. Prepended run54(closed#238)+run55 entries;note 22->21. HEAD 9ffb0f3.
-RUN54:CLOSE#238+comment(aw_0Yktb0sr). RUN53:MONTH-ROLLOVER closed#316(June)+created#342(July). RUN52:CLOSE#232. RUN51:REFRESH#316. RUN50:CLOSE#228.
-ROTATION:run57=REFRESH#342(prepend run56+run57 to Run History),then run58=CLOSE#244(lowest remaining April dup;+transparency comment).Alternate refresh/close-dup(1/run update_issue HARD cap).close dups lowest#first:244,246,248,252,255,257,259,261,266,271,273,275,278,280,283,285,288,290,293,296.
+u:26-07-05|rid:28730782544|run:57|monthly-canonical:#342(July,verified live run57,0 comments no maint engagement)|maint-silent~90d(last~03-29)
+RUN57:REFRESH#342. Prepended run56(closed#240)+run57 entries;note 21->20;dup action list drops#240(now 20:244..296);next-close=#244. Verified live REST:#240 closed(1 comment)2026-07-04,20 April dups open,18 TI PRs open,#265/#214/#139 open,HEAD 9ffb0f3,rate_limit 59 start. Spent 1/run update_issue on refresh.
+RUN56:CLOSE#240(lowest April dup)+transparency comment(aw_RnDFysNq). Did NOT refresh #342.
+RUN55:REFRESH#342(run54+run55). RUN54:CLOSE#238+comment(aw_0Yktb0sr). RUN53:MONTH-ROLLOVER closed#316(June)+created#342(July). RUN52:CLOSE#232. RUN51:REFRESH#316. RUN50:CLOSE#228.
+ROTATION:run58=CLOSE#244(lowest remaining April dup;+transparency comment),then run59=REFRESH#342(prepend run58+run59 to Run History).Alternate close-dup/refresh(1/run update_issue HARD cap).close dups lowest#first:244,246,248,252,255,257,259,261,266,271,273,275,278,280,283,285,288,290,293,296.
 DUPS-OPEN(20)April-only:244,246,248,252,255,257,259,261,266,271,273,275,278,280,283,285,288,290,293,296.
 CLOSED-by-me:#240(r56),#238(r54),#316(r53 month-rollover),#232(r52),#228(r50),#226(r48),#222(r46),#313(r44),#309(r42),#306(r40),#303(r38),#219(r36),#215(r33),#129,#163,#170,#195.
 HOLD:no-new-PRs/comments(except dup-close transparency + monthly rollover/refresh).18 TI-PRs stale,NONE merged,maint disengaged~90d.Dup-cleanup 1/run via single update_issue.Task3 new tests deferred til maint engages.
-READ:MCP list/search/issue_read return [] OR WASM-crash MOST runs BUT public single-issue + list(?state=open&labels=testing / ?state=open&per_page=100 pulls) via curl works(run43-55). Check /rate_limit first(60/hr shared-IP unauth).
+READ:MCP list/search/issue_read return [] OR WASM-crash MOST runs BUT public single-issue + list(?state=open&labels=testing / ?state=open&per_page=100 pulls) via curl works(run43-57). Check /rate_limit first(60/hr shared-IP unauth).
 TESTS:3966 pass/0 fail @9ffb0f3(validated run32 x3,run34 x3). bun NOT preinstalled->curl -fsSL https://bun.sh/install|bash;~/.bun/bin. Prior "1 fail"(05-25)=flaky perf wall-clock src/text/perf.test.ts,NOT logic bug.
 TI-PRs18:162,194,218,221,225,231,234,237,243,251,254,264,268,302,308,312,315,320. No human engagement.
 NOT-MINE:Perf-Improver monthlies/PRs+aw/CI-Doctor(341,339,338,334,164,+many perf PRs 160-329).LEAVE all.
