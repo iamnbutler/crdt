@@ -1,15 +1,15 @@
 {
-"m":"2026-07","t":"2026-07-06","julyIssue":343,
-"SATURATION":"LIVE 07-06: main HEAD #168 9ffb0f3; #276 open draft; ~23 PerfImprover drafts, NONE merged. While saturated: no new perf PRs/comments. Break when #276 merged OR drafts triaged.",
-"strategy":"update_issue max1/run. Alternate: quiet runs close ONE stale May tracker OLDEST-first (status closed). FORCE-refresh #343 when its run-history >=2 days stale (op replace, exact Task7 fmt, backfill entries, fix stale-tracker line). Refresh run CANNOT also close a tracker.",
-"staleMayTrackersOPEN":"9 LIVE 07-06: 319(OLDEST),328,330,331,332,335,336,337,338. Closed:321(07-03),325(07-02),326(07-05). All '[Perf Improver] Monthly Activity 2026-05'.",
-"i343":"#343 OPEN,0 human comments,0 checked as of 07-06. REFRESHED 07-06(op replace): run-history 07-01..07-06 rev-chron; stale line = the 9-set. Actions: merge#276, triage drafts, close#299/#173/#160, close 9 trackers.",
-"next":"07-07 close #319(oldest) via update_issue status closed, DONT touch #343. Then close 328,330,... FORCE-refresh #343 again ~07-08/09 when run-history >=2d stale. After saturation: T4 fix draft CI; T3 resolveInRange binary-search slice+bench.",
-"cmds":"bun NOT preinstalled(curl -fsSL bun.sh/install|bash). install/typecheck OK; bun test ~3966 pass 0 fail ~3.5s; bun run lint FAILS on main(2 Biome errs scripts/record-benchmarks.ts;#276 fixes).",
-"mcp":"list_issues/search UNRELIABLE([]). USE WebFetch: issues?q=is%3Aissue+is%3Aopen+%5BPerf+Improver%5D for list; single issue/PR page for status/comments/checkboxes. update_issue max1/run title must start '[Perf Improver]'; create_issue auto-prefix+label(no prefix).",
-"backlog":"resolveInRange src/anchor/anchor-set.ts ~L308: output offset-SORTED->binary-search slice O(logn+k) vs resolveAll traverse+O(n)filter. LOW-RISK. HOLD. Also #210/#211/#212, Fragment(#298/299), redistributeNodes(#172/173/160). #341 DONE.",
+"m":"2026-07","t":"2026-07-07","julyIssue":343,
+"SATURATION":"LIVE 07-07: HEAD #168 9ffb0f3 unchanged; #276 open draft; ~23 drafts none merged. No new perf PRs/comments until #276 merged OR drafts triaged.",
+"strategy":"update_issue max1/run. Alternate: quiet run closes ONE oldest stale May tracker (status closed). FORCE-refresh #343 when its run-history >=2d stale (op replace, exact Task7 fmt, backfill entries, fix stale-line). Refresh run canNOT also close a tracker.",
+"staleMayTrackersOPEN":"8 @07-07: 328(oldest),330,331,332,335,336,337,338. Closed:319(07-07),321,325,326. All '[Perf Improver] Monthly Activity 2026-05'.",
+"i343":"OPEN,0 human comments,0 checked @07-07(WebFetch). Run-hist thru 07-06 22:08 UTC. Pending: merge#276, triage drafts, close#299/#173/#160, close 8 trackers.",
+"next":"07-08: if #343 run-hist still 07-06(>=2d stale) FORCE-refresh op replace, backfill 07-07(closed#319)+07-08, stale-line=8-set, no tracker-close same run. Else close #328. Post-saturation: T4 fix draft CI; T3 resolveInRange binary-search bench.",
+"cmds":"bun NOT preinstalled(curl -fsSL bun.sh/install|bash). install/typecheck OK; bun test ~3966 pass 0 fail ~3.5s; lint FAILS on main(2 Biome errs scripts/record-benchmarks.ts;#276 fixes).",
+"mcp":"list_issues/search/issue_read ALL return []. USE WebFetch: issues?q=is%3Aissue+is%3Aopen+%5BPerf+Improver%5D; single issue/PR page for status/checkboxes. update_issue title must start '[Perf Improver]'; create_issue auto-prefix+label.",
+"backlog":"resolveInRange src/anchor/anchor-set.ts ~L308 binary-search slice O(logn+k) LOW-RISK HOLD. Also #210/#211/#212, Fragment(#298/299), redistributeNodes(#172/173/160). #341 DONE.",
 "dupPRs":[[299,298],[173,172],[160,172]],
-"runids":"07-01=28550957106,07-02=28624443547,07-03=28685234886,07-04=28721017653,07-05=28756371019,07-06=28826430302",
-"memWarn":"push_repo_memory over-reports size(git-patch old+new). Real file <3.5KB, diff <10KB=OK. Auto-push works regardless.",
-"n":"07-06: DEVIATED from prior 'close #328' plan; instead refreshed #343 (Task7 mandate, was 2d stale) + fixed stale-tracker list (found #319 open, #326 already closed). No tracker closed(1-update spent). NEXT=close#319."
+"runids":"07-05=28756371019,07-06=28826430302,07-07=28901872461",
+"memWarn":"push_repo_memory over-reports(git-patch old+new); real file<3.5KB=OK; auto-push works regardless.",
+"n":"07-07: quiet run, closed #319(oldest stale May) via update_issue status closed; verified WebFetch #319 open/#343 0-checked/HEAD unchanged. Did NOT touch #343. NEXT=force-refresh #343 07-08 backfill 07-07."
 }
