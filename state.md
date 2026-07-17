@@ -1,16 +1,19 @@
-u:26-07-16|rid:29473373726|run:68|monthly-canonical:#342(July,open,0 comments,no maint engagement)|maint-silent~109d(last human commit 9ffb0f3 Nate Butler 2026-03-27,HEAD unchanged)
+u:26-07-17|rid:29556855253|run:69|monthly:#342(July,open,0comments,no maint engagement)|maint-silent~110d(last human commit 9ffb0f3 2026-03-27,HEAD unchanged)
 
-RUN68:CLOSE#257(lowest April dup).Consumed 1/run update_issue cap w/ status=closed.add_comment on #257(dup-of-#342 transparency,SEPARATE cap).Reconciled LIVE at start:core 52/60,search 10/10.search(open TI monthlies)=16 EXACT match memory(257,259,261,266,271,273,275,278,280,283,285,288,290,293,296 +#342).Verified #342 open/0comments,#257 open April dup/0comments via curl single-issue GET.HEAD still 9ffb0f3.#342 body NOT refreshed this run(alternating cadence;1/run update_issue cap forces close XOR refresh).#342 body still lists 15 dups(stale until run69 refresh).
+RUN69:REFRESH#342(1/run update_issue cap). core curl 0/60 exhausted+MCP returned[]; read #342 body via SEARCH API(returns full body+comments!). #342 had 0 comments. Updated body:dup list 15->14(dropped #257 closed run68),prepended run69[refresh]+run68[close#257] to Run History.
 
-ROTATION:run69=REFRESH#342.REREAD #342 body first(maint checkbox changes since run67).Prepend run68[close#257]+run69[refresh] to Run History.Update dup list 15->14 in #342 body(drop #257).Consumes 1/run update_issue cap.Then run70=CLOSE#259(next-lowest dup;+transparency comment ON the closed issue;dup 14->13 in memory,#342 body updated run71).Alternate close-dup/refresh forced by 1/run update_issue HARD cap.Close dups LOWEST#first,comment ON the dup being closed(not on #342).
-DUPS-OPEN(14)April-only:259,261,266,271,273,275,278,280,283,285,288,290,293,296.
-CLOSED-by-me:#257(r68),#255(r66),#252(r64),#248(r62),#246(r60),#244(r58),#240(r56),#238(r54),#316(r53 month-rollover),#232(r52),#228(r50),#226(r48),#222(r46),#313(r44),#309(r42),#306(r40),#303(r38),#219(r36),#215(r33),#129,#163,#170,#195.
+ROTATION(alternate close/refresh,forced by 1/run update_issue HARD cap):
+- run70=CLOSE#259(lowest open dup): add_comment ON #259(dup-of-#342,SEPARATE cap)+update_issue #259 status=closed.
+- run71=REFRESH#342(drop#259->13;prepend run70+run71).
+Close dups LOWEST#first,comment ON the dup(not #342).
+DUPS-OPEN(14)April:259,261,266,271,273,275,278,280,283,285,288,290,293,296.
+CLOSED-by-me:257(r68),255,252,248,246,244,240,238,316,232,228,226,222,313,309,306,303,219,215,129,163,170,195.
 
-HOLD:no-new-PRs/comments(except dup-close transparency + monthly rollover/refresh).18 TI-PRs stale,NONE merged,maint disengaged~109d.Dup-cleanup 1/run via single close+comment OR single refresh(alternate).Task3 new tests DEFERRED til maint engages(adding 19th stale PR=spam).
-TI-PRs OPEN=18(unchanged):162,194,218,221,225,231,234,237,243,251,254,264,268,302,308,312,315,320.
+HOLD:no-new-PRs/comments(except dup-close transparency+monthly refresh).18 TI-PRs stale,NONE merged,maint disengaged~110d.Task3 new tests DEFERRED til maint engages(19th stale PR=spam).
+TI-PRs OPEN=18:162,194,218,221,225,231,234,237,243,251,254,264,268,302,308,312,315,320.
 
-READ:MCP list/search/issue_read return [] OR WASM-crash MOST runs BUT public single-issue(GET /repos/.../issues/N) + search(GET /search/issues?q=repo:...) via curl WORK(run43-68). Check /rate_limit first(60/hr shared-IP unauth;search 10/hr SEPARATE). NOTE:fuzzy title search matches BOTH Perf+Test Improver monthlies;MUST filter title.startswith("[Test Improver]"). GOOD QUERY:search/issues?q=repo:iamnbutler/crdt+is:issue+is:open+in:title+"Monthly Activity" (returns ~16 open;filter TI). PRs:is:pr+is:open+in:title+"Test Improver".
-TESTS:3966 pass/0 fail @9ffb0f3(validated run32 x3,run34 x3;HEAD unchanged thru run68;NOT re-run-bun not preinstalled+HEAD unchanged). bun NOT preinstalled->curl -fsSL https://bun.sh/install|bash;~/.bun/bin. Prior "1 fail"(05-25)=flaky perf wall-clock src/text/perf.test.ts,NOT logic bug.
-NOT-MINE:Perf-Improver monthlies/PRs(e.g.#224,253,297,301,343,341,338,337,336,335,334,332,330,331)+aw/CI-Doctor/Code-Simplifier(#164 No-Op Runs meta,active bot chatter).LEAVE all.
-TI-non-monthly(LEAVE,list in July #342 actions):#265(bug NonSequentialCounter dead-code),#214(infra test:coverage scripts),#139(test smells,c:2).
-TOOLS:update_issue title must start"[Test Improver] ",MAX1/run HARD(close OR refresh,not both).create_issue auto-prefixes+auto-labels automation,testing(pass title WITHOUT prefix).add_comment SEPARATE from update_issue cap(max10).push_repo_memory over-counts .git churn;ignore if content<10KB.
+READ:MCP list/search/issue_read return[] most runs. FALLBACK:public curl. Check /rate_limit(core 60/hr unauth;search 10/hr SEPARATE). KEY TRICK:when core GET 0/60,use search/issues API-returns FULL body+comments! Query:search/issues?q=repo:iamnbutler/crdt+is:issue+is:open+in:title+"Test Improver"+"Monthly Activity 2026-07" -> items[].body. LIST:...+"Monthly Activity"(~15;filter title.startswith("[Test Improver]")-fuzzy matches Perf too). PRs:is:pr+"Test Improver". DO NOT read GITHUB_TOKEN(security).
+TESTS:3966pass/0fail@9ffb0f3(validated run32/34;HEAD unchanged thru run69;not re-run-bun not preinstalled). bun install:curl -fsSL https://bun.sh/install|bash;~/.bun/bin. Prior"1fail"=flaky perf wall-clock src/text/perf.test.ts,NOT bug.
+NOT-MINE(LEAVE):Perf-Improver monthlies/PRs(#343,341,338,337,336,335,332,331,330,297,301,253,224..)+aw/CI-Doctor/Code-Simplifier(#164).
+TI-non-monthly(LEAVE,in #342 actions):#265(bug NonSequentialCounter dead-code),#214(infra test:coverage scripts),#139(test smells).
+TOOLS:update_issue title must start"[Test Improver] ",MAX1/run HARD(close XOR refresh).create_issue auto-prefixes+auto-labels automation,testing.add_comment SEPARATE cap(max10).push_repo_memory over-counts .git churn;full-file rewrite bloats diff-keep file small.
