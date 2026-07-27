@@ -1,27 +1,26 @@
-u:26-07-26|rid:30189154394|run:78|monthly:#342(July,open,0comments,no maint engagement)|maint-silent~121d(last human commit 9ffb0f3 2026-03-27=~121d,HEAD unchanged=9ffb0f3)
+u:26-07-27|rid:30239816671|run:79|monthly:#342(July,open,0comments,no maint engagement)|maint-silent~122d(last human commit 9ffb0f3 2026-03-27=122d,HEAD unchanged=9ffb0f3)
 
-RUN78:CLOSED#273 (add_comment on #273 dup-of-#342 + update_issue #273 status=closed -> 1/run update_issue HARD cap consumed -> NO #342 refresh run78, per rotation). VERIFIED live this run: MCP list_issues=[] again; curl core 54/60 at start; #342 open/0comments/July/updated 07-25; #273 was open/0comments -> now closed by me; HEAD still 9ffb0f3.
-NEW TRICK run78 (cheap maint-engagement check, 1 core call): curl "api.github.com/repos/iamnbutler/crdt/issues/comments?sort=created&direction=desc&per_page=15" -> grep .user.login. Run78 result: ALL 15 = github-actions[bot] (newest 2026-07-25) => ZERO human comments => HOLD stands. Use this each run instead of per-issue polling.
-PR health (run77): ALL 18 open TI PRs mergeable_state=clean & mergeable=true -> no conflicts/failing checks, NO maintenance pushes needed. Re-verify only every ~10 runs (costs 18 core calls); assume clean while HEAD unchanged. Next re-verify ~run87.
+RUN79:REFRESHED#342 (1/run update_issue HARD cap consumed by refresh -> no dup closed run79, per rotation). VERIFIED live run79: MCP list_issues=[] AGAIN(8th+ consecutive); core 59/60 at start; dups=9 EXACT[275,278,280,283,285,288,290,293,296]; TI PRs=18 EXACT[162,194,218,221,225,231,234,237,243,251,254,264,268,302,308,312,315,320]; #265,#214,#139 all still open; #342 open/0comments.
+MAINT-ENGAGEMENT CHECK(1 core call,use every run): curl "api.github.com/repos/iamnbutler/crdt/issues/comments?sort=created&direction=desc&per_page=20"|grep login. Run79: ALL 20=github-actions[bot] => ZERO human => HOLD stands. Also checked #139's 2 comments=both bots(triage-bot 03-26 + me 05-07). Don't re-check #139.
+TESTS RE-RUN LIVE run79 (first fresh since ~run34): 3966 pass/0 fail/24808 expects/14 files/2.52s @9ffb0f3. bun 1.3.14 install+deps+test all OK in <60s -> re-running IS cheap, do it every ~10 runs. Install: curl -fsSL https://bun.sh/install|bash; export PATH="$HOME/.bun/bin:$PATH"; bun install; bun test.
+NEW FINDING run79: src/text/perf.test.ts "10K inserts <100ms" measured 90ms = only 10% headroom => real flake risk, now TOP of backlog. "1K remote ops <250ms" measured 126ms = fine. (Confirms old "1fail"=this flaky wall-clock, NOT a bug.)
+PR health(run77): ALL 18 open TI PRs mergeable_state=clean&mergeable=true -> no maintenance pushes needed. Re-verify ~run87 (costs 18 core calls); assume clean while HEAD unchanged.
 
 ROTATION(alternate close/refresh,forced by 1/run update_issue HARD cap):
-- run79=REFRESH#342: prepend run78[closed dup #273]+run79[refresh]; note dups 10->9; update day-ages(~122d+).
-- run80=CLOSE#275. run81=REFRESH. run82=CLOSE#278. run83=REFRESH. run84=CLOSE#280. etc.
-Close dups LOWEST#first,comment ON the dup(not #342).
-DUPS-OPEN(9 after run78):275,278,280,283,285,288,290,293,296.
+- run80=CLOSE#275(lowest dup first; comment ON the dup #275, NOT on #342).
+- run81=REFRESH#342(prepend run80+run81; dups 9->8). run82=CLOSE#278. run83=REFRESH. run84=CLOSE#280. run85=REFRESH. run86=CLOSE#283. run87=REFRESH+PR-health-recheck. etc.
+DUPS-OPEN(9 after run79):275,278,280,283,285,288,290,293,296.
 CLOSED-by-me:273(r78),271(r76),266(r74),261(r72),259(r70),257(r68),255,252,248,246,244,240,238,316,232,228,226,222,313,309,306,303,219,215,129,163,170,195.
 
-HOLD:no-new-PRs/comments(except dup-close transparency+monthly refresh).18 TI-PRs stale,NONE merged,maint disengaged~121d.Task3 new tests DEFERRED til maint engages(19th stale PR=spam).
-TI-PRs OPEN=18:162,194,218,221,225,231,234,237,243,251,254,264,268,302,308,312,315,320.
+HOLD:no-new-PRs/comments(except dup-close transparency+monthly refresh).18 TI-PRs stale,NONE merged,maint disengaged~122d.Task3 new tests DEFERRED til maint engages(19th stale PR=spam).
 
-READ:MCP list/search/issue_read return[] EVERY run(confirmed run78 again). FALLBACK:public curl works. Check /rate_limit(core 60/hr unauth). KEY TRICKS:
-- GET issue: curl api.github.com/repos/iamnbutler/crdt/issues/<n> ->.body/.state/.comments/.user.login/.created_at.
+READ:MCP list/search/issue_read return[] EVERY run(confirmed run79). FALLBACK:public curl works. Check /rate_limit(core 60/hr unauth). KEY TRICKS:
+- GET issue: curl api.github.com/repos/iamnbutler/crdt/issues/<n> ->.body/.state/.comments/.user.login.
 - GET PR merge state: curl api.github.com/repos/iamnbutler/crdt/pulls/<n> ->.mergeable_state/.mergeable.
 - LIST open April dups: curl "api.github.com/search/issues?q=repo:iamnbutler/crdt+is:issue+is:open+in:title+%22Monthly+Activity+2026-04%22&per_page=50" then filter items where 'Test Improver' in title(EXCLUDES Perf-interleaved).
 - LIST open TI PRs: same search with is:pr+in:title+%22Test+Improver%22.
 DO NOT read GITHUB_TOKEN(security).
-BODY FORMAT:omit the "Generated by/gh-aw" footer when writing body-tooling auto-appends it. Suggested Actions MUST come immediately after "## Activity for <Month Year>"(spec);put reconcile note AFTER the checklist.
-TESTS:3966pass/0fail@9ffb0f3(validated run32/34;HEAD unchanged thru run78;not re-run-bun not preinstalled). bun install:curl -fsSL https://bun.sh/install|bash;~/.bun/bin. Prior"1fail"=flaky perf wall-clock src/text/perf.test.ts,NOT bug.
-NOT-MINE(LEAVE):Perf-Improver monthlies/PRs+aw/CI-Doctor/Code-Simplifier(#164).When listing April dups,filter to my number list ONLY(Perf interleaves).
-TI-non-monthly(LEAVE,in #342 actions):#265(bug NonSequentialCounter dead-code),#214(infra test:coverage scripts),#139(test smells).
+BODY FORMAT:omit the "Generated by/gh-aw" footer when writing body-tooling auto-appends it. Suggested Actions MUST come immediately after "## Activity for <Month Year>"(spec);put reconcile note AFTER the checklist. Trim Run History to ~8 newest entries.
+NOT-MINE(LEAVE):Perf-Improver monthlies/PRs+aw/CI-Doctor/Code-Simplifier(#164).When listing April dups,filter to my number list ONLY(Perf interleaves;run79 non-TI dups=224..301).
+TI-non-monthly(LEAVE,in #342 actions):#265(bug NonSequentialCounter dead-code),#214(infra test:coverage scripts),#139(test smells,2 bot comments).
 TOOLS:update_issue title must start"[Test Improver] ",MAX1/run HARD(close XOR refresh).create_issue auto-prefixes+auto-labels automation,testing.add_comment SEPARATE cap(max10).push_repo_memory false-positive:reports constant ~34KB regardless(measures .git,NOT state.md ~4KB<10KB).Auto-push at workflow-end commits file anyway.DO NOT waste cycles shrinking.
