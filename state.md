@@ -1,20 +1,20 @@
-u:26-07-27|rid:30239816671|run:79|monthly:#342(July,open,0comments,no maint engagement)|maint-silent~122d(last human commit 9ffb0f3 2026-03-27=122d,HEAD unchanged=9ffb0f3)
+u:26-07-28|rid:30331100312|run:80|monthly:#342(July,open,0comments,no maint engagement)|maint-silent~123d(last human commit 9ffb0f3 2026-03-27=123d,HEAD unchanged=9ffb0f3)
 
-RUN79:REFRESHED#342 (1/run update_issue HARD cap consumed by refresh -> no dup closed run79, per rotation). VERIFIED live run79: MCP list_issues=[] AGAIN(8th+ consecutive); core 59/60 at start; dups=9 EXACT[275,278,280,283,285,288,290,293,296]; TI PRs=18 EXACT[162,194,218,221,225,231,234,237,243,251,254,264,268,302,308,312,315,320]; #265,#214,#139 all still open; #342 open/0comments.
-MAINT-ENGAGEMENT CHECK(1 core call,use every run): curl "api.github.com/repos/iamnbutler/crdt/issues/comments?sort=created&direction=desc&per_page=20"|grep login. Run79: ALL 20=github-actions[bot] => ZERO human => HOLD stands. Also checked #139's 2 comments=both bots(triage-bot 03-26 + me 05-07). Don't re-check #139.
-TESTS RE-RUN LIVE run79 (first fresh since ~run34): 3966 pass/0 fail/24808 expects/14 files/2.52s @9ffb0f3. bun 1.3.14 install+deps+test all OK in <60s -> re-running IS cheap, do it every ~10 runs. Install: curl -fsSL https://bun.sh/install|bash; export PATH="$HOME/.bun/bin:$PATH"; bun install; bun test.
-NEW FINDING run79: src/text/perf.test.ts "10K inserts <100ms" measured 90ms = only 10% headroom => real flake risk, now TOP of backlog. "1K remote ops <250ms" measured 126ms = fine. (Confirms old "1fail"=this flaky wall-clock, NOT a bug.)
+RUN80:CLOSED#275 (dup April monthly) + transparency comment ON #275. 1/run update_issue HARD cap consumed by the close -> #342 NOT refreshed run80, per rotation; run81 must refresh #342 and prepend BOTH run80+run81 entries. VERIFIED live run80: MCP list_issues=[] AGAIN(9th consecutive); #275 was open/0comments before close; #342 open/0comments; HEAD still 9ffb0f3.
+MAINT-ENGAGEMENT CHECK(1 core call,use every run): curl "api.github.com/repos/iamnbutler/crdt/issues/comments?sort=created&direction=desc&per_page=20"|grep login. Run80: ALL 20=github-actions[bot] => ZERO human => HOLD stands. Don't re-check #139(2 comments,both bots).
+TESTS(last live re-run run79 @9ffb0f3): 3966 pass/0 fail/24808 expects/14 files/2.52s. Re-run ~every 10 runs => NEXT at ~run89 (skip until then; HEAD unchanged). Install: curl -fsSL https://bun.sh/install|bash; export PATH="$HOME/.bun/bin:$PATH"; bun install; bun test.
+BACKLOG-TOP(run79 finding): src/text/perf.test.ts "10K inserts <100ms" measured 90ms = only 10% headroom => real flake risk. "1K remote ops <250ms" measured 126ms = fine. (Old "1fail"=this flaky wall-clock, NOT a bug.) FIX DEFERRED by HOLD.
 PR health(run77): ALL 18 open TI PRs mergeable_state=clean&mergeable=true -> no maintenance pushes needed. Re-verify ~run87 (costs 18 core calls); assume clean while HEAD unchanged.
+TI PRs=18 EXACT[162,194,218,221,225,231,234,237,243,251,254,264,268,302,308,312,315,320].
 
 ROTATION(alternate close/refresh,forced by 1/run update_issue HARD cap):
-- run80=CLOSE#275(lowest dup first; comment ON the dup #275, NOT on #342).
-- run81=REFRESH#342(prepend run80+run81; dups 9->8). run82=CLOSE#278. run83=REFRESH. run84=CLOSE#280. run85=REFRESH. run86=CLOSE#283. run87=REFRESH+PR-health-recheck. etc.
-DUPS-OPEN(9 after run79):275,278,280,283,285,288,290,293,296.
-CLOSED-by-me:273(r78),271(r76),266(r74),261(r72),259(r70),257(r68),255,252,248,246,244,240,238,316,232,228,226,222,313,309,306,303,219,215,129,163,170,195.
+- run81=REFRESH#342(prepend run80+run81; dups 9->8). run82=CLOSE#278. run83=REFRESH. run84=CLOSE#280. run85=REFRESH. run86=CLOSE#283. run87=REFRESH+PR-health-recheck. run88=CLOSE#285. etc.
+DUPS-OPEN(8 after run80):278,280,283,285,288,290,293,296.
+CLOSED-by-me:275(r80),273(r78),271(r76),266(r74),261(r72),259(r70),257(r68),255,252,248,246,244,240,238,316,232,228,226,222,313,309,306,303,219,215,129,163,170,195.
 
-HOLD:no-new-PRs/comments(except dup-close transparency+monthly refresh).18 TI-PRs stale,NONE merged,maint disengaged~122d.Task3 new tests DEFERRED til maint engages(19th stale PR=spam).
+HOLD:no-new-PRs/comments(except dup-close transparency+monthly refresh).18 TI-PRs stale,NONE merged,maint disengaged~123d.Task3 new tests DEFERRED til maint engages(19th stale PR=spam).
 
-READ:MCP list/search/issue_read return[] EVERY run(confirmed run79). FALLBACK:public curl works. Check /rate_limit(core 60/hr unauth). KEY TRICKS:
+READ:MCP list/search/issue_read return[] EVERY run(confirmed run80). FALLBACK:public curl works. Check /rate_limit(core 60/hr unauth). KEY TRICKS:
 - GET issue: curl api.github.com/repos/iamnbutler/crdt/issues/<n> ->.body/.state/.comments/.user.login.
 - GET PR merge state: curl api.github.com/repos/iamnbutler/crdt/pulls/<n> ->.mergeable_state/.mergeable.
 - LIST open April dups: curl "api.github.com/search/issues?q=repo:iamnbutler/crdt+is:issue+is:open+in:title+%22Monthly+Activity+2026-04%22&per_page=50" then filter items where 'Test Improver' in title(EXCLUDES Perf-interleaved).
