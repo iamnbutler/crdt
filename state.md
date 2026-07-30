@@ -1,33 +1,42 @@
-u:26-07-29|rid:30424609652|run:81|monthly:#342(July,open,0comments,no maint engagement)|maint-silent~124d(last human commit 9ffb0f3 2026-03-27=124d,HEAD unchanged=9ffb0f3)
+u:26-07-30|rid:30516065733|run:82|monthly:#342(July,open,0comments,0checkedoff)|maint-silent~125d(last human commit 9ffb0f3 2026-03-27,HEAD unchanged)
 
-RUN81:REFRESHED#342 (prepended run80+run81 entries; dups 9->8 reflected; trimmed history to 8). 1/run update_issue cap consumed by the refresh. VERIFIED live run81 via curl+search: April TI dups=8 EXACT[278,280,283,285,288,290,293,296]; TI PRs=18 (list unchanged); #265+#214 open 0comments; #342 open 0comments; HEAD 9ffb0f3. MCP list_issues=[] AGAIN(10th consecutive).
-MAINT-ENGAGEMENT CHECK(1 core call,use every run): curl "api.github.com/repos/iamnbutler/crdt/issues/comments?sort=created&direction=desc&per_page=20"|grep login. Run81: ALL 20=github-actions[bot] => ZERO human => HOLD stands.
-TESTS: full suite last live run79 @9ffb0f3 = 3966 pass/0 fail/24808 expects/14 files/2.52s. Re-run ~run89 (skip til then; HEAD unchanged). Run81 targeted: bun test src/text/perf.test.ts src/sum-tree/cursor-itemindex.test.ts = 15 pass/0 fail. Install: curl -fsSL https://bun.sh/install|bash; export PATH="$HOME/.bun/bin:$PATH"; bun install. bun 1.3.14.
+RUN82 = BIGGEST FINDING YET. Filed NEW ISSUE (number UNKNOWN - safeoutputs create_issue returns no number; DISCOVER next run via search & add to #342 Suggested Actions by number): "CI runs only 464 of 3,966 tests - all six CRDT property suites filtered out". Also REFRESHED #342 (consumed 1/run update_issue).
 
-WALL-CLOCK AUDIT **COMPLETE**(run81,do NOT redo). Scanned ALL *.test.ts for timing assertions. Results:
-- perf.test.ts:14 "10K inserts<100ms" = **ONLY REAL FLAKE RISK**. Measured 90ms(run79 runner) vs 69,69,70ms(run81 runner,3x) on IDENTICAL commit => ~30% cross-runner spread, 11% worst-case headroom. FIX(deferred by HOLD)=make relative/ratio-based vs same-run baseline op.
-- perf.test.ts:34 "1K remote ops<250ms": 100-105ms(run81),126ms(run79) => 2.0-2.5x headroom. FINE,leave.
-- cursor-itemindex.test.ts:241 "<100ms/1000 seeks": measured 0.9-5.3ms => 19-100x headroom. Loose BY DESIGN (O(log n) vs O(n) guard; real regression = orders of magnitude). **NOT a defect - do NOT "fix"**.
-- snapshot.test.ts:326 `snapshot.age<1000`: time-based, wide margin, low prio note only.
-MEASURE TRICK(no repo changes committed): write temp src/<mod>/__tmp_measure.ts importing ./index.js, `bun run` it, rm + verify `git status --porcelain` empty.
+**CI TEST-EXCLUSION (verified run82, core new knowledge):** .github/workflows/ci.yml:30 runs
+  bun test --test-name-pattern "^(?!.*(CRDT Property|multiple snapshots see their respective states|10K sequential inserts))"
+=> 464 pass / 3502 FILTERED OUT / 1900 of 24808 asserts. CI executes 11.7% of suite.
+Excluded: 6 describes in src/text/property-tests.test.ts (Convergence:135, OrderIndep:168, Commutativity:220, Idempotency:270, UndoCorrectness:308, AnchorStability:382) + snapshot.test.ts:41 + perf 10K.
+NOT justified for property/snapshot: DETERMINISTIC (seeded LCG createRng:27, ZERO Math.random), FAST (~2s/3523 tests), STABLE 3/3 runs (3523 pass 0 fail). Perf exclusion IS justified (timing).
+Suggested fix (in issue): narrow to "^(?!.*10K sequential inserts)". Did NOT open PR - CI policy = maintainer call.
 
-PR health(run77): ALL 18 open TI PRs mergeable_state=clean&mergeable=true -> no maintenance pushes. Re-verify ~run87 (18 core calls); assume clean while HEAD unchanged.
-TI PRs=18 EXACT[162,194,218,221,225,231,234,237,243,251,254,264,268,302,308,312,315,320].
+**COVERAGE WORKS - PRIOR MEMORY WAS WRONG.** `bun test --coverage` runs with NO setup. Overall 88.40% funcs/90.05% lines. => #214 (add test:coverage scripts) is SUPERSEDED; #342 now suggests closing it. Never say "coverage blocked on #214" again.
+LOW-COVERAGE MAP(run82): protocol/awareness.ts 36.36/63.79 (WORST); protocol/replica-id.ts 57.14/59.09; protocol/state-sync.ts 60.00/53.19; protocol/operation-queue.ts 63.16/66.86; text/snapshot.ts 85.19/78.09; text/undo-map.ts 90.00/81.13; text/fragment.ts 68.00/95.29. 100%: rope/*, text/clock, text/locator, text/types, protocol/types, anchor/snapshot+index+types.
+=> protocol module = clear future test target once HOLD lifts.
 
-ROTATION(alternate close/refresh,forced by 1/run update_issue HARD cap):
-- run82=CLOSE#278. run83=REFRESH. run84=CLOSE#280. run85=REFRESH. run86=CLOSE#283. run87=REFRESH+PR-health-recheck. run88=CLOSE#285. run89=REFRESH+full-test-rerun. run90=CLOSE#288. etc.
-DUPS-OPEN(8 after run80):278,280,283,285,288,290,293,296.
+TESTS run82: full `bun test --coverage` = 3965 pass/1 fail (ONLY perf 10K @140ms, instrumentation overhead - NOT a regression). Bare `bun test src/text/perf.test.ts` 3x = 81,83,85ms ALL PASS. Next full re-run ~run92. Install: curl -fsSL https://bun.sh/install|bash; export PATH="$HOME/.bun/bin:$PATH"; bun install. bun 1.3.14.
+
+WALL-CLOCK AUDIT COMPLETE (run81, do NOT redo). perf.test.ts:14 = ONLY real flake risk: 69-70ms(r81), 81-85ms(r82), 90ms(r79), 140ms(coverage,FAILS) vs 100ms limit. ALSO BLOCKS COVERAGE-IN-CI. Fix=ratio-based vs same-run baseline. perf.test.ts:34 (1K remote 100-144ms/250ms) FINE. cursor-itemindex.test.ts:241 (0.9-5.3ms/100ms) loose BY DESIGN, NOT a defect - do NOT "fix". snapshot.test.ts:326 age<1000 low prio.
+MEASURE TRICK: temp src/<mod>/__tmp_measure.ts importing ./index.js, `bun run`, rm, verify `git status --porcelain` empty.
+
+**SHALLOW CLONE (1 commit)** - `git log`/`git log -S` CANNOT date or attribute changes. Never claim a commit introduced something.
+
+PR health(run77): ALL 18 open TI PRs mergeable_state=clean. Re-verify ~run87. TI PRs=18 EXACT[162,194,218,221,225,231,234,237,243,251,254,264,268,302,308,312,315,320].
+
+ROTATION (SHIFTED +1 by run82's refresh; 1/run update_issue HARD cap forces close XOR refresh):
+- run83=CLOSE#278 (+discover new issue number, note for run84 refresh). run84=REFRESH. run85=CLOSE#280. run86=REFRESH. run87=CLOSE#283+PR-health-recheck. run88=REFRESH. run89=CLOSE#285. etc.
+DUPS-OPEN(8):278,280,283,285,288,290,293,296.
 CLOSED-by-me:275(r80),273(r78),271(r76),266(r74),261(r72),259(r70),257(r68),255,252,248,246,244,240,238,316,232,228,226,222,313,309,306,303,219,215,129,163,170,195.
 
-HOLD:no-new-PRs/comments(except dup-close transparency+monthly refresh).18 TI-PRs stale,NONE merged,maint disengaged~124d.Task3 new tests DEFERRED til maint engages(19th stale PR=spam).
+HOLD:no-new-PRs.18 TI-PRs stale,NONE merged,maint disengaged~125d.Task3 new tests DEFERRED (19th stale PR=spam). EXCEPTION taken run82: filing an ISSUE for a verified correctness-enforcement defect is OK (not test volume). Keep such exceptions rare + high-bar.
 
-READ:MCP list/search/issue_read return[] EVERY run(confirmed run81). FALLBACK:public curl works. Check /rate_limit(core 60/hr unauth;search separate). KEY TRICKS:
-- GET issue: curl api.github.com/repos/iamnbutler/crdt/issues/<n> ->.body/.state/.comments/.user.login.
-- GET PR merge state: curl api.github.com/repos/iamnbutler/crdt/pulls/<n> ->.mergeable_state/.mergeable.
-- LIST open April dups: curl "api.github.com/search/issues?q=repo:iamnbutler/crdt+is:issue+is:open+in:title+%22Monthly+Activity+2026-04%22&per_page=50" then filter items where 'Test Improver' in title(EXCLUDES Perf-interleaved).
-- LIST open TI PRs: same search, is:pr+in:title+%22Test+Improver%22. LIST TI non-monthly issues: is:issue+in:title+%22Test+Improver%22, skip 'Monthly Activity'.
+MAINT-ENGAGEMENT CHECK(1 core call,EVERY run): curl "api.github.com/repos/iamnbutler/crdt/issues/comments?sort=created&direction=desc&per_page=20"|grep login. Run82: ALL 20=github-actions[bot] => ZERO human => HOLD stands.
+READ:MCP list/search/issue_read return [] EVERY run (run82 = 11th consecutive). FALLBACK curl. /rate_limit: core 60/hr unauth, search 10.
+- GET issue: curl api.github.com/repos/iamnbutler/crdt/issues/<n> -> .body/.state/.comments
+- GET PR merge state: curl .../pulls/<n> -> .mergeable_state/.mergeable
+- LIST open TI issues: curl "api.github.com/search/issues?q=repo:iamnbutler/crdt+is:issue+is:open+in:title+%22Test+Improver%22&per_page=50", filter title. TI PRs: is:pr same.
+- Filter April dups to MY number list ONLY (Perf-Improver interleaves).
 DO NOT read GITHUB_TOKEN(security).
-BODY FORMAT:omit "Generated by/gh-aw" footer(tooling auto-appends). Suggested Actions MUST come immediately after "## Activity for <Month Year>"(spec);reconcile note AFTER checklist. Trim Run History to ~8 newest.
-NOT-MINE(LEAVE):Perf-Improver monthlies/PRs+aw/CI-Doctor/Code-Simplifier(#164).Filter April dups to MY number list ONLY(Perf interleaves;run81 non-TI dups=224..301).
-TI-non-monthly(LEAVE,in #342 actions):#265(bug NonSequentialCounter dead-code),#214(infra test:coverage scripts),#139(test smells,2 bot comments,NOT TI-titled).
-TOOLS:update_issue title must start"[Test Improver] ",MAX1/run HARD(close XOR refresh).create_issue auto-prefixes+auto-labels automation,testing.add_comment SEPARATE cap(max10).push_repo_memory false-positive:reports constant ~34KB regardless(measures .git,NOT state.md ~5KB<10KB).Auto-push at workflow-end commits file anyway.DO NOT waste cycles shrinking.
+BODY FORMAT: omit "Generated by/gh-aw" footer (auto-appended). Suggested Actions immediately after "## Activity for <Month>"; notes AFTER checklist. Trim Run History to ~8.
+NOT-MINE(LEAVE):Perf-Improver monthlies/PRs, aw/CI-Doctor/Code-Simplifier(#164).
+TI-non-monthly: #265(bug NonSequentialCounter dead code), #214(SUPERSEDED-suggest close), NEW CI-exclusion issue(run82), #139(test smells, NOT TI-titled, leave).
+TOOLS: update_issue title must start "[Test Improver] ", MAX1/run HARD. create_issue auto-prefixes+auto-labels(automation,testing) - do NOT prefix title yourself; SET temporary_id if you need to reference the new number in the same run (run82 forgot -> had to link generically). add_comment separate cap(max10). push_repo_memory false-positive: reports ~34KB constant (measures .git, not state.md ~6KB). DO NOT waste cycles shrinking.
