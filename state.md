@@ -1,37 +1,40 @@
-u:26-07-31|run:83|rid:30606439248|#342=July monthly(open;1 comment=MINE)|maint silent ~126d|HEAD 9ffb0f3
+u:26-08-01|run:84|rid:30685552017|maint silent ~125d|HEAD 9ffb0f3
+R83's issue = **#345** (snapshotsEqual). R82's = **#344** (CI test-exclusion).
 
-R83 DID: filed issue "snapshotsEqual ignores baseLocatorLevels" (NUMBER UNKNOWN-create_issue returns none; DISCOVER r84). Closed #278. Commented #342 (body edit -> r84).
-R82's issue = **#344** (CI test-exclusion).
+R84 DID: filed CI-RED issue (NUMBER UNKNOWN - create_issue returns none; DISCOVER r85). Closed #342 (July). Created Aug monthly (NUMBER UNKNOWN - discover r85).
 
-**A. snapshotsEqual DEFECT (verified, fix verified).** state-sync.ts:157 compares 7/8 SerializedFragment fields; baseLocatorLevels never compared (probed all 8; only miss). baseLocator drives splitFragment parent (fragment.ts:211 "critical for order independence"). Snaps equal in all else => returns TRUE but splits differ ([0.5,0] vs [0.25,4,0]) => diverge next edit. protocol.test.ts:844 uses same baseLocator both sides, can't catch. Fix=add baseLocatorLevels loop beside locatorLevels loop; verified typecheck clean + 3965/1. Scope: verification helper, NOT apply-path => under-reports divergence, doesn't corrupt docs.
+**D. CI ON MAIN IS RED since 2026-03-27 (~127d). BIGGEST FINDING.** run 23666019419 job Check: Typecheck ok, **Lint FAILURE, Test SKIPPED**. So CI runs **0** tests, not 464 => supersedes/compounds #344. Cause = 2 auto-fixable biome errs in scripts/record-benchmarks.ts (:333 noUnusedTemplateLiteral + :340 format). Fix=`bun run lint:fix`. Prev commit 05fdea5 = success. VERIFY `bun run lint` fails on pristine HEAD before re-reporting.
 
-**B. CORRECTS OLD MEMORY: perf.test.ts:14 fails DETERMINISTICALLY, not coverage-only.** Pristine, no coverage: full `bun test` = 106,112,113,115,130ms FAILS 5/5; isolated = 87,90,92ms PASSES 3/3. Trigger = SUITE POSITION, not --coverage. So `bun test` = **3965 pass/1 fail on clean checkout**; CI green only because --test-name-pattern filters the name => compounds #344. Fix = ratio vs same-run baseline.
-NEVER claim "3966 pass/0 fail" without re-measuring FULL suite.
+**E. CORRECTS OLD MEMORY: 18 PRs were NEVER CI-verified.** /commits/<sha>/check-runs => total_count:0 (#320 2d7b69f, #315 9c17a03); ZERO pull_request-event runs in last 100. mergeable_state:clean = NO REQUIRED CHECKS, not passing. Cause: Actions PRs via GITHUB_TOKEN don't trigger pull_request workflows. NEVER again say "no failing checks".
 
-**C. awareness.ts CLEAN - DO NOT RE-PROBE.** Worst coverage (36% funcs) but 24-case probe (round-trips incl unicode/empty/0/2^31/nested custom; manager LWW, self-ignore, expire, callbacks, clears, wire path) => ZERO defects. Untested != broken. Low priority.
+**F. CORRECTS OLD MEMORY B: perf.test.ts:14 is BORDERLINE-FLAKY, not deterministic-fail.** r84 full `bun test` = **3966 pass/0 fail**, "10K inserts: 96ms (target <100ms)" = 4% margin. Earlier runs 106-130ms failed. Tracks runner speed. Always re-measure; never assert either outcome.
 
-**#344:** ci.yml:30 pattern `^(?!.*(CRDT Property|multiple snapshots see their respective states|10K sequential inserts))` => 464 pass/3502 filtered (11.7%). Property tests ARE deterministic (seeded LCG, no Math.random), ~2s, stable. Perf exclusion justified. Fix: narrow to `^(?!.*10K sequential inserts)`.
+**G. operation-queue.ts DEFECT (verified, fix verified).** enqueue() idempotency checks appliedOps ONLY; deferred ops not deduped => same op enqueued 5x => pendingCount=5; maxSize=3 + 4 resends => overflowed=true => spurious FULL RESYNC. docs/design.md:845 "burst sync from reconnecting peer" = realistic. NOT corruption (flush re-checks hasApplied, apply fires once). Untested because overflow test (protocol.test.ts:470) uses 5 DISTINCT ops + idempotency test only re-enqueues APPLIED op. FIX(+11 lines, verified typecheck+3966/0, REVERTED): pendingKeys:Set<string> mirroring appliedOps - check in enqueue before overflow branch, add on defer, rebuild in updateDeferredReplicas(), clear in clear(). Diff was at /tmp (gone).
+Minor: deferredReplicas getter ALIASES internal Set (empties after clear) while stats copies; getPending() returns live array, goes stale after flush reassign.
 
-COVERAGE WORKS: `bun test --coverage`, no setup, 88.40% funcs/90.05% lines. #214 SUPERSEDED-never say "blocked on #214".
-LOW-COV: awareness 36(CLEAN-C); replica-id 57; state-sync 60(DEFECT-A); operation-queue 63; fragment 68; snapshot 85; undo-map 90. rope/clock/locator/anchor=100.
-NEXT: probe operation-queue.ts + replica-id.ts FOR DEFECTS (not volume). validation.ts dead code=#265 (reconfirmed: outer `<=lastCounter` + inner `>lastCounter+1` mutually exclusive).
-DISMISSED-don't reopen: perf.test.ts:34 (100-155/250ms); cursor-itemindex.test.ts:241 (0.9-5.3/100ms, loose BY DESIGN); snapshot.test.ts:326.
+**H. replica-id.ts CLEAN - DO NOT RE-PROBE.** Sentinels consistent: IDs start 1; MIN0/MAX0xffffffff excluded by isValidReplicaId; generateSecureReplicaId `||1` avoids 0; queue:231-251 + validation:115-141 match types.ts:56-66 EXACTLY. Only wart: SequentialReplicaIdAssigner ctor/fromState accept unvalidated startId (0 possible). Low pri.
+**C. awareness.ts CLEAN - DO NOT RE-PROBE.** 24-case probe => 0 defects. Untested != broken.
+
+COVERAGE: `bun test --coverage`, no setup, 88.40% funcs/90.05% lines. #214 SUPERSEDED-never say "blocked on #214".
+LOW-COV: awareness 36(CLEAN-H/C); replica-id 57(CLEAN-H); state-sync 60(DEFECT-#345); operation-queue 63(DEFECT-G); fragment 68; snapshot 85; undo-map 90. rope/clock/locator/anchor=100.
+NEXT PROBE: fragment.ts (68%) or snapshot.ts (85%) FOR DEFECTS (not volume). validation.ts dead code=#265 (outer `<=lastCounter` + inner `>lastCounter+1` mutually exclusive).
+DISMISSED-don't reopen: perf.test.ts:34; cursor-itemindex.test.ts:241 (loose BY DESIGN); snapshot.test.ts:326.
 
 ENV: curl -fsSL https://bun.sh/install|bash; PATH=$HOME/.bun/bin:$PATH; bun install (1.3.14).
-PROBE TRICK (works): temp src/<mod>/__tmp_probe.ts -> `bun run` -> rm -> confirm `git status --porcelain` empty.
+PROBE TRICK (works): temp src/<mod>/__tmp_probe.ts -> `bun run` -> rm -> confirm `git status --porcelain` empty. NOTE: probe file breaks `bun run typecheck` (branded types) - delete BEFORE typechecking.
 SHALLOW CLONE (1 commit): git log/-S cannot date or attribute changes. Never say a commit introduced something.
 
-PRs: 18 open TI PRs, all mergeable_state=clean (r77). Re-verify r87. [162,194,218,221,225,231,234,237,243,251,254,264,268,302,308,312,315,320]
+PRs: 18 open TI PRs [162,194,218,221,225,231,234,237,243,251,254,264,268,302,308,312,315,320]. No conflicts, but NEVER CI-checked (E).
 
 ROTATION (update_issue MAX 1/run => close XOR refresh):
-r84=REFRESH #342 (fold in: #344, new snapshotsEqual number, B, C). r85=CLOSE#280. r86=REFRESH. r87=CLOSE#283+PR health. r88=REFRESH. r89=CLOSE#285.
+r85=REFRESH Aug monthly (fold in: new CI-red issue number + Aug issue number). r86=CLOSE#280. r87=REFRESH+PR health. r88=CLOSE#283. r89=REFRESH.
 DUPS-OPEN(7): 280,283,285,288,290,293,296.
 
-HOLD: NO new PRs. 18 stale TI PRs, none merged, maint gone ~126d; a 19th = spam. EXCEPTION (r82,r83): filing an ISSUE for a VERIFIED correctness defect is fine - put fix+regression test in the body instead of a PR. Keep rare, high-bar.
+HOLD: NO new PRs. 18 stale TI PRs, none merged, maint gone ~125d; a 19th = spam. EXCEPTION: filing an ISSUE for a VERIFIED defect is fine - put fix+regression test in the body instead of a PR. Keep rare, high-bar. r82,r83,r84 each filed 1. If maint ever replies asking for a PR, the lint fix (D) is the easiest win.
 
-ENGAGEMENT CHECK (every run): curl "api.github.com/repos/iamnbutler/crdt/issues/comments?sort=created&direction=desc&per_page=20"|grep login. r83: 20/20 bot => HOLD stands. #342's 1 comment is MINE, not engagement.
-MCP list/search/issue_read return [] EVERY run (r83=12th). Use curl (60/hr): /issues/<n>, /pulls/<n>(.mergeable_state), and search/issues?q=repo:iamnbutler/crdt+is:issue+is:open+in:title+%22Test+Improver%22. Filter dups to MY list (Perf-Improver interleaves). Never read GITHUB_TOKEN.
+ENGAGEMENT CHECK (every run): curl "api.github.com/repos/iamnbutler/crdt/issues/comments?sort=created&direction=desc&per_page=25"|grep login. r84: 25/25 bot => HOLD stands.
+MCP list/search/issue_read return [] EVERY run (r84=13th). Use curl (60/hr): /issues/<n>, /pulls/<n>, /commits/<sha>/check-runs, /actions/workflows/ci.yml/runs?branch=main, /actions/runs/<id>/jobs, and search/issues?q=repo:iamnbutler/crdt+is:issue+is:open+in:title+%22Test+Improver%22. Filter dups to MY list (Perf-Improver interleaves). Never read GITHUB_TOKEN.
 FORMAT: no "Generated by" footer (auto). Suggested Actions right after month heading; notes after checklist; Run History ~8, newest first.
 LEAVE: Perf-Improver items, aw/CI-Doctor/Code-Simplifier(#164), #139.
-TI issues: #344, new r83 one, #265, #214(suggest close).
-TOOLS: update_issue needs "[Test Improver] " title, MAX1/run. create_issue auto-prefixes+labels, returns NO number. add_comment cap 10 - use it when update_issue is spent. push_repo_memory reports ~38KB but measures .git (172K), not state.md (~5KB) - keep state.md small and proceed.
+TI issues: #344, #345, #265, #214(suggest close), r84 CI-red one.
+TOOLS: update_issue needs "[Test Improver] " title, MAX1/run. create_issue auto-prefixes title + adds labels, returns NO number. add_comment cap 10 - use when update_issue spent. push_repo_memory reports ~38KB but measures .git, not state.md (~6KB) - keep small and proceed.
