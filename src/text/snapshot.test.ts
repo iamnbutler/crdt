@@ -115,6 +115,27 @@ describe("TextBufferSnapshot", () => {
       expect(() => snapshot.lineCount).toThrow("Cannot use released snapshot");
     });
 
+    test("lines() and chunks() work before release", () => {
+      const buffer = TextBuffer.fromString("alpha\nbeta");
+      const snapshot = buffer.snapshot();
+
+      expect([...snapshot.lines()]).toEqual(["alpha", "beta"]);
+      expect([...snapshot.chunks()].join("")).toBe("alpha\nbeta");
+
+      snapshot.release();
+    });
+
+    test("release() prevents iteration via lines() and chunks()", () => {
+      const buffer = TextBuffer.fromString("alpha\nbeta");
+      const snapshot = buffer.snapshot();
+
+      snapshot.release();
+
+      // Iterators must honour the same release guard as the other read paths
+      expect(() => [...snapshot.lines()]).toThrow("Cannot use released snapshot");
+      expect(() => [...snapshot.chunks()]).toThrow("Cannot use released snapshot");
+    });
+
     test("release() is idempotent", () => {
       const buffer = TextBuffer.fromString("test");
       const snapshot = buffer.snapshot();

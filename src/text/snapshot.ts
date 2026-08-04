@@ -406,6 +406,7 @@ export class TextBufferSnapshot implements DocumentSnapshot {
    * ```
    */
   *lines(startLine?: number, endLine?: number): IterableIterator<string> {
+    this.checkReleased();
     yield* this.getRope().lines(startLine, endLine);
   }
 
@@ -426,6 +427,7 @@ export class TextBufferSnapshot implements DocumentSnapshot {
    * ```
    */
   *chunks(start?: number, end?: number): IterableIterator<string> {
+    this.checkReleased();
     yield* this.getRope().chunks(start, end);
   }
 
