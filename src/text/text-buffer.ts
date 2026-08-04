@@ -88,8 +88,7 @@ function compareLocatorsForSort(a: Locator, b: Locator): number {
 }
 
 /**
- * Sort fragments to ensure canonical order regardless of operation application
- * sequence.
+ * Compare two fragments in canonical sort order.
  *
  * Sort key: (locator prefix, insertionId, insertionOffset, locator length)
  *
@@ -97,24 +96,32 @@ function compareLocatorsForSort(a: Locator, b: Locator): number {
  * 1. Fragments at the same position (locator prefix) sort by operation ID
  * 2. Split parts of the same operation sort by offset
  * 3. Child locators sort after parent locators with lower operation IDs
+ *
+ * Returns: <0 if a should come before b, >0 if after, 0 if equal.
  */
-function sortFragments(frags: Fragment[]): void {
-  frags.sort((a, b) => {
-    // First, compare by locator prefix
-    const locCmp = compareLocatorsForSort(a.locator, b.locator);
-    if (locCmp !== 0) return locCmp;
+export function compareFragmentsForSort(a: Fragment, b: Fragment): number {
+  // First, compare by locator prefix
+  const locCmp = compareLocatorsForSort(a.locator, b.locator);
+  if (locCmp !== 0) return locCmp;
 
-    // Same prefix: tie-break by operation ID
-    const idCmp = compareOperationIds(a.insertionId, b.insertionId);
-    if (idCmp !== 0) return idCmp;
+  // Same prefix: tie-break by operation ID
+  const idCmp = compareOperationIds(a.insertionId, b.insertionId);
+  if (idCmp !== 0) return idCmp;
 
-    // Same operation: sort by insertionOffset (split parts)
-    const offsetCmp = a.insertionOffset - b.insertionOffset;
-    if (offsetCmp !== 0) return offsetCmp;
+  // Same operation: sort by insertionOffset (split parts)
+  const offsetCmp = a.insertionOffset - b.insertionOffset;
+  if (offsetCmp !== 0) return offsetCmp;
 
-    // Finally, sort by locator length (children after parent)
-    return a.locator.levels.length - b.locator.levels.length;
-  });
+  // Finally, sort by locator length (children after parent)
+  return a.locator.levels.length - b.locator.levels.length;
+}
+
+/**
+ * Sort fragments in place to ensure canonical order regardless of operation
+ * application sequence.
+ */
+export function sortFragments(frags: Fragment[]): void {
+  frags.sort(compareFragmentsForSort);
 }
 
 // ---------------------------------------------------------------------------
@@ -580,6 +587,28 @@ export class TextBuffer {
    */
   get fragmentsRoot(): NodeId {
     return this.fragments.root;
+  }
+
+  /**
+   * Get a snapshot of the current fragment list, in canonical order.
+   *
+   * Returns a fresh array; mutating it does not affect the buffer. Useful for
+   * debugging, testing, and benchmarking the fragment sort/rebuild path.
+   */
+  fragmentList(): Fragment[] {
+    return this.fragmentsArray();
+  }
+
+  /**
+   * Replace the fragment tree with `frags`, rebuilding the SumTree and the
+   * insertionId index.
+   *
+   * Fragments must already be in canonical order (see {@link sortFragments});
+   * passing an unsorted array leaves the buffer in an inconsistent state.
+   * Useful for debugging, testing, and benchmarking the tree rebuild path.
+   */
+  replaceFragments(frags: Fragment[]): void {
+    this.setFragments(frags);
   }
 
   // ---------------------------------------------------------------------------
@@ -1510,7 +1539,7 @@ export class TextBuffer {
       }
 
       // Use same comparison as sortFragments for consistency
-      const cmp = this.compareFragmentsForSort(newFrag, frag);
+      const cmp = compareFragmentsForSort(newFrag, frag);
       if (cmp <= 0) {
         high = mid;
       } else {
@@ -1519,28 +1548,6 @@ export class TextBuffer {
     }
 
     frags.splice(low, 0, newFrag);
-  }
-
-  /**
-   * Compare two fragments using the same logic as sortFragments.
-   * This ensures insertFragmentByLocator produces the same order as sorting.
-   * Returns: <0 if a should come before b, >0 if after, 0 if equal.
-   */
-  private compareFragmentsForSort(a: Fragment, b: Fragment): number {
-    // First, compare by locator prefix (not lexicographic!)
-    const locCmp = compareLocatorsForSort(a.locator, b.locator);
-    if (locCmp !== 0) return locCmp;
-
-    // Same prefix: tie-break by operation ID
-    const idCmp = compareOperationIds(a.insertionId, b.insertionId);
-    if (idCmp !== 0) return idCmp;
-
-    // Same operation: sort by insertionOffset (split parts)
-    const offsetCmp = a.insertionOffset - b.insertionOffset;
-    if (offsetCmp !== 0) return offsetCmp;
-
-    // Finally, sort by locator length (children after parent)
-    return a.locator.levels.length - b.locator.levels.length;
   }
 
   /**
@@ -1565,7 +1572,7 @@ export class TextBuffer {
         continue;
       }
 
-      const cmp = this.compareFragmentsForSort(newFrag, frag);
+      const cmp = compareFragmentsForSort(newFrag, frag);
       if (cmp <= 0) {
         high = mid;
       } else {

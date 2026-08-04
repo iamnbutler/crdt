@@ -17,7 +17,7 @@ import {
   locatorBetween,
   locatorsEqual,
 } from "./locator.js";
-import { TextBuffer } from "./text-buffer.js";
+import { TextBuffer, compareFragmentsForSort, sortFragments } from "./text-buffer.js";
 import { compareOperationIds, operationIdsEqual, replicaId } from "./types.js";
 import type { OperationId } from "./types.js";
 import { UndoMap } from "./undo-map.js";
@@ -1129,5 +1129,82 @@ describe("Remote delete with split fragments", () => {
     expect(buf1.getText()).toContain("X");
     expect(buf1.getText()).not.toContain("C");
     expect(buf1.getText()).not.toContain("D");
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Fragment list access and canonical sorting
+// ---------------------------------------------------------------------------
+
+describe("fragment list access", () => {
+  it("exposes fragments in canonical order", () => {
+    const buf = TextBuffer.create(replicaId(1));
+    buf.insert(0, "ABCDEF");
+    buf.insert(3, "X");
+
+    const frags = buf.fragmentList();
+    expect(frags.map((f) => f.text).join("")).toBe("ABCXDEF");
+
+    for (let i = 1; i < frags.length; i++) {
+      const prev = frags[i - 1];
+      const cur = frags[i];
+      if (prev === undefined || cur === undefined) continue;
+      expect(compareFragmentsForSort(prev, cur)).toBeLessThan(0);
+    }
+  });
+
+  it("returns a copy that does not alias buffer state", () => {
+    const buf = TextBuffer.create(replicaId(1));
+    buf.insert(0, "hello");
+
+    const frags = buf.fragmentList();
+    frags.length = 0;
+
+    expect(buf.getText()).toBe("hello");
+    expect(buf.fragmentList().length).toBeGreaterThan(0);
+  });
+
+  it("round-trips through sortFragments and replaceFragments", () => {
+    const buf = TextBuffer.create(replicaId(1));
+    buf.insert(0, "ABCDEF");
+    buf.insert(3, "X");
+    buf.delete(1, 2);
+
+    const expected = buf.getText();
+    const scrambled = buf.fragmentList().reverse();
+
+    sortFragments(scrambled);
+    buf.replaceFragments(scrambled);
+
+    expect(buf.getText()).toBe(expected);
+
+    // The rebuilt insertionId index still resolves, so further edits apply.
+    buf.insert(0, "Z");
+    expect(buf.getText()).toBe(`Z${expected}`);
+  });
+
+  it("sorts concurrent fragments with equal locators by operation ID", () => {
+    const rid1 = replicaId(1);
+    const rid2 = replicaId(2);
+
+    const buf1 = TextBuffer.create(rid1);
+    const buf2 = TextBuffer.create(rid2);
+
+    // Concurrent inserts into two empty buffers: same position, no shared history
+    const op1 = buf1.insert(0, "a");
+    const op2 = buf2.insert(0, "b");
+
+    buf1.applyRemote(op2);
+    buf2.applyRemote(op1);
+
+    expect(buf1.getText()).toBe(buf2.getText());
+
+    const frags = buf1.fragmentList();
+    for (let i = 1; i < frags.length; i++) {
+      const prev = frags[i - 1];
+      const cur = frags[i];
+      if (prev === undefined || cur === undefined) continue;
+      expect(compareFragmentsForSort(prev, cur)).toBeLessThan(0);
+    }
   });
 });

@@ -84,7 +84,7 @@ export {
 } from "./fragment.js";
 
 // TextBuffer
-export { TextBuffer } from "./text-buffer.js";
+export { TextBuffer, compareFragmentsForSort, sortFragments } from "./text-buffer.js";
 
 // Snapshot
 export { TextBufferSnapshot } from "./snapshot.js";
