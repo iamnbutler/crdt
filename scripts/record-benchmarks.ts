@@ -330,18 +330,21 @@ async function main() {
             exec(`git rebase origin/${BRANCH}`, { cwd: worktree });
           } catch {
             // Rebase conflict - abort and recreate commit on top of latest
-            exec(`git rebase --abort 2>/dev/null || true`, { cwd: worktree });
+            exec("git rebase --abort 2>/dev/null || true", { cwd: worktree });
             exec(`git reset --hard origin/${BRANCH}`, { cwd: worktree });
 
             // Re-apply our changes
             if (!existsSync(join(worktree, RESULTS_DIR))) {
               mkdirSync(join(worktree, RESULTS_DIR), { recursive: true });
             }
-            writeFileSync(join(worktree, RESULTS_DIR, `${gitInfo.sha}.json`), JSON.stringify(run, null, 2));
+            writeFileSync(
+              join(worktree, RESULTS_DIR, `${gitInfo.sha}.json`),
+              JSON.stringify(run, null, 2),
+            );
 
             // Reload and update index
             const freshIndex: Index = JSON.parse(readFileSync(indexPath, "utf-8"));
-            if (!freshIndex.runs.some(r => r.sha === gitInfo.sha)) {
+            if (!freshIndex.runs.some((r) => r.sha === gitInfo.sha)) {
               freshIndex.runs.unshift({
                 sha: gitInfo.sha,
                 shortSha: gitInfo.shortSha,
@@ -353,7 +356,9 @@ async function main() {
             }
 
             exec("git add .", { cwd: worktree });
-            exec(`git commit -m "Add benchmark results for ${gitInfo.shortSha}"`, { cwd: worktree });
+            exec(`git commit -m "Add benchmark results for ${gitInfo.shortSha}"`, {
+              cwd: worktree,
+            });
           }
 
           exec(`git push origin ${BRANCH}`, { cwd: worktree });
