@@ -1,4 +1,4 @@
-u:26-08-14|run:95|rid:31773881469|HEAD 9ffb0f3
+u:26-08-15|run:96|rid:31865055695|HEAD 9ffb0f3
 
 **!! PATCH-SIZE RULE — READ FIRST !!**
 Real gate = **patch** <=10240 B; patch = old + new bytes, so touching a long line is costly and a rewrite is fatal (r86: **PUSH FAILED #356**, state lost, r87 then shipped a dup PR). **Edit surgically; touch as FEW lines as possible.** Verify: `cd memdir && git add -A && git diff --cached|wc -c`. r94 trimmed the fat bullets (7.8KB->6.6KB) yet STILL hit 10166/10240 — 6 edited lines is the max per run.
@@ -12,13 +12,13 @@ Real gate = **patch** <=10240 B; patch = old + new bytes, so touching a long lin
 
 STATE (verified r94 via curl): TI issues: #347 monthly, #349 guard (reopened), #358 validation, #359 insert-placement (tracking), #360 cursor.prev, #361 cursor.next, **#362 locator slots (CONFIRMED r94)**. #354 no-op tracker, #356 wf-fail. Rest maint's own perf/moonshot — LEAVE.
 Open PRs **5**: #351+#353 (guard, identical snapshot.ts blob 751467e), #352 (bench), #355 + #357 (**dup lint pair, both still open**). All mergeable=true, state=unstable (the #346 lint gate).
-**MAINT SILENT since 08-04 17:31** — re-verified r95: zero human comments thru **08-14**, zero commits, zero checkboxes ticked, 5 PRs unchanged. Filed: r89 #358, r90 #359, r91 #360, r92 #361, r93 #362. **r94+r95 = 2 consecutive deliberate QUIET runs (Task 7 only, no issue/comment/PR).** Keep it that way while silence lasts. Still NO PRs: 2 dups + red main = a 6th PR is noise. r95 re-validated cmds: typecheck clean, test 3966p/0f, lint 2 errs (both scripts/record-benchmarks.ts = exactly what #355 fixes), perf.test 89ms PASS.
+**MAINT SILENT since 08-04 17:31** — re-verified r96: zero human comments thru **08-15**, zero commits, zero checkboxes ticked, 5 PRs unchanged. Filed: r89 #358, r90 #359, r91 #360, r92 #361, r93 #362. **r94+r95+r96 = 3 consecutive deliberate QUIET runs (Task 7 only, no issue/comment/PR).** Keep it that way while silence lasts. Still NO PRs: 2 dups + red main = a 6th PR is noise. r96 re-validated cmds: typecheck clean, lint 2 errs (both scripts/record-benchmarks.ts = exactly what #355 fixes), test **3965p/1f = the perf flake below, NOT a regression**.
 
 **#346 lint red on main** (gates Test => 0 tests in CI since 9ffb0f3). Fix = `lint:fix` **PLUS 1 manual edit**: :333 noUnusedTemplateLiteral is an *unsafe* fix so lint:fix exits 1. Both in #355.
 
 FINDINGS (detail in #347 backlog):
 - **J snapshot guard**: 4-variant x 3-pattern matrix verified r87 — need guard in BOTH method+generator; call-time-only (what maint asked) REGRESSES captured-iterator. [#347 backlog 1]
-- perf.test.ts:14 load-sensitive (r90: 99ms PASS then 105.6ms FAIL, same commit b2b) — goes red once #355 lands. Also: splitFragment(f,0) dup locators (latent); op-queue deferred undeduped. [#347 backlog 6-8]
+- perf.test.ts:14 **now PROVEN flaky, not just thin-margin (r96: hard FAIL 118.81ms in full suite, then 3/3 PASS in isolation; r95 saw 89ms PASS, same commit)** — goes red once #355 lands; don't mistake the 1f for a regression. Also: splitFragment(f,0) dup locators (latent); op-queue deferred undeduped. [#347 backlog 6-8]
 - state-sync.ts (r88): snapshotsEqual skips baseLocatorLevels; createSnapshot/applySnapshot 0% cov (root exports); discards wire `length`. Round-trip CORRECT. =1 small PR when queue clears. [#347 bk 3-5]
 - validation.ts (r89): NonSequentialCounter unreachable [#358, #347 bk 2]. Lesson: **func-cov trap** — 100% FUNC cov w/ dead branch; trust LINE cov.
 - **CURSOR CONVENTION SPLIT (#360 prev, #361 next, peekPrev same) — 1 root cause, FULL detail + verified patches live in those issues. Do NOT re-derive.** 1-line mech: findChildForTarget sets parent.childIndex=i+1 ("next to scan"), the walkers read it as "child we're in"; fix = on ascend `parent.childIndex = popped.indexInParent`. Impact: tryDeleteFast walks w/ next() => delete() silently UNDER-deletes, replicas converge on wrong doc. Ladder 500 seeds: pristine 275 bad -> +prev 46 -> +next 14. NO PR: core nav, 2 valid fixes = maintainer's design call.
