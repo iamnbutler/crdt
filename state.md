@@ -1,4 +1,5 @@
-u:26-09-02|run:114|rid:33610259257|HEAD 9ffb0f3
+u:26-09-03|run:115|rid:33735741295|HEAD 9ffb0f3
+LATEST-RUN (REPLACE this whole line each run; keeps file flat, don't append a new one): r115 26-09-03 = state IDENTICAL to r114 (same 5 PRs, 0 human comments in 30d, 0/8 checkboxes, no commit since Mar); cmds typecheck clean / lint 2err / 3966p-0f / perf 73ms; QUIET run #22 (supersedes the "21" in the STATE para); #364 core 14103->14482 chars.
 
 **!! PATCH-SIZE RULE — READ FIRST !!**
 Real gate = **patch** <=10240 B; patch = old + new bytes, so touching a long line is costly and a rewrite is fatal (r86: **PUSH FAILED #356**, state lost, r87 then shipped a dup PR). **Edit surgically; touch as FEW lines as possible.** Verify: `cd memdir && git add -A && git diff --cached|wc -c`. r94 trimmed the fat bullets (7.8KB->6.6KB) yet STILL hit 10166/10240 — 6 edited lines is the max per run.
