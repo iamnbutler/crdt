@@ -223,22 +223,29 @@ describe("Cursor.itemIndex()", () => {
 
   describe("O(log n) efficiency with getItemCount", () => {
     it("uses O(1) summary lookup for item counts", () => {
-      // countSummaryOps has getItemCount, so itemIndex should be O(log n)
+      let summaryReads = 0;
+      const measuredSummaryOps = {
+        ...countSummaryOps,
+        getItemCount(summary: CountSummary): number {
+          summaryReads++;
+          return summary.count;
+        },
+      };
       const items = Array.from({ length: 10000 }, (_, i) => new CountItem(i));
-      const tree = SumTree.fromItems(items, countSummaryOps, 16);
+      const tree = SumTree.fromItems(items, measuredSummaryOps, 16);
 
-      // This should be fast (O(log n)) not slow (O(n))
-      const start = performance.now();
+      summaryReads = 0;
       for (let i = 0; i < 1000; i++) {
+        const target = (i * 53) % items.length;
         const cursor = tree.cursor(countDimension);
-        cursor.seekForward(5000, "right");
-        cursor.itemIndex();
+        cursor.seekForward(target, "right");
+        expect(cursor.itemIndex()).toBe(target);
       }
-      const elapsed = performance.now() - start;
 
-      // 1000 iterations of O(log n) work should complete in < 100ms
-      // If it were O(n), it would take much longer
-      expect(elapsed).toBeLessThan(100);
+      // Bound the work directly instead of assuming a particular CPU speed.
+      expect(summaryReads).toBeGreaterThan(0);
+      const levels = Math.ceil(Math.log(items.length) / Math.log(16));
+      expect(summaryReads).toBeLessThanOrEqual(1000 * 16 * levels);
     });
   });
 });
