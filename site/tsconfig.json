@@ -1,7 +1,6 @@
 {
-  "files": [],
-  "references": [
-    { "path": "./tsconfig.app.json" },
-    { "path": "./tsconfig.node.json" }
-  ]
+  "extends": "../tsconfig.json",
+  "compilerOptions": { "noEmit": true, "lib": ["ESNext", "DOM"] },
+  "include": ["playground.ts"],
+  "exclude": ["dist"]
 }

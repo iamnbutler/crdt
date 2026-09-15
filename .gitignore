@@ -25,3 +25,7 @@ Thumbs.db
 
 # Debug
 *.log
+
+# Performance lab
+.lab-quick/
+.benchmark-history/

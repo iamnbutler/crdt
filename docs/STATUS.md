@@ -1,5 +1,8 @@
 # CRDT Project Status
 
+> Historical status of the original engine. For CRDT Lab and RunText, see the
+> [current README](../README.md) and [new design](run-design.md).
+
 > Where we are, what's working, what's broken, and what comes next.
 >
 > 2026-03-23, end of day 1

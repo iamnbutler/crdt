@@ -135,3 +135,5 @@ export type {
   UndoOperation,
   VersionVector,
 } from "./text/index.js";
+export { RunText } from "./run/index.js";
+export type { Anchor as RunAnchor, Operation as RunOperation, StateVector } from "./run/index.js";

@@ -1,8 +1,8 @@
 {
-  "name": "@iamnbutler/crdt",
-  "version": "0.0.1",
+  "name": "@iamnbutler/crdt-lab",
+  "version": "0.1.0",
   "type": "module",
-  "description": "Pure TypeScript CRDT implementation for collaborative text editing",
+  "description": "Experimental pure TypeScript text CRDT with reproducible competitor benchmarks",
   "license": "MIT",
   "author": "iamnbutler",
   "exports": {
@@ -33,6 +33,10 @@
     "./anchor": {
       "types": "./dist/anchor/index.d.ts",
       "import": "./dist/anchor/index.js"
+    },
+    "./run": {
+      "types": "./dist/run/index.d.ts",
+      "import": "./dist/run/index.js"
     }
   },
   "files": [
@@ -40,14 +44,14 @@
   ],
   "scripts": {
     "build": "bun run build:js && bun run build:types",
-    "build:js": "bun build ./src/index.ts ./src/arena/index.ts ./src/sum-tree/index.ts ./src/rope/index.ts ./src/text/index.ts ./src/protocol/index.ts ./src/anchor/index.ts --outdir ./dist --target node --splitting",
+    "build:js": "bun build ./src/index.ts ./src/arena/index.ts ./src/sum-tree/index.ts ./src/rope/index.ts ./src/text/index.ts ./src/protocol/index.ts ./src/anchor/index.ts ./src/run/index.ts --outdir ./dist --target node --splitting",
     "build:types": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
     "lint:fix": "biome check --write .",
     "format": "biome format --write .",
-    "test": "bun test",
-    "bench": "bun run benchmarks/index.ts",
+    "test": "bun test src",
+    "bench": "bun run scripts/measure.ts",
     "bench:ci": "bun run benchmarks/index.ts --ci",
     "bench:text": "bun run benchmarks/text-buffer.ts",
     "bench:text:ci": "bun run benchmarks/text-buffer.ts --ci",
@@ -60,18 +64,21 @@
     "bench:compare:ci": "bun run benchmarks/comparison.ts --ci",
     "bench:all": "bun run bench && bun run bench:text && bun run bench:sum-tree && bun run bench:anchor && bun run bench:memory",
     "fixtures:download": "bun run scripts/download-fixtures.ts",
-    "bench:record": "bun run scripts/record-benchmarks.ts",
-    "bench:record:push": "bun run scripts/record-benchmarks.ts --push",
-    "site:dev": "cd site && bun run dev",
-    "site:build": "cd site && bun run build"
+    "site:dev": "bun run scripts/serve-site.ts",
+    "site:build": "bun run scripts/build-site.ts",
+    "bench:lab": "bun run scripts/measure.ts",
+    "bench:lab:quick": "bun run scripts/measure.ts --quick",
+    "site:check": "tsc -p site/tsconfig.json",
+    "bench:legacy": "bun run benchmarks/index.ts"
   },
   "devDependencies": {
-    "@automerge/automerge": "^3.2.4",
+    "@automerge/automerge": "3.4.1",
     "@biomejs/biome": "1.9.4",
     "@types/bun": "latest",
-    "loro-crdt": "^1.10.8",
+    "loro-crdt": "1.16.1",
     "mitata": "1.0.34",
     "typescript": "5.7.2",
-    "yjs": "^13.6.30"
-  }
+    "yjs": "13.6.32"
+  },
+  "private": true
 }
