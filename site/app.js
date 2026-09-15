@@ -1,133 +1,262 @@
-const colors = { run: "#39735a", loro: "#7f80b5", yjs: "#b69c49", automerge: "#ad7962", legacy: "#9aa394" };
 const byId = (id) => document.getElementById(id);
-const number = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 });
-const format = (value, unit = "ms") => value === null ? "—" : unit === "bytes" ? `${number.format(value / 1024)} KiB` : `${number.format(value)} ms`;
-const element = (tag, className, text) => { const node = document.createElement(tag); if (className) node.className = className; if (text !== undefined) node.textContent = text; return node; };
+const integer = new Intl.NumberFormat("en-US");
+const fixed = (value) => value.toLocaleString("en-US", { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+const format = (value, unit = "ms") => {
+  if (value === null || value === undefined) return "—";
+  if (unit === "bytes") return value < 1024 ? `${integer.format(value)} B` : `${fixed(value / 1024)} KiB`;
+  if (value < 1) return `${fixed(value * 1000)} µs`;
+  if (value >= 1000) return `${(value / 1000).toFixed(2)} s`;
+  return `${fixed(value)} ms`;
+};
+const element = (tag, className, text) => {
+  const node = document.createElement(tag);
+  if (className) node.className = className;
+  if (text !== undefined) node.textContent = text;
+  return node;
+};
+const link = (text, href, className) => {
+  const node = element("a", className, text);
+  node.href = href;
+  return node;
+};
+const measurement = (library, id) => library?.measurements.find((value) => value.id === id);
+const valid = (value) => value?.status === "ok" && Number.isFinite(value.median);
+const shortNames = { append: "insert at end", prepend: "insert at start", random: "random edits", live: "live trace", encode: "encode state", decode: "load state", size: "state size", merge: "merge peers", trace: "trace replay" };
+const order = ["append", "prepend", "random", "live", "encode", "decode", "size", "merge", "trace"];
+const cache = new Map();
+let history = [];
 let current;
-let request = 0;
+let generation = 0;
 
-function draw() {
-  if (!current) return;
-  const id = byId("workload").value;
-  const libraries = [...current.libraries].sort((a, b) => (a.id === "run" ? -1 : b.id === "run" ? 1 : 0));
-  const rows = libraries.map((library) => ({ library, value: library.measurements.find((m) => m.id === id) }));
-  const valid = rows.filter(({ value }) => value?.status === "ok");
-  const values = valid.flatMap(({ value }) => [value.min, value.max]).filter((v) => v > 0);
-  const low = Math.floor(Math.log10(Math.min(...values)));
-  const high = Math.max(low + 1, Math.ceil(Math.log10(Math.max(...values))));
-  const position = (value) => `${Math.max(0, Math.min(100, 100 * (Math.log10(value) - low) / (high - low)))}%`;
-  const best = Math.min(...valid.map(({ value }) => value.median));
-  const chart = byId("chart");
-  chart.replaceChildren();
-  for (const { library, value } of rows) {
-    const row = element("div", "chart-row");
-    const label = element("div", "chart-name", library.name);
-    label.append(element("div", "chart-version", library.version));
-    row.append(label);
-    if (value?.status === "ok") {
-      const track = element("div", "track");
-      track.style.setProperty("--color", colors[library.id] ?? "#718268");
-      track.style.backgroundSize = `${100 / (high - low)}% 100%`;
-      const whisker = element("span", "whisker");
-      whisker.style.setProperty("--low", position(value.min));
-      whisker.style.setProperty("--high", position(value.max));
-      const dot = element("span", "dot");
-      dot.style.setProperty("--position", position(value.median));
-      dot.title = `Median ${format(value.median, value.unit)}; range ${format(value.min, value.unit)}–${format(value.max, value.unit)}`;
-      track.setAttribute("aria-label", dot.title);
-      track.append(whisker, dot);
-      row.append(track, element("div", `chart-value${value.median === best ? " winner" : ""}`, format(value.median, value.unit)));
-    } else {
-      const failure = element("div", "chart-failure");
-      failure.append(element("span", "badge", value?.status === "incorrect" ? "INCORRECT OUTPUT" : "NOT MEASURED"));
-      failure.append(element("span", "", value?.detail ?? "A valid trace state is required."));
-      row.append(failure);
-    }
-    chart.append(row);
+function cases(run) {
+  const result = new Map(run.libraries.flatMap((library) => library.measurements.map((value) => [value.id, value])));
+  return [...result.values()].sort((a, b) => {
+    const left = order.indexOf(a.id);
+    const right = order.indexOf(b.id);
+    return (left < 0 ? order.length : left) - (right < 0 ? order.length : right);
+  });
+}
+
+function renderOverview(run) {
+  const workloads = cases(run);
+  const table = byId("overview-table");
+  const headings = element("tr");
+  const label = element("th", "", "Library");
+  label.scope = "col";
+  headings.append(label);
+  for (const workload of workloads) {
+    const cell = element("th");
+    cell.scope = "col";
+    cell.append(link(shortNames[workload.id] ?? workload.label, `#case-${workload.id}`));
+    headings.append(cell);
   }
-  if (values.length) {
-    const axis = element("div", "chart-axis");
-    const ticks = element("div", "axis-ticks");
-    for (let exponent = low; exponent <= high; exponent++) {
-      const value = 10 ** exponent;
-      const tick = element("span", "", number.format(value));
-      tick.style.setProperty("--position", position(value));
-      ticks.append(tick);
+  table.querySelector("thead").replaceChildren(headings);
+  const body = table.querySelector("tbody");
+  body.replaceChildren();
+  for (const library of run.libraries) {
+    const row = element("tr");
+    const name = element("th", "", library.name);
+    name.scope = "row";
+    name.title = `${library.name} ${library.version}`;
+    row.append(name);
+    for (const workload of workloads) {
+      const value = measurement(library, workload.id);
+      const best = Math.min(...run.libraries.map((peer) => measurement(peer, workload.id)).filter(valid).map((value) => value.median));
+      const cell = element("td");
+      if (valid(value)) {
+        cell.textContent = format(value.median, value.unit);
+        if (value.median === best) cell.className = "best";
+        cell.title = `${value.median === best ? "Lowest verified median. " : ""}Range: ${format(value.min, value.unit)}–${format(value.max, value.unit)}`;
+      } else {
+        cell.textContent = value?.status === "incorrect" ? "incorrect" : "—";
+        cell.className = value?.status === "incorrect" ? "invalid" : "unavailable";
+        cell.title = value?.detail ?? "Not measured";
+      }
+      row.append(cell);
     }
-    axis.append(element("span"), ticks, element("span"));
-    chart.append(axis);
+    body.append(row);
   }
-  const example = valid[0]?.value;
-  byId("case-detail").textContent = `${example?.detail ?? "No valid measurements for this workload."}${example ? ` Axis: ${example.unit === "bytes" ? "bytes" : "milliseconds"}.` : ""}`;
+}
+
+function comparable(a, b) {
+  return a.environment.hardware === b.environment.hardware &&
+    a.environment.runtime === b.environment.runtime &&
+    a.environment.os === b.environment.os &&
+    a.fixture.sha256 === b.fixture.sha256 &&
+    a.quick === b.quick &&
+    JSON.stringify(a.methodology) === JSON.stringify(b.methodology);
+}
+
+function renderDetails(run, previous) {
+  const parent = byId("workload-results");
+  parent.replaceChildren();
+  for (const workload of cases(run)) {
+    const section = element("article", "workload");
+    section.id = `case-${workload.id}`;
+    const heading = element("div", "workload-heading");
+    const title = element("h3", "", workload.id);
+    title.append(element("span", "", "smaller is better"));
+    heading.append(title);
+    section.append(heading);
+    const sample = run.libraries.map((library) => measurement(library, workload.id)).find(valid);
+    section.append(element("p", "workload-detail", `${sample?.label ?? workload.label}. ${sample?.detail ?? workload.detail}`));
+    const scroll = element("div", "table-scroll");
+    scroll.tabIndex = 0;
+    scroll.setAttribute("role", "region");
+    scroll.setAttribute("aria-label", `${workload.label} results`);
+    const table = element("table", "detail-table");
+    const thead = element("thead");
+    const headings = element("tr");
+    for (const name of ["Benchmark", "mean", "p50", "min–max", "comparison (p50)", "vs prev"]) {
+      const cell = element("th", "", name);
+      cell.scope = "col";
+      headings.append(cell);
+    }
+    thead.append(headings);
+    const tbody = element("tbody");
+    const max = Math.max(...run.libraries.map((library) => measurement(library, workload.id)).filter(valid).map((value) => value.median));
+    for (const library of run.libraries) {
+      const value = measurement(library, workload.id);
+      const row = element("tr");
+      const name = element("th", "", library.name);
+      name.scope = "row";
+      name.title = library.version;
+      row.append(name);
+      if (!valid(value)) {
+        const failure = element("td", `failure-detail ${value?.status === "incorrect" ? "invalid" : "unavailable"}`, value?.detail ?? "Not measured.");
+        failure.colSpan = 5;
+        row.append(failure);
+        tbody.append(row);
+        continue;
+      }
+      const mean = value.samples.reduce((sum, sample) => sum + sample, 0) / value.samples.length;
+      row.append(element("td", "", format(mean, value.unit)), element("td", "median", format(value.median, value.unit)), element("td", "", `${format(value.min, value.unit)}–${format(value.max, value.unit)}`));
+      const cell = element("td", "comparison-cell");
+      const comparison = element("div", "comparison");
+      const track = element("div", "bar-track");
+      track.setAttribute("aria-hidden", "true");
+      const bar = element("div", `bar${library.id === "run" ? " own" : ""}`);
+      bar.style.setProperty("--width", `${max > 0 ? value.median / max * 100 : 0}%`);
+      track.append(bar);
+      comparison.append(track, element("span", "muted", format(value.median, value.unit)));
+      cell.append(comparison);
+      row.append(cell);
+      const delta = element("td", "muted", "—");
+      const oldLibrary = previous?.libraries.find((candidate) => candidate.id === library.id);
+      const old = measurement(oldLibrary, workload.id);
+      if (valid(old) && old.median > 0 && old.unit === value.unit && old.operations === value.operations && old.detail === value.detail && (library.id === "run" || oldLibrary.version === library.version)) {
+        const percent = (value.median / old.median - 1) * 100;
+        delta.textContent = `${percent > 0 ? "+" : ""}${fixed(percent)}%`;
+        delta.className = percent < 0 ? "change-faster" : percent > 0 ? "change-slower" : "muted";
+        delta.title = `Previous median ${format(old.median, value.unit)} at ${previous.revision.slice(0, 7)}. Negative is better.`;
+      }
+      row.append(delta);
+      tbody.append(row);
+    }
+    table.append(thead, tbody);
+    scroll.append(table);
+    section.append(scroll);
+    parent.append(section);
+  }
+}
+
+function renderHistory() {
+  const body = byId("history-table").querySelector("tbody");
+  body.replaceChildren();
+  for (const entry of history) {
+    const row = element("tr", entry.id === current?.id ? "history-current" : "");
+    const date = element("td");
+    const button = element("button", "history-open", new Date(entry.timestamp).toISOString().replace("T", " ").slice(0, 19));
+    button.type = "button";
+    button.addEventListener("click", () => {
+      byId("run-select").value = `${entry.id}.json`;
+      selectRun(`${entry.id}.json`);
+    });
+    date.append(button);
+    const source = element("td");
+    source.append(link(entry.revision.slice(0, 7), `https://github.com/iamnbutler/crdt-lab/commit/${entry.revision}`));
+    const raw = element("td");
+    raw.append(link("JSON", `./lab/${entry.id}.json`));
+    row.append(date, source, element("td", "", entry.hardware), raw);
+    body.append(row);
+  }
 }
 
 function render(run, filename) {
   current = run;
-  const own = run.libraries.find((library) => library.id === "run");
-  const trace = own?.measurements.find((m) => m.id === "trace" && m.status === "ok");
-  const peers = run.libraries.filter((l) => l.id !== "run").map((l) => ({ library: l, value: l.measurements.find((m) => m.id === "trace" && m.status === "ok") })).filter((r) => r.value).sort((a, b) => a.value.median - b.value.median);
-  byId("headline-time").replaceChildren(document.createTextNode(trace ? number.format(trace.median) : "—"), element("small", "", trace ? "ms" : ""));
-  if (trace && peers[0]) {
-    const ratio = peers[0].value.median / trace.median;
-    byId("headline-ratio").textContent = `${number.format(ratio >= 1 ? ratio : 1 / ratio)}×`;
-    byId("headline-competitor").textContent = `${ratio >= 1 ? "Faster" : "Slower"} than ${peers[0].library.name} on this trace.`;
-  }
-  byId("headline-tests").textContent = run.validation ? number.format(run.validation.passed) : "—";
-  byId("headline-count").textContent = `${number.format(trace?.operations ?? run.fixture.operations)} edits. Exact final text verified.`;
+  const count = history.length || 1;
+  byId("environment").textContent = `${count} ${count === 1 ? "run" : "runs"} — ${run.environment.runtime.toLowerCase()} — ${run.environment.arch}-${run.environment.platform} — ${run.environment.cpu}`;
   byId("raw-link").href = `./lab/${filename}`;
-  const oldWorkload = byId("workload").value;
-  byId("workload").replaceChildren();
-  const unique = new Map(run.libraries.flatMap((l) => l.measurements.map((m) => [m.id, m.label])));
-  for (const [id, label] of unique) { const option = element("option", "", label); option.value = id; byId("workload").append(option); }
-  if (unique.has(oldWorkload)) byId("workload").value = oldWorkload;
-  const machine = byId("machine");
-  machine.replaceChildren();
-  for (const label of [run.environment.cpu, `${run.environment.runtime} · ${run.environment.platform}/${run.environment.arch}`, `${run.methodology.samples} samples + warmup`, new Date(run.timestamp).toLocaleString()]) machine.append(element("span", "", label));
-  const source = element("a", "", `source ${run.revision.slice(0, 7)} ↗`);
-  source.href = `https://github.com/iamnbutler/crdt-lab/commit/${run.revision}`;
-  machine.append(source);
-  const table = byId("result-table");
-  const heading = element("tr");
-  heading.append(element("th", "", "Workload"));
-  for (const library of run.libraries) heading.append(element("th", "", library.name));
-  table.querySelector("thead").replaceChildren(heading);
-  table.querySelector("tbody").replaceChildren();
-  for (const [id, label] of unique) {
-    const row = element("tr"); row.append(element("th", "", label));
-    const values = run.libraries.map((l) => l.measurements.find((m) => m.id === id));
-    const min = Math.min(...values.filter((v) => v?.status === "ok").map((v) => v.median));
-    for (const value of values) {
-      const cell = element("td", value?.status === "ok" && value.median === min ? "best" : "", value?.status === "ok" ? format(value.median, value.unit) : value?.status === "incorrect" ? "Incorrect" : "—");
-      if (value?.detail) cell.title = value.detail;
-      row.append(cell);
-    }
-    table.querySelector("tbody").append(row);
+  byId("method-summary").textContent = `${run.methodology.samples} samples after one full warmup; libraries run sequentially in separate processes. Green marks the lowest verified median per workload.`;
+  byId("library-versions").textContent = run.libraries.map((library) => `${library.name} ${library.version}`).join(" · ");
+  byId("machine-details").textContent = `${run.environment.cpu}, ${run.environment.runtime}, ${run.environment.platform} ${run.environment.os}, ${run.environment.arch}.`;
+  byId("validation").textContent = `${integer.format(run.validation?.passed ?? 0)} tests passed before this run. Exact edit and decoded text checked; merged peers must converge.`;
+  const title = byId("results-title");
+  title.replaceChildren(document.createTextNode(`${history[0]?.id === run.id || history.length === 0 ? "Latest Run" : "Recorded Run"} (`), link(run.revision.slice(0, 7), `https://github.com/iamnbutler/crdt-lab/commit/${run.revision}`, "source-link"), document.createTextNode(")"));
+  byId("run-date").textContent = new Date(run.timestamp).toISOString().replace("T", " ").slice(0, 19) + " UTC";
+  renderOverview(run);
+  renderDetails(run);
+  renderHistory();
+  byId("comparison-note").textContent = "No previous comparable run. “vs prev” requires the same machine, runtime, OS, fixture, and measurement method.";
+  byId("load-status").hidden = true;
+  byId("report").hidden = false;
+}
+
+async function read(filename) {
+  if (!cache.has(filename)) {
+    const response = await fetch(`./lab/${filename}`);
+    if (!response.ok) throw new Error(`Could not load ${filename} (HTTP ${response.status}).`);
+    cache.set(filename, await response.json());
   }
-  draw();
+  return cache.get(filename);
 }
 
-async function load(filename) {
-  const id = ++request;
-  const response = await fetch(`./lab/${filename}`);
-  if (!response.ok) throw new Error("Measurements are not available yet. Check the repository's Actions page.");
-  const data = await response.json();
-  if (id === request) render(data, filename);
+async function loadPrevious(run, token) {
+  const candidates = history.filter((entry) => entry.timestamp < run.timestamp && entry.hardware === run.environment.hardware);
+  for (const entry of candidates) {
+    const previous = await read(`${entry.id}.json`);
+    if (token !== generation) return;
+    if (!comparable(run, previous)) continue;
+    renderDetails(run, previous);
+    byId("comparison-note").textContent = `vs prev: ${previous.revision.slice(0, 7)} · ${new Date(previous.timestamp).toISOString().slice(0, 19).replace("T", " ")} UTC. Median change; negative is better. Same environment and methodology; rival versions must match.`;
+    return;
+  }
 }
 
-byId("workload").addEventListener("change", draw);
-byId("run-select").addEventListener("change", () => load(byId("run-select").value).catch((error) => { byId("case-detail").textContent = error.message; }));
+async function selectRun(filename) {
+  const token = ++generation;
+  try {
+    const run = await read(filename);
+    if (token !== generation) return;
+    render(run, filename);
+    await loadPrevious(run, token);
+  } catch (error) {
+    if (token !== generation) return;
+    byId("load-status").hidden = false;
+    byId("load-status").textContent = error.message;
+  }
+}
+
+byId("run-select").addEventListener("change", () => selectRun(byId("run-select").value));
+function openLinkedSection() {
+  const target = byId(location.hash.slice(1));
+  if (target instanceof HTMLDetailsElement) target.open = true;
+}
+window.addEventListener("hashchange", openLinkedSection);
+openLinkedSection();
+
 try {
-  await load("latest.json");
-  const response = await fetch("./lab/index.json");
-  if (response.ok) {
-    const history = await response.json();
-    const select = byId("run-select"); select.replaceChildren();
+  history = await read("index.json");
+  const select = byId("run-select");
+  if (history.length) {
+    select.replaceChildren();
     for (const entry of history) {
-      const option = element("option", "", `${new Date(entry.timestamp).toLocaleDateString()} · ${entry.revision.slice(0, 7)} · ${entry.hardware}`);
-      option.value = `${entry.id}.json`; select.append(option);
+      const option = element("option", "", `${new Date(entry.timestamp).toISOString().slice(0, 16).replace("T", " ")} UTC · ${entry.revision.slice(0, 7)} · ${entry.hardware}`);
+      option.value = `${entry.id}.json`;
+      select.append(option);
     }
   }
+  await selectRun(history.length ? `${history[0].id}.json` : "latest.json");
 } catch (error) {
-  byId("chart").replaceChildren(element("p", "loading error", error.message));
-  byId("machine").textContent = "No timings are shown until a verified run is available.";
+  byId("load-status").textContent = `No recorded benchmark data is available. ${error.message}`;
 }

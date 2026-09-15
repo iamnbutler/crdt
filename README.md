@@ -2,7 +2,7 @@
 
 An independent performance experiment derived from [iamnbutler/crdt](https://github.com/iamnbutler/crdt). The new engine, **RunText**, is a plain-text CRDT written entirely in TypeScript, with no runtime dependencies or WebAssembly.
 
-**[Live measurements and collaboration demo](https://iamnbutler.github.io/crdt-lab/)** · [Raw measurement history](https://github.com/iamnbutler/crdt-lab/tree/benchmark-data) · [Design](docs/run-design.md)
+**[Benchmark report and replica demo](https://nate.rip/crdt-lab/)** · [Raw measurement history](https://github.com/iamnbutler/crdt-lab/tree/benchmark-data) · [Design](docs/run-design.md)
 
 RunText replaces variable-length position locators with a run-compressed RGA, an edit-local splay tree, and independent indexes for character identities and concurrent siblings. Character identity survives physical run splitting and coalescing. The original engine remains in `src/text` for comparison; its source history is preserved.
 
@@ -47,6 +47,8 @@ bun run bench:lab       # Full matrix; several minutes, mostly Automerge
 bun run site:build
 bun run site:dev        # http://127.0.0.1:4173
 ```
+
+Set `CRDT_LAB_PORT` to choose another local port, for example `CRDT_LAB_PORT=4183 bun run site:dev`.
 
 `bun run bench:lab:quick` uses shorter workloads and writes only to ignored `.lab-quick/`. Full measurements require committed engine/benchmark sources, run the complete test suite, and write machine-readable results under `site/public/lab/`. To rerun selected libraries, use `bun run bench:lab --libraries=run,loro,yjs`; each result records the actual participants.
 

@@ -1,1 +1,8 @@
-[]
+[
+  {
+    "id": "2026-09-15T16-23-43.634Z-ec19ea9",
+    "timestamp": "2026-09-15T16:23:43.634Z",
+    "revision": "ec19ea908471b413bd57d0ee86be62c06f5d56ac",
+    "hardware": "darwin-arm64-Apple M4 Max"
+  }
+]

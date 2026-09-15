@@ -1,8 +1,9 @@
 import { resolve, sep } from "node:path";
 const root = resolve(import.meta.dir, "../site/dist");
+const { CRDT_LAB_PORT: configuredPort } = process.env;
 const server = Bun.serve({
   hostname: "127.0.0.1",
-  port: 4173,
+  port: Number(configuredPort ?? 4173),
   async fetch(request) {
     const pathname = decodeURIComponent(new URL(request.url).pathname);
     const path = resolve(root, `.${pathname === "/" ? "/index.html" : pathname}`);

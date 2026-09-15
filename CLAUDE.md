@@ -1,68 +1,52 @@
-# @iamnbutler/crdt
+# CRDT Lab
 
-Pure TypeScript CRDT implementation for collaborative text editing.
+An independent performance experiment derived from `iamnbutler/crdt`. The active engine is `RunText` in `src/run/`. Preserve the original implementation in `src/text/` as a reproducible baseline.
 
-## Project Philosophy
+## Implementation
 
-- **Bun-first**: Use Bun runtime, no Node.js compatibility needed
-- **Zero dependencies**: All algorithms implemented from scratch
-- **Strict TypeScript**: No `any`, no type assertions, no runtime type errors
+- Pure TypeScript with no runtime dependencies or WebAssembly. The engine runs in browsers; development and measurements use Bun.
+- Strict types: no `any`, type assertions, or non-null assertions in new code.
+- Use Bun's test runner and Biome's formatting and lint rules.
+- Keep identity, convergence, UTF-16 preservation, and out-of-order delivery correct before optimizing.
+- Read `docs/run-design.md` before changing the sequence or identity indexes.
 
 ## Commands
 
-```bash
-bun install          # Install dev dependencies
-bun test             # Run tests
-bun run typecheck    # TypeScript type checking
-bun run lint         # Biome linting
-bun run lint:fix     # Auto-fix lint issues
-bun run bench        # Run benchmarks
-bun run bench:ci     # Benchmarks with JSON output for CI
-bun run fixtures:download  # Download Kleppmann editing trace
+```sh
+bun install --frozen-lockfile
+bun run fixtures:download
+bun test src
+bun run typecheck
+bun run site:check
+bun run lint
+bun run build
+bun run bench:lab:quick
+bun run bench:lab
+bun run site:build
+bun run site:dev
 ```
 
-## Code Style
+The local site defaults to port 4173; `CRDT_LAB_PORT` overrides it. Rebuild the site after changing its source or recorded data.
 
-Enforced by Biome and TypeScript strict mode:
+## Measurement integrity
 
-- No `any` types - use proper generics or `unknown` with type guards
-- No type assertions (`as`) - refactor to make types flow naturally
-- No non-null assertions (`!`) - handle null/undefined explicitly
-- Use `const` over `let`, never use `var`
-- Imports must use `type` keyword for type-only imports
-- 2-space indentation, double quotes, semicolons
+Full measurements require committed engine and harness sources and a passing test suite. Each library runs sequentially in a separate process, with one complete warmup and five samples. Include final text materialization and verify exact output. Incorrect results stay visible but do not receive a timing rank.
 
-## Module Structure
+Quick measurements write to ignored `.lab-quick/`; do not publish them as full measurements. Record actual dependency versions, source and fixture hashes, sample values, and machine/runtime metadata. Compare like environments and disclose the scope of each workload. Do not claim universal performance superiority from a finite suite.
 
-```
-src/
-  arena/       # Arena allocator for CRDT nodes
-  sum-tree/    # Sum tree for efficient range queries
-  rope/        # Rope data structure for text storage
-  text/        # Text CRDT implementation
-  protocol/    # Sync protocol for collaboration
-```
+GitHub Actions publishes the report to Pages and stores raw history on `benchmark-data`. Tests and measurements gate publication; there is no fixed percentage regression gate on noisy hosted runners.
 
-Each module is exported as a subpath: `@iamnbutler/crdt/rope`, etc.
+## Benchmark site
 
-## Testing
+Keep the site a compact technical report, following the original `nate.rip/crdt/` report. Put the complete comparison matrix first, then per-workload timings, environment details, and history. Use dense monospace tables and highlight the lowest valid result. Keep the replica demo secondary. Do not add marketing headlines, promotional copy, hero sections, or score cards.
 
-- Tests live alongside source files as `*.test.ts`
-- Use Bun's built-in test runner
-- Target edge cases: empty documents, single characters, large documents
+## Layout
 
-## Benchmarking
+- `src/run/`: current engine, binary protocol, and correctness tests
+- `benchmarks/lab/`: rival adapters, workloads, and isolated worker
+- `scripts/measure.ts`: correctness gate, provenance, and recorded results
+- `site/`: benchmark tables and the two-replica browser demo
+- `src/text/`, `src/sum-tree/`, `src/anchor/`: original implementation
+- `docs/`: design, baseline failure reproduction, and historical notes
 
-- Uses mitata for microbenchmarks
-- Kleppmann editing trace (260K ops) for realistic workloads
-- Synthetic documents from 100 lines to 10M lines
-- 10% regression threshold blocks merge
-
-Run `bun run fixtures:download` to get the editing trace before benchmarking.
-
-## Performance Considerations
-
-- Minimize allocations in hot paths
-- Use arena allocation for CRDT nodes
-- Prefer mutable operations internally, immutable APIs externally
-- Profile with `bun --inspect` for detailed analysis
+The new engine is experimental plain text. Rich text, undo, history reclamation, and editor/network integrations are outside its current scope. Keep these limitations visible alongside performance wins.
