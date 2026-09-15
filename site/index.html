@@ -74,7 +74,7 @@
     <details id="reproduce">
       <summary>Methodology and reproduction</summary>
       <p>The full 259,778-edit Kleppmann trace uses one bulk transaction. Synthetic workloads and the 10,000-edit live trace commit individually. Document creation and final text materialization are timed; validation and garbage collection are outside the timers.</p>
-      <p>Encoding uses each library's native collaboration state, including Yjs update V2, without extra transport compression. Loading creates a replica and reads its text. Merge timing includes both peers importing the other peer's snapshot and reading their resulting text; setup and encoding are excluded.</p>
+      <p>Encoding uses each library's native collaboration state, including Yjs update V2, without extra transport compression. RunText's format packs columns, uses a TypeScript LZ4 codec, and omits deleted text while retaining its identities. Encoding after edits and repeated encoding of unchanged state are separate cases. Loading builds a usable replica and reads its text. Merge timing includes both peers importing the other peer's snapshot and reading their resulting text; setup and encoding are excluded.</p>
       <p>Each library runs sequentially in a separate process. A full untimed warmup precedes five samples. The report shows the mean, median, and observed range; five samples do not support a useful tail percentile.</p>
       <pre><code>git clone https://github.com/iamnbutler/crdt-lab
 cd crdt-lab

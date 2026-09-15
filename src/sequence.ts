@@ -19,7 +19,7 @@ export class Run {
     readonly time: number,
     readonly originActor: number,
     readonly originSeq: number,
-    readonly depth: number,
+    public depth: number,
     public text: string,
     public deleted: boolean,
     readonly priority: number,
@@ -45,6 +45,31 @@ export class Sequence {
   head: Run | null = null;
   tail: Run | null = null;
   count = 0;
+
+  /** Build a balanced positional index once when loading an entire snapshot. */
+  load(nodes: readonly Run[]): void {
+    const build = (start: number, end: number, parent: Run | null): Run | null => {
+      if (start === end) return null;
+      const middle = Math.floor((start + end) / 2);
+      const node = nodes[middle];
+      if (node === undefined) throw new Error("Missing snapshot run");
+      node.parent = parent;
+      node.left = build(start, middle, node);
+      node.right = build(middle + 1, end, node);
+      update(node);
+      return node;
+    };
+    for (let i = 0; i < nodes.length; i++) {
+      const node = nodes[i];
+      if (node === undefined) throw new Error("Missing snapshot run");
+      node.prev = nodes[i - 1] ?? null;
+      node.next = nodes[i + 1] ?? null;
+    }
+    this.root = build(0, nodes.length, null);
+    this.head = nodes[0] ?? null;
+    this.tail = nodes[nodes.length - 1] ?? null;
+    this.count = nodes.length;
+  }
 
   splay(node: Run): void {
     while (node.parent !== null) {
@@ -220,6 +245,25 @@ export function idInsert(root: Run | null, node: Run): Run {
       child.idLeft = root;
       return child;
     }
+  }
+  return root;
+}
+
+/** Build an identity treap in linear time from increasing sequence intervals. */
+export function idBuild(nodes: readonly Run[]): Run | null {
+  const stack: Run[] = [];
+  let root: Run | null = null;
+  for (const node of nodes) {
+    let left: Run | null = null;
+    while (stack.length > 0 && (stack[stack.length - 1]?.priority ?? 0) > node.priority) {
+      left = stack.pop() ?? null;
+    }
+    node.idLeft = left;
+    node.idRight = null;
+    const parent = stack[stack.length - 1];
+    if (parent === undefined) root = node;
+    else parent.idRight = node;
+    stack.push(node);
   }
   return root;
 }

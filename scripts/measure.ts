@@ -7,13 +7,9 @@ import type { LibraryResult } from "../benchmarks/lab/worker.js";
 const root = join(import.meta.dir, "..");
 const quick = process.argv.includes("--quick");
 const selection = process.argv.find((arg) => arg.startsWith("--libraries="));
-const libraries = selection?.slice("--libraries=".length).split(",") ?? [
-  "run",
-  "loro",
-  "yjs",
-  "automerge",
-  "legacy",
-];
+const libraries =
+  selection?.slice("--libraries=".length).split(",") ??
+  (quick ? ["run", "loro", "yjs"] : ["run", "loro", "yjs", "automerge"]);
 const directory = quick ? join(root, ".lab-quick") : join(root, "site/public/lab");
 
 async function git(args: string[]): Promise<string> {
@@ -35,12 +31,19 @@ const tracked = [
 const dirty = await git(["status", "--porcelain", "--", ...tracked]);
 if (dirty !== "" && !quick)
   throw new Error("Commit the engine and benchmark sources before recording publishable results.");
-const filenames = (await git(["ls-files", "--", ...tracked])).split("\n").filter(Boolean).sort();
+const filenames = (
+  await git(["ls-files", "--cached", "--others", "--exclude-standard", "-z", "--", ...tracked])
+)
+  .split("\0")
+  .filter(Boolean)
+  .sort();
 const hasher = new Bun.CryptoHasher("sha256");
 for (const path of filenames) {
+  const file = Bun.file(join(root, path));
+  if (!(await file.exists())) continue; // Quick runs can include unstaged deletions.
   hasher.update(path);
   hasher.update("\0");
-  hasher.update(await Bun.file(join(root, path)).arrayBuffer());
+  hasher.update(await file.arrayBuffer());
 }
 const sha = await git(["rev-parse", "HEAD"]);
 const timestamp = new Date().toISOString();
@@ -108,7 +111,7 @@ const run = {
     samples: quick ? 3 : 5,
     warmup: "One complete untimed run of each workload",
     timing:
-      "Sequential isolated processes; fresh documents; materialization included; GC and validation outside timers",
+      "Sequential isolated processes; fresh replay/load replicas; unchanged-state encoding allows native caches; materialization included; GC and validation outside timers",
     batching:
       "Full trace: one bulk transaction. Synthetic and 10K live trace: one transaction per edit.",
     scope:

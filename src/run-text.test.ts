@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { loadEditingTrace } from "../../benchmarks/fixtures.js";
+import { loadEditingTrace } from "../benchmarks/fixtures.js";
 import { RunText } from "./run-text.js";
 import type { Id, Insert, Operation } from "./types.js";
 
@@ -107,6 +107,46 @@ describe("RunText", () => {
     expect(b.getText()).toBe(a.getText());
     b.check();
   });
+
+  for (let seed = 0; seed < 40; seed++) {
+    test(`replicas reload while edits and dependencies are in flight, seed ${seed}`, () => {
+      const rng = random(seed + 4000);
+      const docs = [new RunText(1), new RunText(2), new RunText(3)];
+      const operations: Operation[] = [];
+      for (let step = 0; step < 400; step++) {
+        const index = Math.floor(rng() * docs.length);
+        const doc = docs[index];
+        if (doc === undefined) throw new Error("Missing replica");
+        if (rng() < 0.35 && operations.length > 0) {
+          const op = operations[Math.floor(rng() * operations.length)];
+          if (op !== undefined) doc.apply(op);
+        } else {
+          const offset = Math.floor(rng() * (doc.length + 1));
+          if (offset < doc.length && rng() < 0.35)
+            operations.push(doc.delete(offset, Math.min(3, doc.length - offset)));
+          else
+            operations.push(doc.insert(offset, ["abc", "😀", "\ud800x", "\r\n"][step % 4] ?? "x"));
+        }
+        if (step % 7 === 0) {
+          const offset = Math.floor(doc.length / 2);
+          const anchor = doc.anchorAt(offset);
+          const restored = RunText.decode(doc.encode(), doc.actor);
+          expect(restored.getText()).toBe(doc.getText());
+          expect(restored.stateVector()).toEqual(doc.stateVector());
+          expect(restored.resolve(anchor)).toBe(offset);
+          restored.check();
+          docs[index] = restored;
+        }
+      }
+      const expected = reference(operations);
+      for (const doc of docs) {
+        for (const op of shuffled(operations, rng)) doc.apply(op);
+        expect(doc.getText()).toBe(expected);
+        expect(doc.stats.pending).toBe(0);
+        doc.check();
+      }
+    });
+  }
 
   for (let seed = 0; seed < 30; seed++) {
     test(`partial delivery interleaved with local editing, seed ${seed}`, () => {

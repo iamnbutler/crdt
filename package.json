@@ -1,6 +1,6 @@
 {
   "name": "@iamnbutler/crdt-lab",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "type": "module",
   "description": "Experimental pure TypeScript text CRDT with reproducible competitor benchmarks",
   "license": "MIT",
@@ -9,34 +9,6 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
-    },
-    "./arena": {
-      "types": "./dist/arena/index.d.ts",
-      "import": "./dist/arena/index.js"
-    },
-    "./sum-tree": {
-      "types": "./dist/sum-tree/index.d.ts",
-      "import": "./dist/sum-tree/index.js"
-    },
-    "./rope": {
-      "types": "./dist/rope/index.d.ts",
-      "import": "./dist/rope/index.js"
-    },
-    "./text": {
-      "types": "./dist/text/index.d.ts",
-      "import": "./dist/text/index.js"
-    },
-    "./protocol": {
-      "types": "./dist/protocol/index.d.ts",
-      "import": "./dist/protocol/index.js"
-    },
-    "./anchor": {
-      "types": "./dist/anchor/index.d.ts",
-      "import": "./dist/anchor/index.js"
-    },
-    "./run": {
-      "types": "./dist/run/index.d.ts",
-      "import": "./dist/run/index.js"
     }
   },
   "files": [
@@ -44,7 +16,7 @@
   ],
   "scripts": {
     "build": "bun run build:js && bun run build:types",
-    "build:js": "bun build ./src/index.ts ./src/arena/index.ts ./src/sum-tree/index.ts ./src/rope/index.ts ./src/text/index.ts ./src/protocol/index.ts ./src/anchor/index.ts ./src/run/index.ts --outdir ./dist --target node --splitting",
+    "build:js": "bun run scripts/build.ts",
     "build:types": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
     "lint": "biome check .",
@@ -52,31 +24,18 @@
     "format": "biome format --write .",
     "test": "bun test src",
     "bench": "bun run scripts/measure.ts",
-    "bench:ci": "bun run benchmarks/index.ts --ci",
-    "bench:text": "bun run benchmarks/text-buffer.ts",
-    "bench:text:ci": "bun run benchmarks/text-buffer.ts --ci",
-    "bench:sum-tree": "bun run benchmarks/sum-tree.ts",
-    "bench:sum-tree:ci": "bun run benchmarks/sum-tree.ts --ci",
-    "bench:anchor": "bun run benchmarks/anchor-bench.ts",
-    "bench:memory": "bun run benchmarks/memory.ts",
-    "bench:memory:ci": "bun run benchmarks/memory.ts --ci",
-    "bench:compare": "bun run benchmarks/comparison.ts",
-    "bench:compare:ci": "bun run benchmarks/comparison.ts --ci",
-    "bench:all": "bun run bench && bun run bench:text && bun run bench:sum-tree && bun run bench:anchor && bun run bench:memory",
+    "bench:lab": "bun run scripts/measure.ts",
+    "bench:lab:quick": "bun run scripts/measure.ts --quick",
     "fixtures:download": "bun run scripts/download-fixtures.ts",
     "site:dev": "bun run scripts/serve-site.ts",
     "site:build": "bun run scripts/build-site.ts",
-    "bench:lab": "bun run scripts/measure.ts",
-    "bench:lab:quick": "bun run scripts/measure.ts --quick",
-    "site:check": "tsc -p site/tsconfig.json",
-    "bench:legacy": "bun run benchmarks/index.ts"
+    "site:check": "tsc -p site/tsconfig.json"
   },
   "devDependencies": {
     "@automerge/automerge": "3.4.1",
     "@biomejs/biome": "1.9.4",
     "@types/bun": "latest",
     "loro-crdt": "1.16.1",
-    "mitata": "1.0.34",
     "typescript": "5.7.2",
     "yjs": "13.6.32"
   },

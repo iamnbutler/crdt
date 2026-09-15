@@ -21,6 +21,8 @@ export class Intervals {
 
   add(start: number, end: number): void {
     const index = this.lowerBound(start);
+    const existing = this.ranges[index];
+    if (existing !== undefined && existing.start <= start && existing.end >= end) return;
     let stop = index;
     let mergedStart = start;
     let mergedEnd = end;

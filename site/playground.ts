@@ -1,4 +1,4 @@
-import { RunText, type Operation } from "../src/run/index.js";
+import { RunText, type Operation } from "../src/index.js";
 
 const leftInput = document.getElementById("replica-a");
 const rightInput = document.getElementById("replica-b");

@@ -33,7 +33,7 @@ async function installedVersion(name: string): Promise<string> {
 
 export async function adapter(name: string): Promise<Adapter> {
   if (name === "run") {
-    const { RunText } = await import("../../src/run/index.js");
+    const { RunText } = await import("../../src/index.js");
     const wrap = (doc: InstanceType<typeof RunText>): Editor => ({
       get length() {
         return doc.length;
@@ -52,7 +52,7 @@ export async function adapter(name: string): Promise<Adapter> {
     });
     return {
       name: "RunText",
-      version: "0.1.0-experimental",
+      version: "0.2.0",
       create: () => wrap(new RunText()),
       decode: (bytes) => wrap(RunText.decode(bytes)),
     };
@@ -176,33 +176,6 @@ export async function adapter(name: string): Promise<Adapter> {
       version: await installedVersion("@automerge/automerge"),
       create: () => wrap(A.from({ text: "" })),
       decode: (bytes) => wrap(A.load<Content>(bytes)),
-    };
-  }
-  if (name === "legacy") {
-    const { TextBuffer } = await import("../../src/text/index.js");
-    const wrap = (doc: ReturnType<typeof TextBuffer.create>): Editor => ({
-      get length() {
-        return doc.length;
-      },
-      insert: (position, text) => {
-        doc.insert(position, text);
-      },
-      delete: (position, count) => {
-        doc.delete(position, position + count);
-      },
-      text: () => doc.getText(),
-      batch: (edit) => edit(),
-      encode: () => doc.serialize(),
-      merge: () => {
-        throw new Error("Original snapshot merge is not supported by this adapter");
-      },
-      dispose: () => undefined,
-    });
-    return {
-      name: "Original",
-      version: "9ffb0f3",
-      create: () => wrap(TextBuffer.create()),
-      decode: (bytes) => wrap(TextBuffer.deserialize(bytes)),
     };
   }
   throw new Error(`Unknown adapter ${name}`);

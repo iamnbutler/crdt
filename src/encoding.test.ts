@@ -1,6 +1,6 @@
 import { expect, test } from "bun:test";
-import { loadEditingTrace } from "../../benchmarks/fixtures.js";
-import { decodeOperations, encodeOperations } from "./encoding.js";
+import { loadEditingTrace } from "../benchmarks/fixtures.js";
+import { decodeFrame, decodeOperations, encodeFrame, encodeOperations } from "./encoding.js";
 import { RunText } from "./run-text.js";
 
 test("binary state round-trips exact UTF-16, actor IDs, and deletion history", () => {
@@ -96,4 +96,70 @@ test("full trace state restores, then supports further concurrent editing", asyn
   copy.apply(a);
   expect(source.getText()).toBe(copy.getText());
   copy.check();
+});
+
+test("cached snapshots are isolated from callers and invalidated by every edit type", () => {
+  const a = new RunText(1);
+  a.insert(0, "abc");
+  const first = a.encode();
+  const second = a.encode();
+  first.fill(255);
+  expect(RunText.decode(second).getText()).toBe("abc");
+  expect(RunText.decode(a.encode()).getText()).toBe("abc");
+  a.insert(1, "X");
+  expect(RunText.decode(a.encode()).getText()).toBe("aXbc");
+  a.delete(0, 1);
+  expect(RunText.decode(a.encode()).getText()).toBe("Xbc");
+  const b = a.fork(2);
+  a.apply(b.insert(0, "Y"));
+  expect(RunText.decode(a.encode()).getText()).toBe("YXbc");
+  a.apply(b.delete(0, 1));
+  expect(RunText.decode(a.encode()).getText()).toBe("Xbc");
+  const input = a.encode();
+  const restored = RunText.decode(input);
+  input.fill(0);
+  expect(RunText.decode(restored.encode()).getText()).toBe("Xbc");
+});
+
+test("deleted text is omitted but anchors and future insert origins survive", () => {
+  const source = new RunText(1);
+  source.insert(0, "abcdef");
+  const anchor = source.anchorAt(3, "left");
+  const offline = source.fork(2);
+  source.delete(1, 4);
+  const frame = decodeFrame(source.encode());
+  expect(frame.runs.filter((run) => run.deleted).every((run) => /^\0+$/.test(run.text))).toBe(true);
+  const restored = RunText.decode(source.encode(), 3);
+  expect(restored.resolve(anchor)).toBe(source.resolve(anchor));
+  const op = offline.insert(3, "X");
+  source.apply(op);
+  restored.apply(op);
+  expect(restored.getText()).toBe("aXf");
+  expect(restored.getText()).toBe(source.getText());
+  restored.check();
+});
+
+test("malformed complete snapshots never partially replace an empty receiver", () => {
+  const source = new RunText(1);
+  source.insert(0, "ab");
+  source.insert(1, "X");
+  const frame = decodeFrame(source.encode());
+  const bad = [
+    encodeFrame([...frame.runs].reverse(), frame.spans, true),
+    encodeFrame([...frame.runs, ...frame.runs], frame.spans, true),
+    encodeFrame(frame.runs, [{ actor: 1, seq: 1, length: 1 }], true),
+    encodeFrame(
+      frame.runs.map((run) => ({ ...run, originActor: 99, originSeq: 1 })),
+      frame.spans,
+      true,
+    ),
+  ];
+  for (const bytes of bad) {
+    const target = new RunText(2);
+    expect(() => target.merge(bytes)).toThrow();
+    expect(target.getText()).toBe("");
+    expect(target.stats.runs).toBe(0);
+    expect(target.stateVector().size).toBe(0);
+    target.check();
+  }
 });

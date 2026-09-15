@@ -1,8 +1,9 @@
-import { decodeOperations, encodeOperations } from "./encoding.js";
+import { type EncodedRun, type Frame, decodeFrame, encodeFrame } from "./encoding.js";
 import { Intervals } from "./intervals.js";
 import {
   Run,
   Sequence,
+  idBuild,
   idFind,
   idInsert,
   idNext,
@@ -40,14 +41,15 @@ function randomActor(): number {
  * tree; remote references use a separate per-actor interval treap.
  */
 export class RunText {
-  private readonly tree = new Sequence();
+  private tree = new Sequence();
   private rootChildren: Run | null = null;
-  private readonly actors = new Map<number, Actor>();
+  private actors = new Map<number, Actor>();
   private readonly waiting = new Map<number, Map<number, Map<string, Insert>>>();
   private nextSeq = 1;
   private lamport = 0;
   private random = 0x6d2b79f5;
   private cachedText: string | null = "";
+  private cachedState: Uint8Array | null = null;
   private pending = 0;
 
   constructor(readonly actor = randomActor()) {
@@ -105,6 +107,7 @@ export class RunText {
     if (text.length === 0) throw new RangeError("Insert text must be nonempty");
     integer(this.nextSeq + text.length, "sequence end", 1);
     integer(this.lamport + text.length + 1, "time end", 1);
+    this.cachedState = null;
     let left: Run | null = null;
     if (offset > 0) {
       left = this.tree.seek(offset - 1);
@@ -144,6 +147,7 @@ export class RunText {
     this.position(offset);
     integer(length, "length");
     if (offset + length > this.length) throw new RangeError("Delete exceeds the document");
+    this.cachedState = null;
     const spans: Span[] = [];
     let remaining = length;
     while (remaining > 0) {
@@ -176,6 +180,7 @@ export class RunText {
 
   /** Apply an operation once, many times, or before its dependencies. */
   apply(op: Operation): void {
+    this.cachedState = null;
     if (op.kind === "delete") {
       for (const span of op.spans) validateSpan(span);
       for (const span of op.spans) {
@@ -203,11 +208,203 @@ export class RunText {
 
   /** Full CRDT state, or missing insertions plus the deletion set. */
   encode(since?: StateVector): Uint8Array {
-    return encodeOperations(this.export(since));
+    if (since === undefined && this.cachedState !== null) return this.cachedState.slice();
+    const runs: EncodedRun[] = [];
+    const spans: Span[] = [];
+    if (since !== undefined) {
+      for (const [actor, seq] of since) {
+        integer(actor, "state actor");
+        integer(seq, "state sequence");
+      }
+    }
+    // Identity order is already indexed: no export allocation or global sort.
+    const stack: Run[] = [];
+    for (const actor of [...this.actors.keys()].sort((a, b) => a - b)) {
+      let node = this.actors.get(actor)?.root ?? null;
+      while (node !== null || stack.length > 0) {
+        while (node !== null) {
+          stack.push(node);
+          node = node.idLeft;
+        }
+        const run = stack.pop();
+        if (run === undefined) break;
+        const skip = Math.max(0, (since?.get(actor) ?? 0) + 1 - run.seq);
+        if (skip < run.text.length)
+          runs.push(
+            skip === 0
+              ? run
+              : {
+                  actor,
+                  seq: run.seq + skip,
+                  time: run.time + skip,
+                  originActor: actor,
+                  originSeq: run.seq + skip - 1,
+                  text: run.text.slice(skip),
+                  deleted: run.deleted,
+                },
+          );
+        node = run.idRight;
+      }
+    }
+    for (const byCounter of this.waiting.values()) {
+      for (const byId of byCounter.values()) {
+        for (const op of byId.values())
+          runs.push({
+            actor: op.actor,
+            seq: op.seq,
+            time: op.time,
+            originActor: op.after?.actor ?? 0,
+            originSeq: op.after?.seq ?? 0,
+            text: op.text,
+            deleted: false,
+          });
+      }
+    }
+    for (const [actor, state] of this.actors) {
+      for (const range of state.deleted.ranges)
+        spans.push({ actor, seq: range.start, length: range.end - range.start });
+    }
+    const bytes = encodeFrame(runs, spans, since === undefined && this.pending === 0);
+    if (since === undefined) {
+      this.cachedState = bytes;
+      return bytes.slice();
+    }
+    return bytes;
   }
 
   merge(update: Uint8Array): void {
-    for (const op of decodeOperations(update)) this.apply(op);
+    const frame = decodeFrame(update);
+    if (frame.complete && this.actors.size === 0 && this.pending === 0) {
+      const loaded = new RunText(this.actor);
+      loaded.restore(frame);
+      this.tree = loaded.tree;
+      this.actors = loaded.actors;
+      this.rootChildren = loaded.rootChildren;
+      this.nextSeq = loaded.nextSeq;
+      this.lamport = loaded.lamport;
+      this.random = loaded.random;
+      this.cachedText = loaded.cachedText;
+      this.cachedState = update.slice();
+      return;
+    }
+    const spans = [...frame.spans];
+    for (const run of frame.runs) {
+      if (run.deleted) spans.push({ actor: run.actor, seq: run.seq, length: run.text.length });
+    }
+    this.apply({ kind: "delete", spans });
+    for (const run of frame.runs)
+      this.apply({
+        kind: "insert",
+        actor: run.actor,
+        seq: run.seq,
+        time: run.time,
+        after: run.originSeq === 0 ? null : { actor: run.originActor, seq: run.originSeq },
+        text: run.text,
+      });
+  }
+
+  /** Rebuild indexes from a complete snapshot, without replaying edit history. */
+  private restore(frame: Frame): void {
+    interface Group {
+      state: Actor;
+      ends: Map<number, Run>;
+      nodes: Run[];
+    }
+    const groups = new Map<number, Group>();
+    const groupFor = (actor: number): Group => {
+      let group = groups.get(actor);
+      if (group === undefined) {
+        group = { state: this.actorState(actor), ends: new Map(), nodes: [] };
+        groups.set(actor, group);
+      }
+      return group;
+    };
+    for (const span of frame.spans)
+      groupFor(span.actor).state.deleted.add(span.seq, span.seq + span.length);
+    const nodes: Run[] = [];
+    for (const run of frame.runs) {
+      const group = groupFor(run.actor);
+      const previous = group.nodes[group.nodes.length - 1];
+      if (previous !== undefined && previous.seq + previous.text.length > run.seq)
+        throw new Error("Unsorted or overlapping snapshot IDs");
+      const node = new Run(
+        run.actor,
+        run.seq,
+        run.time,
+        run.originActor,
+        run.originSeq,
+        0,
+        run.text,
+        run.deleted,
+        this.priority(),
+      );
+      group.nodes.push(node);
+      group.ends.set(node.seq + node.text.length - 1, node);
+      nodes.push(node);
+      this.lamport = Math.max(this.lamport, run.time + run.text.length - 1);
+      if (run.actor === this.actor)
+        this.nextSeq = Math.max(this.nextSeq, run.seq + run.text.length);
+    }
+    for (const group of groups.values()) {
+      group.state.root = idBuild(group.nodes);
+      let deletionIndex = 0;
+      const ranges = group.state.deleted.ranges;
+      for (const node of group.nodes) {
+        if (node.seq === group.state.received + 1)
+          group.state.received = node.seq + node.text.length - 1;
+        while (deletionIndex < ranges.length && (ranges[deletionIndex]?.end ?? 0) <= node.seq)
+          deletionIndex++;
+        const range = ranges[deletionIndex];
+        const end = node.seq + node.text.length;
+        if (node.deleted) {
+          if (range === undefined || range.start > node.seq || range.end < end) {
+            group.state.deleted.add(node.seq, end);
+            deletionIndex = group.state.deleted.lowerBound(node.seq);
+          }
+        } else if (range !== undefined && range.start < end)
+          throw new Error("Inconsistent snapshot visibility");
+      }
+    }
+    for (const node of nodes) {
+      if (node.originSeq === 0) this.rootChildren = siblingInsert(this.rootChildren, node);
+      else {
+        const parent = groups.get(node.originActor)?.ends.get(node.originSeq);
+        if (parent === undefined) throw new Error("Invalid snapshot origin");
+        if (node.time <= parent.time + parent.text.length - 1)
+          throw new Error("Invalid snapshot time");
+        parent.children = siblingInsert(parent.children, node);
+      }
+    }
+    // Traverse the RGA once to build the positional index and materialized text.
+    const pending: Run[] = [];
+    const siblings: Run[] = [];
+    const ordered: Run[] = [];
+    const text: string[] = [];
+    const pushChildren = (root: Run | null, depth: number): void => {
+      let node = root;
+      while (node !== null || siblings.length > 0) {
+        while (node !== null) {
+          siblings.push(node);
+          node = node.siblingLeft;
+        }
+        const next = siblings.pop();
+        if (next === undefined) break;
+        next.depth = depth;
+        pending.push(next);
+        node = next.siblingRight;
+      }
+    };
+    pushChildren(this.rootChildren, 0);
+    while (pending.length > 0) {
+      const node = pending.pop();
+      if (node === undefined) break;
+      ordered.push(node);
+      if (!node.deleted) text.push(node.text);
+      pushChildren(node.children, node.depth + node.text.length);
+    }
+    if (ordered.length !== nodes.length) throw new Error("Disconnected snapshot runs");
+    this.tree.load(ordered);
+    this.cachedText = text.join("");
   }
 
   static decode(update: Uint8Array, actor = randomActor()): RunText {

@@ -21,8 +21,8 @@ const link = (text, href, className) => {
 };
 const measurement = (library, id) => library?.measurements.find((value) => value.id === id);
 const valid = (value) => value?.status === "ok" && Number.isFinite(value.median);
-const shortNames = { append: "insert at end", prepend: "insert at start", random: "random edits", live: "live trace", encode: "encode state", decode: "load state", size: "state size", merge: "merge peers", trace: "trace replay" };
-const order = ["append", "prepend", "random", "live", "encode", "decode", "size", "merge", "trace"];
+const shortNames = { append: "insert at end", prepend: "insert at start", random: "random edits", live: "live trace", "encode-changed": "encode after edit", encode: "encode unchanged", decode: "load state", size: "state size", merge: "merge peers", trace: "trace replay" };
+const order = ["append", "prepend", "random", "live", "encode-changed", "encode", "decode", "size", "merge", "trace"];
 const cache = new Map();
 let history = [];
 let current;

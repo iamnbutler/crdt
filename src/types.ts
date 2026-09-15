@@ -1,149 +1,78 @@
-/**
- * Branded Types for the CRDT Public API
- *
- * These types provide compile-time safety by distinguishing values
- * that are structurally identical but semantically different.
- *
- * @example
- * ```ts
- * import { LineNumber, Utf16Offset, lineNumber, utf16Offset } from "@iamnbutler/crdt";
- *
- * const line: LineNumber = lineNumber(5);
- * const offset: Utf16Offset = utf16Offset(42);
- *
- * // Type error: cannot assign Utf16Offset to LineNumber
- * // const bad: LineNumber = offset;
- * ```
- */
-
-// ---------------------------------------------------------------------------
-// LineNumber: 0-based line index in a document
-// ---------------------------------------------------------------------------
-
-/**
- * A 0-based line number in the document.
- *
- * Line numbers are integers starting from 0 for the first line.
- * Use the `lineNumber()` function to create values of this type.
- */
-export type LineNumber = number & { readonly __brand: "LineNumber" };
-
-/**
- * Create a LineNumber from a plain number.
- *
- * @param n - The 0-based line index
- * @returns A branded LineNumber
- *
- * @example
- * ```ts
- * const first = lineNumber(0);
- * const tenth = lineNumber(9);
- * ```
- */
-export function lineNumber(n: number): LineNumber {
-  return n as LineNumber;
+/** IDs address UTF-16 code units, matching JavaScript string offsets. */
+export interface Id {
+  readonly actor: number;
+  readonly seq: number;
 }
 
-// ---------------------------------------------------------------------------
-// Utf16Offset: UTF-16 code unit offset in a document
-// ---------------------------------------------------------------------------
-
-/**
- * A UTF-16 code unit offset in the document.
- *
- * This is the standard string index in JavaScript/TypeScript.
- * Surrogate pairs (emoji, etc.) occupy 2 UTF-16 code units.
- */
-export type Utf16Offset = number & { readonly __brand: "Utf16Offset" };
-
-/**
- * Create a Utf16Offset from a plain number.
- *
- * @param n - The UTF-16 offset
- * @returns A branded Utf16Offset
- *
- * @example
- * ```ts
- * const start = utf16Offset(0);
- * const mid = utf16Offset(50);
- * ```
- */
-export function utf16Offset(n: number): Utf16Offset {
-  return n as Utf16Offset;
+export interface Insert {
+  readonly kind: "insert";
+  readonly actor: number;
+  readonly seq: number;
+  /** Lamport time of the first code unit. Following units increment it. */
+  readonly time: number;
+  readonly after: Id | null;
+  readonly text: string;
 }
 
-// ---------------------------------------------------------------------------
-// ByteOffset: Byte offset (UTF-8) in a document
-// ---------------------------------------------------------------------------
-
-/**
- * A byte offset (UTF-8 encoding) in the document.
- *
- * Useful for interoperability with systems that use byte offsets
- * (e.g., LSP, some editors, file I/O).
- */
-export type ByteOffset = number & { readonly __brand: "ByteOffset" };
-
-/**
- * Create a ByteOffset from a plain number.
- *
- * @param n - The byte offset
- * @returns A branded ByteOffset
- *
- * @example
- * ```ts
- * const start = byteOffset(0);
- * const pos = byteOffset(128);
- * ```
- */
-export function byteOffset(n: number): ByteOffset {
-  return n as ByteOffset;
+export interface Span {
+  readonly actor: number;
+  readonly seq: number;
+  readonly length: number;
 }
 
-// ---------------------------------------------------------------------------
-// Column: 0-based column number in a line
-// ---------------------------------------------------------------------------
-
-/**
- * A 0-based column number within a line.
- *
- * Column numbers are UTF-16 code units from the start of the line.
- */
-export type Column = number & { readonly __brand: "Column" };
-
-/**
- * Create a Column from a plain number.
- *
- * @param n - The 0-based column index
- * @returns A branded Column
- */
-export function column(n: number): Column {
-  return n as Column;
+export interface Delete {
+  readonly kind: "delete";
+  readonly spans: readonly Span[];
 }
 
-// ---------------------------------------------------------------------------
-// Position: line and column pair
-// ---------------------------------------------------------------------------
+export type Operation = Insert | Delete;
+/** Highest contiguous insertion sequence received from each actor. */
+export type StateVector = ReadonlyMap<number, number>;
 
-/**
- * A position in the document specified by line and column.
- *
- * Both line and column are 0-based indices.
- */
-export interface LineColumn {
-  readonly line: LineNumber;
-  readonly col: Column;
+export type Anchor =
+  | { readonly edge: "start" | "end" }
+  | { readonly id: Id; readonly side: "before" | "after" };
+
+export function integer(value: number, name: string, min = 0): void {
+  if (!Number.isSafeInteger(value) || value < min) {
+    throw new RangeError(`${name} must be a safe integer >= ${min}`);
+  }
 }
 
-/**
- * Create a LineColumn position.
- *
- * @param line - 0-based line number
- * @param col - 0-based column number
- */
-export function lineColumn(line: number, col: number): LineColumn {
-  return {
-    line: lineNumber(line),
-    col: column(col),
-  };
+export function validateInsert(op: Insert): void {
+  if (typeof op.text !== "string" || op.text.length === 0) {
+    throw new TypeError("Insert text must be a nonempty string");
+  }
+  validateRunRange(op.actor, op.seq, op.time, op.text.length);
+  if (op.after !== null) {
+    validateOrigin(op.actor, op.seq, op.after.actor, op.after.seq);
+  }
+}
+
+export function validateRunRange(actor: number, seq: number, time: number, length: number): void {
+  integer(actor, "actor");
+  integer(seq, "seq", 1);
+  integer(time, "time", 1);
+  integer(length, "length", 1);
+  integer(seq + length, "sequence end", 1);
+  integer(time + length, "time end", 1);
+}
+
+export function validateOrigin(
+  actor: number,
+  seq: number,
+  originActor: number,
+  originSeq: number,
+): void {
+  integer(originActor, "origin actor");
+  integer(originSeq, "origin sequence", 1);
+  if (originActor === actor && originSeq >= seq)
+    throw new Error("An actor cannot insert after its own future operation");
+}
+
+export function validateSpan(span: Span): void {
+  integer(span.actor, "actor");
+  integer(span.seq, "seq", 1);
+  integer(span.length, "length", 1);
+  integer(span.seq + span.length, "span end", 1);
 }

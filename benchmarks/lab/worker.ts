@@ -74,43 +74,6 @@ function replay(doc: Editor, workload: Workload): void {
 let traceDoc: Editor | null = null;
 let traceExpected = "";
 for (const workload of cases) {
-  // The old engine's existing unit suite misses a real trace failure. Locate
-  // that failure before spending minutes timing a known-invalid full replay.
-  if (name === "legacy") {
-    const probe = factory.create();
-    let expected = "";
-    let failure = 0;
-    for (let i = 0; i < Math.min(workload.edits.length, 1000); i++) {
-      const op = workload.edits[i];
-      if (op === undefined) break;
-      if (op.deleteCount) probe.delete(op.position, op.deleteCount);
-      if (op.insertText) probe.insert(op.position, op.insertText);
-      expected =
-        expected.slice(0, op.position) +
-        op.insertText +
-        expected.slice(op.position + op.deleteCount);
-      if (probe.text() !== expected) {
-        failure = i + 1;
-        break;
-      }
-    }
-    probe.dispose();
-    if (failure > 0) {
-      result.measurements.push({
-        id: workload.id,
-        label: workload.label,
-        unit: "ms",
-        operations: workload.edits.length,
-        status: "incorrect",
-        samples: [],
-        median: null,
-        min: null,
-        max: null,
-        detail: `First incorrect text at edit ${failure}. Timing excluded.`,
-      });
-      continue;
-    }
-  }
   // One complete untimed warmup per workload. Every timed iteration uses a new
   // document; final text materialization is inside the timer, validation outside.
   const warmup = factory.create();
@@ -188,10 +151,10 @@ if (traceDoc !== null) {
   result.measurements.push(
     summarize(
       "encode",
-      "Encode full trace state",
+      "Encode unchanged state",
       encodeSamples,
       1,
-      "Retains CRDT identities and deletion state; Yjs uses compact update V2.",
+      "Repeated encoding of an unchanged trace state after warmup. Native caches are allowed; Yjs uses update V2.",
     ),
   );
   result.measurements.push(
@@ -209,8 +172,33 @@ if (traceDoc !== null) {
       "Full trace state size",
       [state.length],
       1,
-      "Uncompressed transport bytes from each library's native format.",
+      "Native saved-state bytes; no additional transport compression.",
       "bytes",
+    ),
+  );
+  const changedSamples: number[] = [];
+  for (let i = -1; i < sampleCount; i++) {
+    const doc = factory.decode(state);
+    const length = doc.length;
+    doc.insert(length, "x");
+    doc.delete(length, 1);
+    Bun.gc(true);
+    const start = performance.now();
+    const encoded = doc.encode();
+    const elapsed = performance.now() - start;
+    const restored = factory.decode(encoded);
+    if (restored.text() !== traceExpected) throw new Error("Invalid changed-state snapshot");
+    if (i >= 0) changedSamples.push(elapsed);
+    restored.dispose();
+    doc.dispose();
+  }
+  result.measurements.push(
+    summarize(
+      "encode-changed",
+      "Encode after editing",
+      changedSamples,
+      2,
+      "First encoding after appending and deleting one character in a fresh trace replica. Setup and validation excluded.",
     ),
   );
   traceDoc.dispose();
@@ -219,7 +207,7 @@ if (traceDoc !== null) {
 // A separate two-replica merge: shared base, independent appended text, a
 // concurrent deletion, then exchange full snapshots. No equality assumptions
 // between distinct CRDT algorithms; each library must converge with itself.
-if (name !== "legacy") {
+{
   const mergeSamples: number[] = [];
   const count = quick ? 1000 : 5000;
   for (let i = -1; i < sampleCount; i++) {
