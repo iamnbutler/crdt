@@ -1,0 +1,85 @@
+name: CRDT Benchmarks
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+  schedule:
+    - cron: "23 8 * * 1"
+
+concurrency:
+  group: lab-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.6
+      - run: bun install --frozen-lockfile
+      - run: bun run fixtures:download
+      - run: bun run typecheck && bun run site:check
+      - run: bun run lint
+      - run: bun test src
+      - run: bun run build && bun run site:build
+
+  measure-and-publish:
+    if: github.ref == 'refs/heads/main' && github.event_name != 'pull_request'
+    needs: check
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    permissions:
+      contents: write
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: 1.3.6
+      - run: bun install --frozen-lockfile
+      - run: bun run fixtures:download
+      - name: Restore measurement history
+        run: |
+          if git ls-remote --exit-code origin refs/heads/benchmark-data; then
+            git fetch origin benchmark-data
+            git worktree add --detach .benchmark-history FETCH_HEAD
+            mkdir -p site/public/lab
+            cp .benchmark-history/*.json site/public/lab/
+          else
+            git worktree add --detach .benchmark-history HEAD
+            git -C .benchmark-history switch --orphan benchmark-data
+          fi
+      - name: Measure each library in a separate process
+        run: bun run bench:lab
+      - name: Persist results independently of source history
+        run: |
+          cp site/public/lab/*.json .benchmark-history/
+          git -C .benchmark-history config user.name "github-actions[bot]"
+          git -C .benchmark-history config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git -C .benchmark-history add '*.json'
+          git -C .benchmark-history commit -m "Record measurements for ${GITHUB_SHA}"
+          git -C .benchmark-history push origin HEAD:benchmark-data
+      - run: bun run site:build
+      - uses: actions/upload-artifact@v4
+        with:
+          name: raw-benchmarks
+          path: site/public/lab/
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: site/dist
+      - name: Deploy progress site
+        id: deploy
+        uses: actions/deploy-pages@v4

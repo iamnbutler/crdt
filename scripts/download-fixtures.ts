@@ -9,7 +9,7 @@ const EDITING_TRACE_PATH = join(FIXTURES_DIR, "editing-trace.json");
 // Source: https://github.com/automerge/automerge-perf
 // The file is a JavaScript module with `const edits = [...]` and `const finalText = "..."` format
 const EDITING_TRACE_URL =
-  "https://raw.githubusercontent.com/automerge/automerge-perf/master/edit-by-index/editing-trace.js";
+  "https://raw.githubusercontent.com/automerge/automerge-perf/73eea0e30f2c28f34cb6103f75fa5cef33bd0cef/edit-by-index/editing-trace.js";
 
 interface EditOperation {
   position: number;
