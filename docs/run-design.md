@@ -1,4 +1,4 @@
-# RunText design
+# Text engine design
 
 ## Identity and ordering
 

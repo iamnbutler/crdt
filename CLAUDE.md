@@ -1,6 +1,6 @@
-# CRDT Lab
+# CRDT
 
-An independent performance experiment derived from `iamnbutler/crdt`. RunText in `src/` is the sole engine. This is pure research with no consumers to migrate: make breaking API and format changes when useful. Do not keep the old engine, parallel implementations, or compatibility layers. Git history and recorded benchmark results preserve earlier experiments.
+`@iamnbutler/crdt` is the library name. Its `RunText` class in `src/` is the sole text engine. This is pure research with no consumers to migrate: make breaking API and format changes when useful. Do not keep the old engine, parallel implementations, or compatibility layers. Git history and recorded benchmark results preserve earlier experiments.
 
 ## Implementation
 
@@ -42,7 +42,7 @@ Keep the site a compact technical report, following the original `nate.rip/crdt/
 
 ## Layout
 
-- `src/`: RunText engine, binary protocol, and correctness tests
+- `src/`: Text engine, binary protocol, and correctness tests
 - `benchmarks/lab/`: rival adapters, workloads, and isolated worker
 - `scripts/measure.ts`: correctness gate, provenance, and recorded results
 - `site/`: benchmark tables and the two-replica browser demo

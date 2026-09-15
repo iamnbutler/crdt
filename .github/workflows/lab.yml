@@ -1,4 +1,4 @@
-name: CRDT Lab
+name: CRDT Benchmarks
 
 on:
   push:

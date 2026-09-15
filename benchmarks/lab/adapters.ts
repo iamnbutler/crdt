@@ -51,7 +51,7 @@ export async function adapter(name: string): Promise<Adapter> {
       dispose: () => undefined,
     });
     return {
-      name: "RunText",
+      name: "@iamnbutler/crdt",
       version: "0.2.0",
       create: () => wrap(new RunText()),
       decode: (bytes) => wrap(RunText.decode(bytes)),

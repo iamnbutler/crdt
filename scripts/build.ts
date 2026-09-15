@@ -11,4 +11,4 @@ const result = await Bun.build({
   sourcemap: "external",
 });
 if (!result.success) throw new Error(result.logs.join("\n"));
-console.log(`Built RunText at ${outdir}`);
+console.log(`Built @iamnbutler/crdt at ${outdir}`);

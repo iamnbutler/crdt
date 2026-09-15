@@ -92,7 +92,7 @@ for (const workload of cases) {
       max: null,
       detail: "Final text differs from the string oracle. Timing excluded.",
     });
-    if (name === "run") throw new Error(`RunText failed ${workload.id}`);
+    if (name === "run") throw new Error(`${factory.name} failed ${workload.id}`);
     continue;
   }
   warmup.dispose();

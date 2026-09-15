@@ -19,6 +19,7 @@ const link = (text, href, className) => {
   node.href = href;
   return node;
 };
+const libraryName = (library) => library.id === "run" ? "@iamnbutler/crdt" : library.name;
 const measurement = (library, id) => library?.measurements.find((value) => value.id === id);
 const valid = (value) => value?.status === "ok" && Number.isFinite(value.median);
 const shortNames = { append: "insert at end", prepend: "insert at start", random: "random edits", live: "live trace", "encode-changed": "encode after edit", encode: "encode unchanged", decode: "load state", size: "state size", merge: "merge peers", trace: "trace replay" };
@@ -55,9 +56,9 @@ function renderOverview(run) {
   body.replaceChildren();
   for (const library of run.libraries) {
     const row = element("tr");
-    const name = element("th", "", library.name);
+    const name = element("th", "", library.id === "run" ? "crdt" : libraryName(library));
     name.scope = "row";
-    name.title = `${library.name} ${library.version}`;
+    name.title = `${libraryName(library)} ${library.version}`;
     row.append(name);
     for (const workload of workloads) {
       const value = measurement(library, workload.id);
@@ -118,7 +119,7 @@ function renderDetails(run, previous) {
     for (const library of run.libraries) {
       const value = measurement(library, workload.id);
       const row = element("tr");
-      const name = element("th", "", library.name);
+      const name = element("th", "", libraryName(library));
       name.scope = "row";
       name.title = library.version;
       row.append(name);
@@ -174,7 +175,7 @@ function renderHistory() {
     });
     date.append(button);
     const source = element("td");
-    source.append(link(entry.revision.slice(0, 7), `https://github.com/iamnbutler/crdt-lab/commit/${entry.revision}`));
+    source.append(link(entry.revision.slice(0, 7), `https://github.com/iamnbutler/crdt/commit/${entry.revision}`));
     const raw = element("td");
     raw.append(link("JSON", `./lab/${entry.id}.json`));
     row.append(date, source, element("td", "", entry.hardware), raw);
@@ -188,11 +189,11 @@ function render(run, filename) {
   byId("environment").textContent = `${count} ${count === 1 ? "run" : "runs"} — ${run.environment.runtime.toLowerCase()} — ${run.environment.arch}-${run.environment.platform} — ${run.environment.cpu}`;
   byId("raw-link").href = `./lab/${filename}`;
   byId("method-summary").textContent = `${run.methodology.samples} samples after one full warmup; libraries run sequentially in separate processes. Green marks the lowest verified median per workload.`;
-  byId("library-versions").textContent = run.libraries.map((library) => `${library.name} ${library.version}`).join(" · ");
+  byId("library-versions").textContent = run.libraries.map((library) => `${libraryName(library)} ${library.version}`).join(" · ");
   byId("machine-details").textContent = `${run.environment.cpu}, ${run.environment.runtime}, ${run.environment.platform} ${run.environment.os}, ${run.environment.arch}.`;
   byId("validation").textContent = `${integer.format(run.validation?.passed ?? 0)} tests passed before this run. Exact edit and decoded text checked; merged peers must converge.`;
   const title = byId("results-title");
-  title.replaceChildren(document.createTextNode(`${history[0]?.id === run.id || history.length === 0 ? "Latest Run" : "Recorded Run"} (`), link(run.revision.slice(0, 7), `https://github.com/iamnbutler/crdt-lab/commit/${run.revision}`, "source-link"), document.createTextNode(")"));
+  title.replaceChildren(document.createTextNode(`${history[0]?.id === run.id || history.length === 0 ? "Latest Run" : "Recorded Run"} (`), link(run.revision.slice(0, 7), `https://github.com/iamnbutler/crdt/commit/${run.revision}`, "source-link"), document.createTextNode(")"));
   byId("run-date").textContent = new Date(run.timestamp).toISOString().replace("T", " ").slice(0, 19) + " UTC";
   renderOverview(run);
   renderDetails(run);
