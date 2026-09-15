@@ -1,4 +1,4 @@
-import { mkdir } from "node:fs/promises";
+import { mkdir, readdir } from "node:fs/promises";
 import { arch, cpus, platform, release, totalmem } from "node:os";
 import { join } from "node:path";
 import { loadEditingTrace } from "../benchmarks/fixtures.js";
@@ -124,14 +124,22 @@ const run = {
 await mkdir(directory, { recursive: true });
 await Bun.write(join(directory, `${run.id}.json`), `${JSON.stringify(run, null, 2)}\n`);
 await Bun.write(join(directory, "latest.json"), `${JSON.stringify(run, null, 2)}\n`);
-const indexFile = Bun.file(join(directory, "index.json"));
-const previous: { id: string; timestamp: string; revision: string; hardware: string }[] =
-  (await indexFile.exists()) ? await indexFile.json() : [];
-const index = [
-  { id: run.id, timestamp, revision: sha, hardware },
-  ...previous.filter((entry) => entry.id !== run.id),
-].slice(0, 100);
-await Bun.write(indexFile, `${JSON.stringify(index, null, 2)}\n`);
+// Rebuild from the recorded files so restoring CI history cannot hide a run
+// committed from another machine by overwriting its index.json.
+const index: { id: string; timestamp: string; revision: string; hardware: string }[] = [];
+for (const filename of await readdir(directory)) {
+  if (!/^\d{4}-\d{2}-\d{2}T[\d.-]+Z-[a-f0-9]{7}\.json$/.test(filename)) continue;
+  const recorded: typeof run = await Bun.file(join(directory, filename)).json();
+  if (`${recorded.id}.json` !== filename) throw new Error(`Invalid history file: ${filename}`);
+  index.push({
+    id: recorded.id,
+    timestamp: recorded.timestamp,
+    revision: recorded.revision,
+    hardware: recorded.environment.hardware,
+  });
+}
+index.sort((a, b) => b.timestamp.localeCompare(a.timestamp));
+await Bun.write(join(directory, "index.json"), `${JSON.stringify(index.slice(0, 100), null, 2)}\n`);
 console.log(`Recorded ${run.id} in ${directory}`);
 for (const library of results) {
   const trace = library.measurements.find((measurement) => measurement.id === "trace");
