@@ -1,5 +1,11 @@
 [
   {
+    "id": "2026-09-21T15-11-01.519Z-d818f2c",
+    "timestamp": "2026-09-21T15:11:01.519Z",
+    "revision": "d818f2cd12b80bae65f71e33de3ce412ab408aa6",
+    "hardware": "linux-x64-AMD EPYC 9V74 80-Core Processor"
+  },
+  {
     "id": "2026-09-15T17-25-00.021Z-d818f2c",
     "timestamp": "2026-09-15T17:25:00.021Z",
     "revision": "d818f2cd12b80bae65f71e33de3ce412ab408aa6",
