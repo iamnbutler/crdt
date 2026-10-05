@@ -1,5 +1,11 @@
 [
   {
+    "id": "2026-10-05T17-14-44.696Z-d818f2c",
+    "timestamp": "2026-10-05T17:14:44.696Z",
+    "revision": "d818f2cd12b80bae65f71e33de3ce412ab408aa6",
+    "hardware": "linux-x64-AMD EPYC 9V45 96-Core Processor"
+  },
+  {
     "id": "2026-09-28T16-50-37.723Z-d818f2c",
     "timestamp": "2026-09-28T16:50:37.723Z",
     "revision": "d818f2cd12b80bae65f71e33de3ce412ab408aa6",
