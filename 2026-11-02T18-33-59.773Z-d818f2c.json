@@ -1,0 +1,772 @@
+{
+  "schema": 1,
+  "id": "2026-11-02T18-33-59.773Z-d818f2c",
+  "timestamp": "2026-11-02T18:33:59.773Z",
+  "revision": "d818f2cd12b80bae65f71e33de3ce412ab408aa6",
+  "sourceHash": "dd58cb2013b5b4c7fea221fe6fd5fe7e94eccdbc359e0018110e1d237e8383c4",
+  "sourceDirty": false,
+  "validation": {
+    "command": "bun test src",
+    "passed": 293,
+    "failed": 0
+  },
+  "quick": false,
+  "environment": {
+    "hardware": "linux-x64-AMD EPYC 9V74 80-Core Processor",
+    "cpu": "AMD EPYC 9V74 80-Core Processor",
+    "platform": "linux",
+    "arch": "x64",
+    "os": "7.0.0-1017-azure",
+    "runtime": "Bun 1.3.6",
+    "logicalCpus": 4,
+    "totalMemory": 16759443456
+  },
+  "fixture": {
+    "sha256": "9e2f13955a416cf0a9b62ca0dde91f28d2bfb4c67abaeda40d82ae175270b478",
+    "operations": 259778,
+    "finalLength": 104852,
+    "source": "https://github.com/automerge/automerge-perf/tree/master/edit-by-index"
+  },
+  "methodology": {
+    "samples": 5,
+    "warmup": "One complete untimed run of each workload",
+    "timing": "Sequential isolated processes; fresh replay/load replicas; unchanged-state encoding allows native caches; materialization included; GC and validation outside timers",
+    "batching": "Full trace: one bulk transaction. Synthetic and 10K live trace: one transaction per edit.",
+    "scope": "Plain text, UTF-16 offsets. No observers, rich text, undo manager, or network transport. Native full-state formats; Yjs update V2.",
+    "correctness": "Every timed output checked against an exact string oracle; decoded text verified; two replicas must converge."
+  },
+  "libraries": [
+    {
+      "id": "run",
+      "name": "@iamnbutler/crdt",
+      "version": "0.2.0",
+      "measurements": [
+        {
+          "id": "trace",
+          "label": "Editing trace · 259,778",
+          "unit": "ms",
+          "operations": 259778,
+          "status": "ok",
+          "samples": [
+            73.90898599999997,
+            72.45042699999999,
+            75.26860800000003,
+            83.45197800000005,
+            81.47896000000003
+          ],
+          "median": 75.26860800000003,
+          "min": 72.45042699999999,
+          "max": 83.45197800000005,
+          "detail": "One transaction for bulk replay; commit and final text included."
+        },
+        {
+          "id": "append",
+          "label": "Append · 10,000",
+          "unit": "ms",
+          "operations": 10000,
+          "status": "ok",
+          "samples": [
+            1.5142130000000407,
+            1.202538000000004,
+            1.583125999999993,
+            0.9092089999999189,
+            2.645263
+          ],
+          "median": 1.5142130000000407,
+          "min": 0.9092089999999189,
+          "max": 2.645263,
+          "detail": "Each edit commits individually; final text included."
+        },
+        {
+          "id": "prepend",
+          "label": "Prepend · 10,000",
+          "unit": "ms",
+          "operations": 10000,
+          "status": "ok",
+          "samples": [
+            3.667811000000029,
+            3.4043179999999893,
+            3.0531929999999647,
+            3.0420159999999896,
+            4.483471000000009
+          ],
+          "median": 3.4043179999999893,
+          "min": 3.0420159999999896,
+          "max": 4.483471000000009,
+          "detail": "Each edit commits individually; final text included."
+        },
+        {
+          "id": "random",
+          "label": "Random edits · 10,000",
+          "unit": "ms",
+          "operations": 10000,
+          "status": "ok",
+          "samples": [
+            14.425017999999909,
+            13.28388300000006,
+            12.468744000000015,
+            12.52986599999997,
+            13.456890999999814
+          ],
+          "median": 13.28388300000006,
+          "min": 12.468744000000015,
+          "max": 14.425017999999909,
+          "detail": "Each edit commits individually; final text included."
+        },
+        {
+          "id": "live",
+          "label": "Individual edits · 10,000",
+          "unit": "ms",
+          "operations": 10000,
+          "status": "ok",
+          "samples": [
+            1.9017630000000736,
+            1.9082220000000234,
+            1.8909959999998591,
+            2.00343399999997,
+            1.9053480000000036
+          ],
+          "median": 1.9053480000000036,
+          "min": 1.8909959999998591,
+          "max": 2.00343399999997,
+          "detail": "Each edit commits individually; final text included."
+        },
+        {
+          "id": "encode",
+          "label": "Encode unchanged state",
+          "unit": "ms",
+          "operations": 1,
+          "status": "ok",
+          "samples": [
+            0.037305999999944106,
+            0.04461700000001656,
+            0.021782000000030166,
+            0.01989899999989575,
+            0.01972000000000662
+          ],
+          "median": 0.021782000000030166,
+          "min": 0.01972000000000662,
+          "max": 0.04461700000001656,
+          "detail": "Repeated encoding of an unchanged trace state after warmup. Native caches are allowed; Yjs uses update V2."
+        },
+        {
+          "id": "decode",
+          "label": "Load full trace state",
+          "unit": "ms",
+          "operations": 1,
+          "status": "ok",
+          "samples": [
+            19.07615899999996,
+            13.813114000000041,
+            14.280301999999892,
+            19.2221669999999,
+            17.60647300000005
+          ],
+          "median": 17.60647300000005,
+          "min": 13.813114000000041,
+          "max": 19.2221669999999,
+          "detail": "Create a usable replica from encoded state and materialize its text."
+        },
+        {
+          "id": "size",
+          "label": "Full trace state size",
+          "unit": "bytes",
+          "operations": 1,
+          "status": "ok",
+          "samples": [
+            88147
+          ],
+          "median": 88147,
+          "min": 88147,
+          "max": 88147,
+          "detail": "Native saved-state bytes; no additional transport compression."
+        },
+        {
+          "id": "encode-changed",
+          "label": "Encode after editing",
+          "unit": "ms",
+          "operations": 2,
+          "status": "ok",
+          "samples": [
+            10.490056999999979,
+            7.2319179999999506,
+            6.707182999999986,
+            6.3532950000001165,
+            8.509567000000061
+          ],
+          "median": 7.2319179999999506,
+          "min": 6.3532950000001165,
+          "max": 10.490056999999979,
+          "detail": "First encoding after appending and deleting one character in a fresh trace replica. Setup and validation excluded."
+        },
+        {
+          "id": "merge",
+          "label": "Merge two 5,000-edit peers",
+          "unit": "ms",
+          "operations": 10000,
+          "status": "ok",
+          "samples": [
+            0.5816099999999551,
+            0.3866579999998976,
+            0.4689100000000508,
+            0.5560210000001007,
+            0.5367720000001555
+          ],
+          "median": 0.5367720000001555,
+          "min": 0.3866579999998976,
+          "max": 0.5816099999999551,
+          "detail": "Both imports and final texts timed. Shared-base setup, local edits, and encoding excluded."
+        }
+      ]
+    },
+    {
+      "id": "loro",
+      "name": "Loro",
+      "version": "1.16.1",
+      "measurements": [
+        {
+          "id": "trace",
+          "label": "Editing trace · 259,778",
+          "unit": "ms",
+          "operations": 259778,
+          "status": "ok",
+          "samples": [
+            392.13784599999997,
+            393.41425300000014,
+            388.1027510000001,
+            383.58095300000014,
+            385.93036299999994
+          ],
+          "median": 388.1027510000001,
+          "min": 383.58095300000014,
+          "max": 393.41425300000014,
+          "detail": "One transaction for bulk replay; commit and final text included."
+        },
+        {
+          "id": "append",
+          "label": "Append · 10,000",
+          "unit": "ms",
+          "operations": 10000,
+          "status": "ok",
+          "samples": [
+            21.751824999999826,
+            21.408441999999923,
+            24.170768999999837,
+            20.934903999999733,
+            21.490555000000313
+          ],
+          "median": 21.490555000000313,
+          "min": 20.934903999999733,
+          "max": 24.170768999999837,
+          "detail": "Each edit commits individually; final text included."
+        },
+        {
+          "id": "prepend",
+          "label": "Prepend · 10,000",
+          "unit": "ms",
+          "operations": 10000,
+          "status": "ok",
+          "samples": [
+            30.817101999999977,
+            29.53159000000005,
+            29.651058999999805,
+            29.346603999999843,
+            30.057836999999836
+          ],
+          "median": 29.651058999999805,
+          "min": 29.346603999999843,
+          "max": 30.817101999999977,
+          "detail": "Each edit commits individually; final text included."
+        },
+        {
+          "id": "random",
+          "label": "Random edits · 10,000",
+          "unit": "ms",
+          "operations": 10000,
+          "status": "ok",
+          "samples": [
+            41.03231700000015,
+            37.29487199999994,
+            39.782910000000356,
+            39.79709099999991,
+            36.047728000000006
+          ],
+          "median": 39.782910000000356,
+          "min": 36.047728000000006,
+          "max": 41.03231700000015,
+          "detail": "Each edit commits individually; final text included."
+        },
+        {
+          "id": "live",
+          "label": "Individual edits · 10,000",
+          "unit": "ms",
+          "operations": 10000,
+          "status": "ok",
+          "samples": [
+            24.620432000000164,
+            24.22479099999964,
+            24.700842000000193,
+            24.196597999999994,
+            24.543095999999878
+          ],
+          "median": 24.543095999999878,
+          "min": 24.196597999999994,
+          "max": 24.700842000000193,
+          "detail": "Each edit commits individually; final text included."
+        },
+        {
+          "id": "encode",
+          "label": "Encode unchanged state",
+          "unit": "ms",
+          "operations": 1,
+          "status": "ok",
+          "samples": [
+            3.823914000000059,
+            1.2507089999999152,
+            1.3189910000000964,
+            1.2158660000000054,
+            1.0297489999998106
+          ],
+          "median": 1.2507089999999152,
+          "min": 1.0297489999998106,
+          "max": 3.823914000000059,
+          "detail": "Repeated encoding of an unchanged trace state after warmup. Native caches are allowed; Yjs uses update V2."
+        },
+        {
+          "id": "decode",
+          "label": "Load full trace state",
+          "unit": "ms",
+          "operations": 1,
+          "status": "ok",
+          "samples": [
+            1.7916780000000472,
+            1.9199789999997847,
+            2.089922999999999,
+            1.761653000000024,
+            1.5508279999999104
+          ],
+          "median": 1.7916780000000472,
+          "min": 1.5508279999999104,
+          "max": 2.089922999999999,
+          "detail": "Create a usable replica from encoded state and materialize its text."
+        },
+        {
+          "id": "size",
+          "label": "Full trace state size",
+          "unit": "bytes",
+          "operations": 1,
+          "status": "ok",
+          "samples": [
+            251391
+          ],
+          "median": 251391,
+          "min": 251391,
+          "max": 251391,
+          "detail": "Native saved-state bytes; no additional transport compression."
+        },
+        {
+          "id": "encode-changed",
+          "label": "Encode after editing",
+          "unit": "ms",
+          "operations": 2,
+          "status": "ok",
+          "samples": [
+            3.228784999999789,
+            3.5668409999998403,
+            4.323021000000153,
+            3.066012000000228,
+            2.9871140000000196
+          ],
+          "median": 3.228784999999789,
+          "min": 2.9871140000000196,
+          "max": 4.323021000000153,
+          "detail": "First encoding after appending and deleting one character in a fresh trace replica. Setup and validation excluded."
+        },
+        {
+          "id": "merge",
+          "label": "Merge two 5,000-edit peers",
+          "unit": "ms",
+          "operations": 10000,
+          "status": "ok",
+          "samples": [
+            4.668457000000217,
+            3.838376000000153,
+            2.535348999999769,
+            3.100644000000102,
+            1.2673039999999673
+          ],
+          "median": 3.100644000000102,
+          "min": 1.2673039999999673,
+          "max": 4.668457000000217,
+          "detail": "Both imports and final texts timed. Shared-base setup, local edits, and encoding excluded."
+        }
+      ]
+    },
+    {
+      "id": "yjs",
+      "name": "Yjs",
+      "version": "13.6.32",
+      "measurements": [
+        {
+          "id": "trace",
+          "label": "Editing trace · 259,778",
+          "unit": "ms",
+          "operations": 259778,
+          "status": "ok",
+          "samples": [
+            1597.5018579999999,
+            1704.7523129999995,
+            1770.4589449999994,
+            1755.7887459999993,
+            1718.407545
+          ],
+          "median": 1718.407545,
+          "min": 1597.5018579999999,
+          "max": 1770.4589449999994,
+          "detail": "One transaction for bulk replay; commit and final text included."
+        },
+        {
+          "id": "append",
+          "label": "Append · 10,000",
+          "unit": "ms",
+          "operations": 10000,
+          "status": "ok",
+          "samples": [
+            33.019217000000936,
+            33.65325499999926,
+            35.51204299999881,
+            32.86202299999968,
+            25.5088539999997
+          ],
+          "median": 33.019217000000936,
+          "min": 25.5088539999997,
+          "max": 35.51204299999881,
+          "detail": "Each edit commits individually; final text included."
+        },
+        {
+          "id": "prepend",
+          "label": "Prepend · 10,000",
+          "unit": "ms",
+          "operations": 10000,
+          "status": "ok",
+          "samples": [
+            25.124829000000318,
+            26.22636599999896,
+            26.328568999999334,
+            25.897885000000315,
+            26.223009999999704
+          ],
+          "median": 26.223009999999704,
+          "min": 25.124829000000318,
+          "max": 26.328568999999334,
+          "detail": "Each edit commits individually; final text included."
+        },
+        {
+          "id": "random",
+          "label": "Random edits · 10,000",
+          "unit": "ms",
+          "operations": 10000,
+          "status": "ok",
+          "samples": [
+            46.40159800000038,
+            51.35781499999939,
+            55.114879999999175,
+            45.87261699999908,
+            47.25218899999891
+          ],
+          "median": 47.25218899999891,
+          "min": 45.87261699999908,
+          "max": 55.114879999999175,
+          "detail": "Each edit commits individually; final text included."
+        },
+        {
+          "id": "live",
+          "label": "Individual edits · 10,000",
+          "unit": "ms",
+          "operations": 10000,
+          "status": "ok",
+          "samples": [
+            40.64117400000032,
+            37.35189299999911,
+            41.35381400000006,
+            52.07639899999958,
+            41.774412000000666
+          ],
+          "median": 41.35381400000006,
+          "min": 37.35189299999911,
+          "max": 52.07639899999958,
+          "detail": "Each edit commits individually; final text included."
+        },
+        {
+          "id": "encode",
+          "label": "Encode unchanged state",
+          "unit": "ms",
+          "operations": 1,
+          "status": "ok",
+          "samples": [
+            9.420969000000696,
+            6.334726999999475,
+            4.788377000000764,
+            5.033943000000363,
+            4.3435109999991255
+          ],
+          "median": 5.033943000000363,
+          "min": 4.3435109999991255,
+          "max": 9.420969000000696,
+          "detail": "Repeated encoding of an unchanged trace state after warmup. Native caches are allowed; Yjs uses update V2."
+        },
+        {
+          "id": "decode",
+          "label": "Load full trace state",
+          "unit": "ms",
+          "operations": 1,
+          "status": "ok",
+          "samples": [
+            19.04060599999866,
+            12.258369999999559,
+            11.082071999999243,
+            13.12980299999981,
+            10.418992000000799
+          ],
+          "median": 12.258369999999559,
+          "min": 10.418992000000799,
+          "max": 19.04060599999866,
+          "detail": "Create a usable replica from encoded state and materialize its text."
+        },
+        {
+          "id": "size",
+          "label": "Full trace state size",
+          "unit": "bytes",
+          "operations": 1,
+          "status": "ok",
+          "samples": [
+            159929
+          ],
+          "median": 159929,
+          "min": 159929,
+          "max": 159929,
+          "detail": "Native saved-state bytes; no additional transport compression."
+        },
+        {
+          "id": "encode-changed",
+          "label": "Encode after editing",
+          "unit": "ms",
+          "operations": 2,
+          "status": "ok",
+          "samples": [
+            4.356490000000122,
+            2.223944000001211,
+            2.58828800000083,
+            2.273177000000942,
+            2.0929079999987152
+          ],
+          "median": 2.273177000000942,
+          "min": 2.0929079999987152,
+          "max": 4.356490000000122,
+          "detail": "First encoding after appending and deleting one character in a fresh trace replica. Setup and validation excluded."
+        },
+        {
+          "id": "merge",
+          "label": "Merge two 5,000-edit peers",
+          "unit": "ms",
+          "operations": 10000,
+          "status": "ok",
+          "samples": [
+            0.4192370000000665,
+            0.33248699999967357,
+            0.2688109999999142,
+            0.24597299999913957,
+            0.37041299999873445
+          ],
+          "median": 0.33248699999967357,
+          "min": 0.24597299999913957,
+          "max": 0.4192370000000665,
+          "detail": "Both imports and final texts timed. Shared-base setup, local edits, and encoding excluded."
+        }
+      ]
+    },
+    {
+      "id": "automerge",
+      "name": "Automerge",
+      "version": "3.4.1",
+      "measurements": [
+        {
+          "id": "trace",
+          "label": "Editing trace · 259,778",
+          "unit": "ms",
+          "operations": 259778,
+          "status": "ok",
+          "samples": [
+            51819.8027,
+            49343.225943,
+            49633.67041399999,
+            49676.67500799999,
+            48785.478110999975
+          ],
+          "median": 49633.67041399999,
+          "min": 48785.478110999975,
+          "max": 51819.8027,
+          "detail": "One transaction for bulk replay; commit and final text included."
+        },
+        {
+          "id": "append",
+          "label": "Append · 10,000",
+          "unit": "ms",
+          "operations": 10000,
+          "status": "ok",
+          "samples": [
+            467.213088999968,
+            456.50468200002797,
+            474.57421499997145,
+            464.42712000000756,
+            454.1992939999909
+          ],
+          "median": 464.42712000000756,
+          "min": 454.1992939999909,
+          "max": 474.57421499997145,
+          "detail": "Each edit commits individually; final text included."
+        },
+        {
+          "id": "prepend",
+          "label": "Prepend · 10,000",
+          "unit": "ms",
+          "operations": 10000,
+          "status": "ok",
+          "samples": [
+            501.42811300000176,
+            501.5179169999901,
+            498.42396899999585,
+            503.7875130000175,
+            501.31750599999214
+          ],
+          "median": 501.42811300000176,
+          "min": 498.42396899999585,
+          "max": 503.7875130000175,
+          "detail": "Each edit commits individually; final text included."
+        },
+        {
+          "id": "random",
+          "label": "Random edits · 10,000",
+          "unit": "ms",
+          "operations": 10000,
+          "status": "ok",
+          "samples": [
+            675.1621739999973,
+            695.744365999999,
+            689.7079559999984,
+            679.8891949999961,
+            677.299289000046
+          ],
+          "median": 679.8891949999961,
+          "min": 675.1621739999973,
+          "max": 695.744365999999,
+          "detail": "Each edit commits individually; final text included."
+        },
+        {
+          "id": "live",
+          "label": "Individual edits · 10,000",
+          "unit": "ms",
+          "operations": 10000,
+          "status": "ok",
+          "samples": [
+            608.9003559999983,
+            605.8071989999735,
+            586.0588690000004,
+            602.6328170000343,
+            602.459205000021
+          ],
+          "median": 602.6328170000343,
+          "min": 586.0588690000004,
+          "max": 608.9003559999983,
+          "detail": "Each edit commits individually; final text included."
+        },
+        {
+          "id": "encode",
+          "label": "Encode unchanged state",
+          "unit": "ms",
+          "operations": 1,
+          "status": "ok",
+          "samples": [
+            10.268186000001151,
+            9.303758000023663,
+            9.241834999993443,
+            9.083875000011176,
+            8.681327000027522
+          ],
+          "median": 9.241834999993443,
+          "min": 8.681327000027522,
+          "max": 10.268186000001151,
+          "detail": "Repeated encoding of an unchanged trace state after warmup. Native caches are allowed; Yjs uses update V2."
+        },
+        {
+          "id": "decode",
+          "label": "Load full trace state",
+          "unit": "ms",
+          "operations": 1,
+          "status": "ok",
+          "samples": [
+            136.22145200002706,
+            120.22230600001058,
+            131.72342599998228,
+            121.42141799995443,
+            120.73424999997951
+          ],
+          "median": 121.42141799995443,
+          "min": 120.22230600001058,
+          "max": 136.22145200002706,
+          "detail": "Create a usable replica from encoded state and materialize its text."
+        },
+        {
+          "id": "size",
+          "label": "Full trace state size",
+          "unit": "bytes",
+          "operations": 1,
+          "status": "ok",
+          "samples": [
+            129103
+          ],
+          "median": 129103,
+          "min": 129103,
+          "max": 129103,
+          "detail": "Native saved-state bytes; no additional transport compression."
+        },
+        {
+          "id": "encode-changed",
+          "label": "Encode after editing",
+          "unit": "ms",
+          "operations": 2,
+          "status": "ok",
+          "samples": [
+            8.054308000020683,
+            8.241070999996737,
+            8.581275000004098,
+            9.03033499995945,
+            8.475465999974404
+          ],
+          "median": 8.475465999974404,
+          "min": 8.054308000020683,
+          "max": 9.03033499995945,
+          "detail": "First encoding after appending and deleting one character in a fresh trace replica. Setup and validation excluded."
+        },
+        {
+          "id": "merge",
+          "label": "Merge two 5,000-edit peers",
+          "unit": "ms",
+          "operations": 10000,
+          "status": "ok",
+          "samples": [
+            27.052394999947865,
+            31.950461000029463,
+            26.333187000011094,
+            26.625439000024926,
+            29.50382099999115
+          ],
+          "median": 27.052394999947865,
+          "min": 26.333187000011094,
+          "max": 31.950461000029463,
+          "detail": "Both imports and final texts timed. Shared-base setup, local edits, and encoding excluded."
+        }
+      ]
+    }
+  ]
+}
